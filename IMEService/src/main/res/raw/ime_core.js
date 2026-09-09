@@ -10,6 +10,21 @@ var selectedPaths = [];
 var selectedPathId = 0;
 var fileOperItems = $('.file-oper-items');
 
+function escapeHtml(str){
+	return String(str == null ? "" : str).replace(/[&<>"']/g, function(c){
+		switch(c){
+			case '&': return '&amp;';
+			case '<': return '&lt;';
+			case '>': return '&gt;';
+			case '"': return '&quot;';
+			case "'": return '&#39;';
+		}
+	});
+}
+function encodePath(path){
+	return String(path).split('/').map(encodeURIComponent).join('/');
+}
+
 function formatSize(size){
 	if(size < 1024){
 		return size + " B";
@@ -128,8 +143,8 @@ function reloadAppList(){
 		for(var i=0;i<data.length;i++){
 			var app=data[i];
 			html.push('<div class="app-item">');
-			html.push('<img src="/icon/'+app.packageName+'" class="app-icon" />');
-			html.push('<div class="app-name'+(app.isSysApp?" blue":"")+'" id="app-'+i+'" data-packageName="'+app.packageName+'">'+app.lable+"</div>");
+			html.push('<img src="/icon/'+encodeURIComponent(app.packageName)+'" class="app-icon" />');
+			html.push('<div class="app-name'+(app.isSysApp?" blue":"")+'" id="app-'+i+'" data-packageName="'+escapeHtml(app.packageName)+'">'+escapeHtml(app.lable)+"</div>");
 			html.push('<div class="app-btn">');
 			if(app.isSysApp){
 				html.push('   <input type="button" value="运行" class="btn" onclick="clickApp('+i+', 1);" />');
@@ -156,17 +171,17 @@ function loadFileList(path){
 		var fileDeleteChecked = $("#cbFileSelect")[0].checked;
 		if(data.parent != undefined){
 			html.push('<div class="file-item"><div class="file-icon-panel">');
-			html.push('<img src="/ic_dl_folder.png" class="file-icon" onclick="loadFileList(\''+data.parent+'\');" />');
+			html.push('<img src="/ic_dl_folder.png" class="file-icon go-path" data-path="'+escapeHtml(data.parent)+'" />');
 			html.push('</div><div class="file-name">..</div>');
 			html.push('</div>');
 		}
 		for(var i=0;i<data.dirs.length;i++){
 			var file=data.dirs[i];
 			html.push('<div class="file-item"><div class="file-icon-panel">');
-			html.push('<img src="/ic_dl_folder.png" class="file-icon" onclick="loadFileList(\''+file.path+'\');" />');
-			html.push('</div><div class="file-name">'+file.name+'</div>');
+			html.push('<img src="/ic_dl_folder.png" class="file-icon go-path" data-path="'+escapeHtml(file.path)+'" />');
+			html.push('</div><div class="file-name">'+escapeHtml(file.name)+'</div>');
 			html.push('<div class="app-btn">');
-			html.push('<input type="button" value="选择" class="fbtn2 app-btn1' + (fileDeleteChecked ? '' : ' hide') + '" onclick="addFile(1,\''+file.name+'\',\''+file.path+'\');" />');
+			html.push('<input type="button" value="选择" class="fbtn2 app-btn1 select-file' + (fileDeleteChecked ? '' : ' hide') + '" data-type="1" data-name="'+escapeHtml(file.name)+'" data-path="'+escapeHtml(file.path)+'" />');
 			html.push("</div>");
 			html.push('</div>');
 		}
@@ -174,17 +189,17 @@ function loadFileList(path){
 			var file=data.files[i];
 			html.push('<div class="file-item"><div class="file-icon-panel">');
 			if(file.isMedia){
-				html.push('<img src="ic_dl_video.png" class="file-icon" border="0" onclick="playMedia(this)" uri="' + file.fullPath + '" />');
+				html.push('<img src="ic_dl_video.png" class="file-icon play-media" border="0" data-uri="' + escapeHtml(file.fullPath) + '" />');
 			}else{
 				html.push('<img src="ic_dl_other.png" class="file-icon" border="0" />');
 			}
 			html.push('<div class="' + (file.isMedia ? 'media-size' : 'file-size') + '">' + formatSize(file.size) + '</div>');
-			html.push('</div><div class="file-name">'+file.name+'</div>');
+			html.push('</div><div class="file-name">'+escapeHtml(file.name)+'</div>');
 			html.push('<div class="app-btn">');
-			html.push('<a href="/file/download/' + file.path + '" target="_blank" class="' + (fileDeleteChecked ? ' hide' : '') + '">');
-			html.push('<input type="button" value="下载" class="fbtn1 app-btn1" />');	
+			html.push('<a href="/file/download/' + encodePath(file.path) + '" target="_blank" class="' + (fileDeleteChecked ? ' hide' : '') + '">');
+			html.push('<input type="button" value="下载" class="fbtn1 app-btn1" />');
 			html.push("</a>");
-			html.push('\t  <input type="button" value="选择" class="fbtn2 app-btn1' + (fileDeleteChecked ? '' : ' hide') + '" onclick="addFile(2,\''+file.name+'\',\''+file.path+'\');" />');
+			html.push('\t  <input type="button" value="选择" class="fbtn2 app-btn1 select-file' + (fileDeleteChecked ? '' : ' hide') + '" data-type="2" data-name="'+escapeHtml(file.name)+'" data-path="'+escapeHtml(file.path)+'" />');
 			html.push("</div>");
 			html.push('</div>');
 		}
@@ -201,11 +216,11 @@ function addFile(type, name, path){
 	selectedPaths.push(path);
 	selectedPathId ++;
 	var html = [];
-	html.push('<div class="file-oper-item" onclick="removeFile(' + selectedPathId + ',\'' + path + '\');" id="fileOperItem' + selectedPathId + '">');
+	html.push('<div class="file-oper-item remove-file-item" data-id="' + selectedPathId + '" data-path="' + escapeHtml(path) + '" id="fileOperItem' + selectedPathId + '">');
 	html.push('<div class="file-oper-name">');
 	html.push(type == 1 ? "目录" : "文件");
 	html.push("：");
-	html.push(name);
+	html.push(escapeHtml(name));
 	html.push('</div><div class="file-oper-del">X</div></div>');
 	fileOperItems.append(html.join(''));
 	$('.file-oper').removeClass('hide');
@@ -237,10 +252,10 @@ function loadTVList(){
 		for(var i=0;i<data.length;i++){
 			var tv=data[i];
 			html.push('<div class="tv-item">');
-			html.push(tv.name);
+			html.push(escapeHtml(tv.name));
 			html.push('<br />');
 			for(var j=0; j<tv.urls.length; j++){
-				html.push('<a class="tv-source" data-video="' + tv.urls[j].url + '" onclick="playTV(this)">' + tv.urls[j].name + '</a>');
+				html.push('<a class="tv-source" data-video="' + escapeHtml(tv.urls[j].url) + '" onclick="playTV(this)">' + escapeHtml(tv.urls[j].name) + '</a>');
 			}
 			html.push('</div>');
 		}
@@ -364,10 +379,22 @@ $("#btnPlay").on("click", function() {
 	}
 })
 function playMedia(obj){
-	$.post("/play", {playUrl: $(obj).attr('uri'), "useSystem":$('#playUseSystem')[0].checked}, function(data) {
+	$.post("/play", {playUrl: $(obj).attr('data-uri'), "useSystem":$('#playUseSystem')[0].checked}, function(data) {
 		console.log(data)
 	})
 }
+$('.file-list').on('click', '.go-path', function(){
+	loadFileList($(this).attr('data-path'));
+});
+$('.file-list').on('click', '.select-file', function(){
+	addFile(parseInt($(this).attr('data-type'), 10), $(this).attr('data-name'), $(this).attr('data-path'));
+});
+$('.file-list').on('click', '.play-media', function(){
+	playMedia(this);
+});
+fileOperItems.on('click', '.remove-file-item', function(){
+	removeFile($(this).attr('data-id'), $(this).attr('data-path'));
+});
 $('#stopPlay').on("click", function(){
 	$.post("/playStop",null, function(data) {
 		console.log(data)
@@ -482,7 +509,7 @@ function addTorrentItems(data){
 	if(data.files && data.files.length){
 		for(var i=0; i<data.files.length; i++){
 			var f = data.files[i];
-			torrentItems.append("<option value='" + f.index + "'>" + f.name + "(" + formatSize(f.size) + ")</option>");
+			torrentItems.append("<option value='" + encodeURIComponent(f.index) + "'>" + escapeHtml(f.name) + "(" + formatSize(f.size) + ")</option>");
 		}
 		torrentItems.val(data.files[0].index);
 	}
@@ -493,26 +520,14 @@ function loadTorrentItems(){
 	});
 }
 
-var upgradeScript = null;
-
-function upgrade() {
+function showCurrentVersion() {
 	$.get('/version', function(version){
-		$('#curVer').html(version);
+		$('#curVer').text(version);
 	});
-	if(null != upgradeScript){
-		document.body.removeChild(upgradeScript);
-	}
-	var upgradeScript = document.createElement("script");
-	upgradeScript.type = "text/javascript";
-	upgradeScript.src = "http://tvremoteime-1255402058.cos.ap-guangzhou.myqcloud.com/upgrade.js";
-	document.body.appendChild(upgradeScript);
 }
 reloadAppList();
 loadFileList("");
 getDiskSpace();
 loadTVList();
 loadTorrentItems();
-upgrade();
-setInterval(function() {
-	upgrade()
-}, 18e5);
+showCurrentVersion();

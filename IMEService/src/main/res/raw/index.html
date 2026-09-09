@@ -9,7 +9,7 @@
 </head>
 <body>
 	<div class="container">
-		<div class="version">当前版本：<span class="version-code" id="curVer">1.0</span><a href="#" target="_blank" id="newVerUrl" style="margin-left:10px;display:none;">最新版本：<span class="version-code" id="newVer">1.0</span></a></div>
+		<div class="version">当前版本：<span class="version-code" id="curVer">1.0</span></div>
 	    <div class="tabs">
 		  <div class="tab cur" data-rel="controls">输入遥控</div>
 		  <div class="tab" data-rel="app">应用管理</div>
@@ -67,7 +67,7 @@
 		   </div>
 		   <div>
 			   网络视频：<a href="javascript:$('#playUrl').val('');" style="color:#8c8c8c;font-size:12px;">[清空地址]</a><br />
-			   <input type="text" id="playUrl" placeholder="http/ftp/thunder/ed2k/rtmp/mms" value="ftp://d:d@dygodj8.com:12311/[电影天堂www.dy2018.com]超能陆战队BD国粤英中英双字.mp4" />
+			   <input type="text" id="playUrl" placeholder="http/ftp/thunder/ed2k/rtmp/mms" value="" />
 			   <input type="button" value="远程播放" class="btn" id="btnPlay" />
 		   </div>
 		   <div style="margin-top:10px; position: relative;">种子视频：
@@ -119,14 +119,5 @@
 	</div>
 	<script src="/jquery_min.js"></script>
 	<script src="/ime_core.js"></script>
-	<script>
-	var _hmt = _hmt || [];
-	(function() {
-	  var hm = document.createElement("script");
-	  hm.src = "https://hm.baidu.com/hm.js?21bd14f87a177443260cab412a786bd6";
-	  var s = document.getElementsByTagName("script")[0]; 
-	  s.parentNode.insertBefore(hm, s);
-	})();
-	</script>
 </body>
 </html>
