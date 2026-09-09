@@ -1,7 +1,7 @@
 buildscript {
     repositories {
         google()
-        jcenter()
+        mavenCentral()
     }
     dependencies {
         // Android plugin for gradle
@@ -12,7 +12,10 @@ buildscript {
 allprojects {
     repositories {
         google()
-        jcenter()
+        mavenCentral()
+        // JCenter已于2021年永久关停，ijkplayer 0.8.4等少数依赖当年只发布在JCenter，
+        // 官方没有再迁移到Maven Central，这里用阿里云维护的JCenter镜像兜底解析。
+        maven { url 'https://maven.aliyun.com/repository/jcenter' }
     }
 }
 task clean(type: Delete) {
