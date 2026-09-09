@@ -15,6 +15,10 @@ permissions:
 env:
   ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
   CMDLINE_TOOLS_VERSION: "9477386"
+  # 各子模块compileSdkVersion/buildToolsVersion不完全一致：
+  # IMEService/thunder用26/27.0.3，DroidDLNA/ijkplayer用25/26.0.2。
+  # 全部显式安装，不依赖AGP的"缺什么自动联网下载"行为（那个行为不稳定，CI上
+  # 遇到过间歇性连接失败）。
 
 jobs:
   build:
@@ -28,7 +32,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.ANDROID_SDK_ROOT }}
-          key: android-sdk-${{ env.CMDLINE_TOOLS_VERSION }}-platform26-buildtools27.0.3
+          key: android-sdk-${{ env.CMDLINE_TOOLS_VERSION }}-p25-p26-bt26.0.2-bt27.0.3-v2
 
       # sdkmanager本身（新版cmdline-tools）需要JDK 11+才能运行，这里先用JDK 17跑
       # sdkmanager，装完SDK后再在下面切到JDK 8去跑Gradle构建（Gradle 4.4 +
@@ -40,7 +44,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install Android SDK (platform 26 / build-tools 27.0.3)
+      - name: Install Android SDK (platforms 25/26, build-tools 26.0.2/27.0.3)
         if: steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
           set -e
@@ -51,7 +55,9 @@ jobs:
           mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" --licenses > /dev/null
           "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
-            "platform-tools" "platforms;android-26" "build-tools;27.0.3"
+            "platform-tools" \
+            "platforms;android-25" "platforms;android-26" \
+            "build-tools;26.0.2" "build-tools;27.0.3"
 
       - name: Set up JDK 8 (for Gradle build)
         uses: actions/setup-java@v4
