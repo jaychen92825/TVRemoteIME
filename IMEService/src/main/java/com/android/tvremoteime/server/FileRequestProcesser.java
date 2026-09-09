@@ -87,8 +87,12 @@ public class FileRequestProcesser  implements RequestProcesser {
     }
 
     private NanoHTTPD.Response responseDirData(String dirName) {
-        File path = new File(Environment.getExternalStorageDirectory(), dirName);
-        String root = Environment.getExternalStorageDirectory().getPath();
+        File rootFile = Environment.getExternalStorageDirectory();
+        File path = RemoteServerFileManager.resolveSafeFile(rootFile, dirName);
+        if(path == null){
+            return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.FORBIDDEN, "Error 403, invalid path.");
+        }
+        String root = rootFile.getPath();
         JSONArray dirs = new JSONArray();
         JSONArray files = new JSONArray();
         try {
@@ -127,7 +131,10 @@ public class FileRequestProcesser  implements RequestProcesser {
     }
 
     private NanoHTTPD.Response downloadFileData(String fileName){
-        File file = new File(Environment.getExternalStorageDirectory(), fileName);
+        File file = RemoteServerFileManager.resolveSafeFile(Environment.getExternalStorageDirectory(), fileName);
+        if(file == null){
+            return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.FORBIDDEN, "Error 403, invalid path.");
+        }
         if(!file.exists()){
             return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.NOT_FOUND, "Error 404, file not found.");
         }
@@ -147,10 +154,12 @@ public class FileRequestProcesser  implements RequestProcesser {
         boolean r = false;
         if(!TextUtils.isEmpty(uploadFileName)) {
             if (!TextUtils.isEmpty(localFilename)) {
-                File saveFilename = new File(Environment.getExternalStorageDirectory(), uploadPathName);
-                File localFile = new File(localFilename);
-                saveFilename = new File(saveFilename,localFile.getName());
-                r = localFile.renameTo(saveFilename);
+                File saveDir = RemoteServerFileManager.resolveSafeFile(Environment.getExternalStorageDirectory(), uploadPathName);
+                if(saveDir != null) {
+                    File localFile = new File(localFilename);
+                    File saveFilename = new File(saveDir, localFile.getName());
+                    r = localFile.renameTo(saveFilename);
+                }
             }
         }
         return RemoteServer.createJSONResponse(NanoHTTPD.Response.Status.OK,  "{\"success\":" + (r ? "true": "false") + "}");
@@ -160,32 +169,32 @@ public class FileRequestProcesser  implements RequestProcesser {
         String[] pathData = paths.split("\\|");
         for(String p : pathData){
             if(!TextUtils.isEmpty(p)) {
-                File path = new File(Environment.getExternalStorageDirectory(), p);
-                RemoteServerFileManager.deleteFile(path);
+                File path = RemoteServerFileManager.resolveSafeFile(Environment.getExternalStorageDirectory(), p);
+                if(path != null) RemoteServerFileManager.deleteFile(path);
             }
         }
     }
     private void batchCopyFile(String targetPath, String paths){
-        File targetPathFile = new File(Environment.getExternalStorageDirectory(), targetPath);
-        if(!targetPathFile.exists()) return;
+        File targetPathFile = RemoteServerFileManager.resolveSafeFile(Environment.getExternalStorageDirectory(), targetPath);
+        if(targetPathFile == null || !targetPathFile.exists()) return;
 
         String[] pathData = paths.split("\\|");
         for(String p : pathData){
             if(!TextUtils.isEmpty(p)) {
-                File source = new File(Environment.getExternalStorageDirectory(), p);
-                RemoteServerFileManager.copyFile(source, targetPathFile);
+                File source = RemoteServerFileManager.resolveSafeFile(Environment.getExternalStorageDirectory(), p);
+                if(source != null) RemoteServerFileManager.copyFile(source, targetPathFile);
             }
         }
     }
     private void batchCutFile(String targetPath, String paths){
-        File targetPathFile = new File(Environment.getExternalStorageDirectory(), targetPath);
-        if(!targetPathFile.exists()) return;
+        File targetPathFile = RemoteServerFileManager.resolveSafeFile(Environment.getExternalStorageDirectory(), targetPath);
+        if(targetPathFile == null || !targetPathFile.exists()) return;
 
         String[] pathData = paths.split("\\|");
         for(String p : pathData){
             if(!TextUtils.isEmpty(p)) {
-                File source = new File(Environment.getExternalStorageDirectory(), p);
-                RemoteServerFileManager.cutFile(source, targetPathFile);
+                File source = RemoteServerFileManager.resolveSafeFile(Environment.getExternalStorageDirectory(), p);
+                if(source != null) RemoteServerFileManager.cutFile(source, targetPathFile);
             }
         }
     }

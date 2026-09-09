@@ -1,6 +1,7 @@
 package com.android.tvremoteime;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.nfc.Tag;
 import android.os.Handler;
 import android.provider.Settings;
@@ -9,6 +10,7 @@ import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Toast;
 
+import java.security.SecureRandom;
 import java.util.List;
 
 /**
@@ -21,6 +23,37 @@ public class Environment {
     public static int adbServerPort = 5555;
 
     private static Handler toastHandler = null;
+
+    private static final String PREFS_NAME = "tvremoteime_settings";
+    private static final String PREF_ACCESS_CODE = "access_code";
+    public static final String AUTH_REALM_USER = "tvremoteime";
+
+    /**
+     * 控制端HTTP接口的访问口令。首次调用时会自动生成一个随机6位数字口令并持久化，
+     * 用于给RemoteServer做HTTP Basic鉴权，避免局域网内任何人/网页无鉴权即可控制盒子。
+     */
+    public static String getAccessCode(Context context){
+        SharedPreferences prefs = context.getApplicationContext()
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String code = prefs.getString(PREF_ACCESS_CODE, null);
+        if(code == null){
+            code = generateAccessCode();
+            prefs.edit().putString(PREF_ACCESS_CODE, code).apply();
+        }
+        return code;
+    }
+
+    public static void setAccessCode(Context context, String code){
+        SharedPreferences prefs = context.getApplicationContext()
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit().putString(PREF_ACCESS_CODE, code).apply();
+    }
+
+    private static String generateAccessCode(){
+        SecureRandom random = new SecureRandom();
+        int code = 100000 + random.nextInt(900000);
+        return String.valueOf(code);
+    }
 
     public static void debug(String tag, String msg){
         Log.d(tag, msg);

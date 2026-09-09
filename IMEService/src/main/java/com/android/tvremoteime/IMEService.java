@@ -491,7 +491,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
             TextView title = helpDialog.findViewById(R.id.title);
             title.setText(title.getText() + " " + version);
             String address = mServer.getServerAddress();
-            addressView.setText(address);
+            addressView.setText(address + "\n访问口令：" + Environment.getAccessCode(this));
             qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(address, 300, 300));
         }
 

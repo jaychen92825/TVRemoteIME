@@ -21,7 +21,6 @@ import javax.net.ssl.HttpsURLConnection;
  */
 public class HTTPGet {
     public static String readString(String uri){
-        HTTPSTrustManager.allowAllSSL();
         try {
             URL url = new URL(uri);
             HttpsURLConnection conn = (HttpsURLConnection) url.openConnection();
@@ -63,7 +62,6 @@ public class HTTPGet {
     }
 
     public static boolean downloadFile(String uri, File file){
-        HTTPSTrustManager.allowAllSSL();
         try {
             URL url = new URL(uri);
             HttpsURLConnection conn = (HttpsURLConnection) url.openConnection();

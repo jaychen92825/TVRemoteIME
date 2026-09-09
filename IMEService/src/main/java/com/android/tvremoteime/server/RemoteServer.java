@@ -3,6 +3,8 @@ package com.android.tvremoteime.server;
 
 import android.content.Context;
 import android.net.wifi.WifiManager;
+import android.text.TextUtils;
+import android.util.Base64;
 import android.util.Log;
 
 import com.android.tvremoteime.Environment;
@@ -10,6 +12,7 @@ import com.android.tvremoteime.IMEService;
 import com.android.tvremoteime.R;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -155,9 +158,38 @@ public class RemoteServer extends NanoHTTPD
     }
 
 
+    /**
+     * 控制端接口的HTTP Basic鉴权。口令保存在应用私有SharedPreferences中，
+     * 首次运行自动生成，在应用主界面/输入法帮助页可查看。避免局域网内任意设备或
+     * 网页（CSRF）无鉴权即可访问文件管理、装卸载应用、按键输入等接口。
+     */
+    private Response checkAuth(IHTTPSession session){
+        String accessCode = Environment.getAccessCode(mContext);
+        if(TextUtils.isEmpty(accessCode)) return null;
+
+        String authHeader = session.getHeaders().get("authorization");
+        if(authHeader != null && authHeader.toLowerCase().startsWith("basic ")){
+            try {
+                byte[] decoded = Base64.decode(authHeader.substring(6).trim(), Base64.DEFAULT);
+                String credentials = new String(decoded, "UTF-8");
+                int idx = credentials.indexOf(':');
+                String password = idx >= 0 ? credentials.substring(idx + 1) : credentials;
+                if (accessCode.equals(password)) {
+                    return null;
+                }
+            } catch (IllegalArgumentException | UnsupportedEncodingException ignored) {
+            }
+        }
+        Response resp = createPlainTextResponse(Response.Status.UNAUTHORIZED, "需要访问口令，请在应用主界面查看当前口令。");
+        resp.addHeader("WWW-Authenticate", "Basic realm=\"" + Environment.AUTH_REALM_USER + "\"");
+        return resp;
+    }
+
     @Override
     public Response serve(IHTTPSession session) {
         Log.i(IMEService.TAG, "接收到HTTP请求：" + session.getMethod() + " " + session.getUri());
+        Response authFailure = checkAuth(session);
+        if(authFailure != null) return authFailure;
         if(!session.getUri().isEmpty()) {
             String fileName = session.getUri().trim();
             if (fileName.indexOf('?') >= 0) {

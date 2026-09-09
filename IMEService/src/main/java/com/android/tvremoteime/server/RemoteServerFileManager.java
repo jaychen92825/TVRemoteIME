@@ -32,6 +32,25 @@ public class RemoteServerFileManager implements NanoHTTPD.TempFileManager {
     static File getPlayTorrentFile(){
         return new File(RemoteServerFileManager.baseDir, "play.torrent");
     }
+
+    /**
+     * 将HTTP接口收到的相对路径解析为root目录下的文件，并校验解析结果没有借助"../"
+     * 逃逸出root目录（路径穿越）。校验失败（含相对路径为空、解析出错）时返回null，
+     * 调用方应视为非法请求处理，不再往下访问文件系统。
+     */
+    public static File resolveSafeFile(File root, String relativePath){
+        if(relativePath == null) return null;
+        try {
+            String rootCanonical = root.getCanonicalPath();
+            File target = new File(root, relativePath);
+            String targetCanonical = target.getCanonicalPath();
+            if(targetCanonical.equals(rootCanonical) || targetCanonical.startsWith(rootCanonical + File.separator)){
+                return target;
+            }
+        } catch (IOException ignored) {
+        }
+        return null;
+    }
     public static File getScreenShotFile(){
         return new File(RemoteServerFileManager.baseDir, "screenshot.png");
     }

@@ -96,7 +96,8 @@ public class AdbHelper {
                         if(data instanceof Integer){
                             msg = "shell:input keyevent " + String.valueOf(data);
                         }else{
-                            msg = "shell:input text \"" + ((String)data).replaceAll("\"", "\\\"").replaceAll("\\\\", "\\\\") + "\"";
+                            //使用单引号包裹并转义内部单引号，避免文本中的$()、反引号等被远程shell当作命令展开执行
+                            msg = "shell:input text '" + ((String)data).replace("'", "'\\''") + "'";
                         }
                         try {
                             if(connection != null || try2Connect()){
