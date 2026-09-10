@@ -135,14 +135,17 @@ jobs:
           path: IMEService/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
-      # App内"检查更新"功能读的就是这个Release：只在push到master、且配置了release
-      # 签名密钥（未签名的APK根本装不上，发布出去没有意义）时才发布。tag固定用
+      # App内"检查更新"功能读的就是这个Release：只在master分支上、且配置了release
+      # 签名密钥（未签名的APK根本装不上，发布出去没有意义）时才发布，push和手动
+      # 触发(workflow_dispatch，方便配完Secret后立刻手动跑一次验证整条链路，不用
+      # 干等下一次真实代码改动)都算，PR不算(fork PR不带Secret，也不该在没合并前
+      # 就对外发布)。tag固定用
       # "v<versionCode>"这个格式而不是滚动的"latest"标签——这样App直接从tag名解析
       # 版本号做数值比较即可，不需要额外接口，也顺带保留了每个历史版本各自的下载
       # 记录；versionCode没有变化时重复push到master会更新同一个tag对应的Release
       # (软件行为，不是bug)，版本号变了则会创建一个新的Release。
       - name: Extract version info
-        if: ${{ github.ref == 'refs/heads/master' && github.event_name == 'push' && env.HAS_RELEASE_SIGNING == 'true' }}
+        if: ${{ github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && env.HAS_RELEASE_SIGNING == 'true' }}
         id: appver
         run: |
           set -e
@@ -152,7 +155,7 @@ jobs:
           echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Publish release APK to GitHub Release
-        if: ${{ github.ref == 'refs/heads/master' && github.event_name == 'push' && env.HAS_RELEASE_SIGNING == 'true' }}
+        if: ${{ github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && env.HAS_RELEASE_SIGNING == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.appver.outputs.code }}
