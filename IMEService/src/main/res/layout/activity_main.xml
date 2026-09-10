@@ -99,6 +99,7 @@
                             android:paddingRight="16dp"
                             android:text="设置"
                             android:textColor="@color/white"
+                            android:nextFocusDown="@id/btnSetIME"
                             android:onClick="onClick"/>
                     </LinearLayout>
 
@@ -131,6 +132,8 @@
                             android:paddingRight="16dp"
                             android:text="设置"
                             android:textColor="@color/white"
+                            android:nextFocusUp="@id/btnUseIME"
+                            android:nextFocusDown="@id/btnStartService"
                             android:onClick="onClick"/>
                     </LinearLayout>
 
@@ -155,6 +158,8 @@
                             android:paddingRight="12dp"
                             android:text="手动启动"
                             android:textColor="@color/white"
+                            android:nextFocusUp="@id/btnSetIME"
+                            android:nextFocusDown="@id/etTestInput"
                             android:onClick="onClick"/>
                     </LinearLayout>
                 </LinearLayout>
@@ -176,12 +181,15 @@
                         android:textSize="17sp"
                         android:textStyle="bold"/>
                     <EditText
+                        android:id="@+id/etTestInput"
                         android:layout_width="match_parent"
                         android:layout_height="42dp"
                         android:background="@drawable/bg_edit"
                         android:hint="点此，用手机在控制端输入试试"
                         android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_secondary"/>
+                        android:textColorHint="@color/text_secondary"
+                        android:nextFocusUp="@id/btnStartService"
+                        android:nextFocusDown="@id/etAccessCode"/>
                 </LinearLayout>
             </LinearLayout>
 
@@ -266,7 +274,9 @@
                             android:hint="输入新口令"
                             android:inputType="text"
                             android:textColor="@color/text_primary"
-                            android:textColorHint="@color/text_secondary"/>
+                            android:textColorHint="@color/text_secondary"
+                            android:nextFocusUp="@id/etTestInput"
+                            android:nextFocusDown="@id/btnSetAccessCode"/>
                         <Button
                             android:id="@+id/btnSetAccessCode"
                             android:layout_width="wrap_content"
@@ -277,6 +287,8 @@
                             android:paddingRight="16dp"
                             android:text="修改"
                             android:textColor="@color/white"
+                            android:nextFocusUp="@id/etAccessCode"
+                            android:nextFocusDown="@id/etDLNAName"
                             android:onClick="onClick"/>
                     </LinearLayout>
                 </LinearLayout>
@@ -310,7 +322,9 @@
                             android:background="@drawable/bg_edit"
                             android:hint="如：客厅、卧室"
                             android:textColor="@color/text_primary"
-                            android:textColorHint="@color/text_secondary"/>
+                            android:textColorHint="@color/text_secondary"
+                            android:nextFocusUp="@id/btnSetAccessCode"
+                            android:nextFocusDown="@id/btnSetDLNA"/>
                         <Button
                             android:id="@+id/btnSetDLNA"
                             android:layout_width="wrap_content"
@@ -321,6 +335,8 @@
                             android:paddingRight="16dp"
                             android:text="设置"
                             android:textColor="@color/white"
+                            android:nextFocusUp="@id/etDLNAName"
+                            android:nextFocusDown="@id/btnCheckUpdate"
                             android:onClick="onClick"/>
                     </LinearLayout>
                 </LinearLayout>
@@ -368,6 +384,7 @@
                     android:paddingRight="16dp"
                     android:text="检查更新"
                     android:textColor="@color/white"
+                    android:nextFocusUp="@id/btnSetDLNA"
                     android:onClick="onClick"/>
             </LinearLayout>
         </LinearLayout>
