@@ -402,6 +402,13 @@ $("div.tab").on("click", function(){
 	tabs.filter('[data-tab="' + o.attr('data-rel')+ '"]').removeClass("hide");
 	o.addClass('cur');
 })
+$(".mode-tab").on("click", function(){
+	var mode = $(this).attr("data-mode");
+	$(".mode-tab").removeClass("active");
+	$(this).addClass("active");
+	$(".nav-mode").addClass("hide");
+	$('.nav-mode[data-mode="' + mode + '"]').removeClass("hide");
+})
 $("#btnCls").on("click",function(){
 	vibrateShort();
 	postKeyCode($(this).attr("data-key"))

@@ -14,10 +14,22 @@
 <body>
 	<div class="container">
 	    <div class="tabs">
-		  <div class="tab cur" data-rel="controls">输入遥控</div>
-		  <div class="tab" data-rel="app">应用管理</div>
-		  <div class="tab" data-rel="file">文件管理</div>
-		  <div class="tab" data-rel="video">视频直播</div>
+		  <div class="tab cur" data-rel="controls">
+			  <svg viewBox="0 0 24 24" width="14" height="14"><rect x="2" y="6" width="20" height="12" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><line x1="6" y1="10" x2="6" y2="10.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="10" y1="10" x2="10" y2="10.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="14" y1="10" x2="14" y2="10.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="10" x2="18" y2="10.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="7" y1="14" x2="17" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+			  输入遥控
+		  </div>
+		  <div class="tab" data-rel="app">
+			  <svg viewBox="0 0 24 24" width="14" height="14"><rect x="3" y="3" width="7" height="7" rx="1.5" fill="currentColor"/><rect x="14" y="3" width="7" height="7" rx="1.5" fill="currentColor"/><rect x="3" y="14" width="7" height="7" rx="1.5" fill="currentColor"/><rect x="14" y="14" width="7" height="7" rx="1.5" fill="currentColor"/></svg>
+			  应用管理
+		  </div>
+		  <div class="tab" data-rel="file">
+			  <svg viewBox="0 0 24 24" width="14" height="14"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6z" fill="currentColor"/></svg>
+			  文件管理
+		  </div>
+		  <div class="tab" data-rel="video">
+			  <svg viewBox="0 0 24 24" width="14" height="14"><rect x="2" y="4" width="20" height="13" rx="1.5" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M10 8l6 3-6 3V8z" fill="currentColor"/><line x1="8" y1="21" x2="16" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+			  视频直播
+		  </div>
 		  <div class="version-watermark">V<span id="curVer">1.0</span></div>
 		</div>
 		<div class="keys" data-tab="controls">
@@ -30,12 +42,29 @@
 						<svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 9v6h4l5 5V4L8 9H4z" fill="currentColor"/><path d="M17 8l4 8M21 8l-4 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
 					</div>
 				</div>
-				<div id="direction-btns" class="direction-btns">
-					<div class="direction left-btn" id="left-btn" data-key='21'>◀</div>
-					<div class="direction top-btn" id="top-btn" data-key='19'>▲</div>
-					<div class="direction right-btn" id="right-btn" data-key='22'>▶</div>
-					<div class="direction bottom-btn" id="bottom-btn" data-key='20'>▼</div>
-					<div class="direction center-btn" id="center-btn" data-key='23'></div>
+				<div class="mode-tabs">
+					<div class="mode-tab active" data-mode="dpad">
+						<svg viewBox="0 0 24 24" width="13" height="13"><path d="M12 2l3 3h-2v4h4V7l3 3-3 3v-2h-4v4h2l-3 3-3-3h2v-4H6v2l-3-3 3-3v2h4V5H8l3-3z" fill="currentColor"/></svg>
+						方向键
+					</div>
+					<div class="mode-tab" data-mode="mouse">
+						<svg viewBox="0 0 24 24" width="13" height="13"><rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="14" cy="11" r="1.6" fill="currentColor"/></svg>
+						触控板
+					</div>
+				</div>
+				<div class="nav-mode" data-mode="dpad">
+					<div id="direction-btns" class="direction-btns">
+						<div class="direction left-btn" id="left-btn" data-key='21'>◀</div>
+						<div class="direction top-btn" id="top-btn" data-key='19'>▲</div>
+						<div class="direction right-btn" id="right-btn" data-key='22'>▶</div>
+						<div class="direction bottom-btn" id="bottom-btn" data-key='20'>▼</div>
+						<div class="direction center-btn" id="center-btn" data-key='23'></div>
+					</div>
+				</div>
+				<div class="nav-mode hide" data-mode="mouse">
+					<div class="touchpad" id="touchpad">
+						触控板<br /><span class="touchpad-hint">滑动移动光标，轻触点击（需电视盒子已连接ADB）</span>
+					</div>
 				</div>
 				<div class="remote-row remote-row-nav">
 					<div class="otherbtn round-btn" id="home-btn" data-key='3' title="主页">
@@ -55,9 +84,6 @@
 					</div>
 				</div>
 			</div>
-			<div class="touchpad" id="touchpad">
-				触控板<br /><span class="touchpad-hint">滑动移动光标，轻触点击（需电视盒子已连接ADB）</span>
-			</div>
 		</div>
 		<div class="main-wrapper" data-tab="controls">
 			<div class="inputarea-wrapper">
@@ -65,24 +91,24 @@
 			</div>
 		</div>
 		<div class="btn-line" data-tab="controls">
-		    <input type="button" value="退格" class="btn" id="btnDel" data-key='67' />
-		    <input type="button" value="回车" class="btn" id="btnEnter" />
-		    <input type="button" value="清空" class="btn" id="btnCls" data-key='cls' />
+		    <div class="btn" id="btnDel" data-key='67'><svg viewBox="0 0 24 24" width="14" height="14"><path d="M8 5h12a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H8l-6-7 6-7z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/><line x1="11" y1="9" x2="17" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="17" y1="9" x2="11" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>退格</div>
+		    <div class="btn" id="btnEnter"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M19 5v7a2 2 0 0 1-2 2H7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11l-4 3 4 3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>回车</div>
+		    <div class="btn" id="btnCls" data-key='cls'><svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" fill="none"/><line x1="9" y1="9" x2="15" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="15" y1="9" x2="9" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>清空</div>
 		</div>
 		<div class="app-panel hide" data-tab="app">
 			<div class="app-un">
-		    <a class="showSettings" id="showSettings">系统设置</a>
+		    <a class="showSettings" id="showSettings"><svg viewBox="0 0 24 24" width="12" height="12"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-dasharray="2.4 2.6"/></svg>系统设置</a>
 			<label style="margin-left:10px;" class="blue"><input type="checkbox" id="cbListSystem">显示系统应用</label>
 			<label style="margin-left:10px;"><input type="checkbox" id="cbUninstall">卸载应用</label></div>
 			<div class="app-list"></div>
 		</div>
 		<div class="app-upload" data-tab="controls">
 		    <input type="file" id="upfile" value=".." />
-		    <input type="button" value="传送文件" class="upload-btn" id="btnUpload" />
+		    <div class="upload-btn" id="btnUpload"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 18a4 4 0 0 1-1-7.87A5 5 0 0 1 16 8h.5a3.5 3.5 0 0 1 .5 7" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="12" x2="12" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M9 15l3-3 3 3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>传送文件</div>
 			<div class="upload-process">
 			    <div class="processbar" id="processbar1"></div>
 			</div>
-		    <input type="button" value="清除缓存" class="upload-btn" id="btnClear" />
+		    <div class="upload-btn" id="btnClear"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 7h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/></svg>清除缓存</div>
 		</div>
 		<div class="upload-settings" data-tab="controls">
 		   <label style="margin-right:10px;"><input type="checkbox" checked="checked" id="cbAutoInstall">传送后自动安装APK文件或播放视频文件</label>
@@ -91,38 +117,38 @@
 		   <div style="text-align:right;font-size:12px;color:blue;">
 		   <label>每次快进<input type="text" id="speedInterval" maxlength="3" value="5" style="width:30px;height:22px;" />秒</label>
 		   <label style=""><input type="checkbox" id="playUseSystem">调用系统播放器</label>
-		   <input type="button" value="停止边下边播任务" class="btn1 app-btn1" id="stopPlay" style="margin-left:10px;height:23px;margin-right:15px;">
+		   <div class="btn1 app-btn1" id="stopPlay" style="margin-left:10px;height:23px;margin-right:15px;"><svg viewBox="0 0 24 24" width="12" height="12"><rect x="5" y="5" width="14" height="14" rx="1.5" fill="currentColor"/></svg>停止边下边播任务</div>
 		   </div>
 		   <div>
-			   网络视频：<a href="javascript:$('#playUrl').val('');" style="color:#8c8c8c;font-size:12px;">[清空地址]</a><br />
+			   网络视频：<a href="javascript:$('#playUrl').val('');" style="color:#8c8c8c;font-size:12px;display:inline-flex;align-items:center;gap:2px;"><svg viewBox="0 0 24 24" width="11" height="11"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>清空地址</a><br />
 			   <input type="text" id="playUrl" placeholder="http/ftp/thunder/ed2k/rtmp/mms" value="" />
-			   <input type="button" value="远程播放" class="btn" id="btnPlay" />
+			   <div class="btn" id="btnPlay"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 5l12 7-12 7V5z" fill="currentColor"/></svg>远程播放</div>
 		   </div>
 		   <div style="margin-top:10px; position: relative;">种子视频：
 		       <input type="file" id="upfile3" value="..">
 			   <input type="button" value="上传种子" class="btn" id="btnUploadTorrent">     
-			   <input type="button" value="开始播放" class="btn" id="btnPlayTorrent">
+			   <div class="btn" id="btnPlayTorrent"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 5l12 7-12 7V5z" fill="currentColor"/></svg>开始播放</div>
 			   <select style="height:30px;width:115px;" id="torrentItems">
                </select>  
            </div>
 		   <div class="tv-list">
 		    <div class="tv-panel-title">
 			  <div style="flex:1">电视节目：</div>
-			  <div style="font-size:12px;text-align:right;">提示：需要更改下方电视直播源请<a style="color:red" id="btnShowTVEdit">点击这里</a></div>
+			  <div style="font-size:12px;text-align:right;">提示：需要更改下方电视直播源请<a style="color:red;display:inline-flex;align-items:center;gap:2px;" id="btnShowTVEdit"><svg viewBox="0 0 24 24" width="11" height="11"><path d="M4 20l1-4 11-11 3 3-11 11-4 1z" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linejoin="round"/></svg>点击这里</a></div>
 			</div>
 			<div class="tv-items"></div>
 		   </div>
 		   <div class="tv-edit hide">
 		      <textarea style="width:98%;height:500px" id="tvData"></textarea><br />
-              <input type="button" value="修改" class="btn" id="btnTVEdit">
-			  <input type="button" value="取消" class="btn" id="btnTVCancel">
+              <div class="btn" id="btnTVEdit"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M5 13l4 4 10-10" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>修改</div>
+			  <div class="btn" id="btnTVCancel"><svg viewBox="0 0 24 24" width="14" height="14"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>取消</div>
 		  </div>
 	    </div>
 		<div class="file-panel hide" data-tab="file">
 		   <div class="file-un">
 			   <div class="file-upload">
 					<input type="file" id="upfile2" value=".." />
-					<input type="button" value="上传文件" class="btn" id="btnUpload2" />
+					<div class="btn" id="btnUpload2"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 18a4 4 0 0 1-1-7.87A5 5 0 0 1 16 8h.5a3.5 3.5 0 0 1 .5 7" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="12" x2="12" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M9 15l3-3 3 3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>上传文件</div>
 					<div class="upload-process" style="height:30px">
 						<div class="processbar" id="processbar2"></div>
 					</div>
@@ -133,9 +159,9 @@
 		       <div class="file-oper-items">
 			   </div>
 			   <div style="text-align:right">
-					<input type="button" value="复制" class="btn" id="btnCopy" onclick="postFileAction('copy');" />
-					<input type="button" value="剪切" class="btn" id="btnCut" onclick="postFileAction('cut');" />
-					<input type="button" value="删除" class="btn" id="btnDelete" onclick="postFileAction('delete');" style="color:red" />
+					<div class="btn" id="btnCopy" onclick="postFileAction('copy');"><svg viewBox="0 0 24 24" width="14" height="14"><rect x="8" y="8" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M5 15V5a1 1 0 0 1 1-1h10" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>复制</div>
+					<div class="btn" id="btnCut" onclick="postFileAction('cut');"><svg viewBox="0 0 24 24" width="14" height="14"><circle cx="6" cy="6" r="2.2" stroke="currentColor" stroke-width="1.6" fill="none"/><circle cx="6" cy="18" r="2.2" stroke="currentColor" stroke-width="1.6" fill="none"/><line x1="7.8" y1="7.5" x2="20" y2="18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="7.8" y1="16.5" x2="20" y2="6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>剪切</div>
+					<div class="btn" id="btnDelete" onclick="postFileAction('delete');" style="color:red"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 7h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/></svg>删除</div>
 			   </div>
 		   </div>
 		   <div class="file-disk">
