@@ -8,6 +8,7 @@ import android.text.TextUtils;
 
 import com.android.tvremoteime.AppPackagesHelper;
 import com.android.tvremoteime.VideoPlayHelper;
+import com.android.tvremoteime.adb.AdbHelper;
 
 import java.io.File;
 import java.util.Map;
@@ -31,6 +32,7 @@ public class OtherGetRequestProcesser implements RequestProcesser {
             switch (fileName) {
                 case "/version":
                 case "/sdcard_stat":
+                case "/adbStatus":
                     return true;
             }
         }
@@ -44,9 +46,23 @@ public class OtherGetRequestProcesser implements RequestProcesser {
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK, AppPackagesHelper.getCurrentPackageVersion(this.context) );
             case "/sdcard_stat":
                 return getSDCardStatResponse();
+            case "/adbStatus":
+                return getAdbStatusResponse();
             default:
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.NOT_FOUND, "Error 404, file not found.");
         }
+    }
+
+    //电源键/触控板都依赖ADB，之前只能靠"点了没反应"来猜是不是没连上ADB；
+    //这里主动探测一次连接状态（还没连上的话顺带在后台尝试连一次），让控制页
+    //能提前显示"ADB未连接"，而不是等用户点了按钮才发现不生效。
+    private NanoHTTPD.Response getAdbStatusResponse(){
+        AdbHelper.createInstance();
+        if(AdbHelper.initService(this.context)){
+            AdbHelper.probeConnection();
+        }
+        return RemoteServer.createJSONResponse(NanoHTTPD.Response.Status.OK,
+                "{\"connected\":" + AdbHelper.isServiceConnected() + "}");
     }
 
     private NanoHTTPD.Response getSDCardStatResponse(){

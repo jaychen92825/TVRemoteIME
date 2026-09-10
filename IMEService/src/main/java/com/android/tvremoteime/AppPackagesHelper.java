@@ -89,7 +89,7 @@ public class AppPackagesHelper {
         return version;
     }
 
-    public static List<AppInfo> queryAppInfo(Context context, boolean containSysApp){
+    public static List<AppInfo> queryAppInfo(final Context context, boolean containSysApp){
         PackageManager pm = context.getPackageManager();
         List<ApplicationInfo> listAppcations = pm
                 .getInstalledApplications(PackageManager.MATCH_UNINSTALLED_PACKAGES);
@@ -108,16 +108,22 @@ public class AppPackagesHelper {
                 appInfos.add(appInfo);
             }
         }
+        //常用应用置顶：非系统/系统这个大分组不变，组内按控制端启动次数从高到低排，
+        //次数一样再按名称排——这样点得越多的应用格子越靠前，不用每次都往下翻找。
         Collections.sort(appInfos, new Comparator<AppInfo>() {
             @Override
             public int compare(AppInfo o1, AppInfo o2) {
                 int i1 = (o1.isSysApp ? 2 : 1);
                 int i2 = (o2.isSysApp ? 2 : 1);
-                if(i1 == i2){
-                    return o1.getLable().compareTo(o2.getLable());
-                }else{
+                if(i1 != i2){
                     return (i1 < i2) ? -1 : 1;
                 }
+                int c1 = Environment.getAppLaunchCount(context, o1.getPackageName());
+                int c2 = Environment.getAppLaunchCount(context, o2.getPackageName());
+                if(c1 != c2){
+                    return c2 - c1;
+                }
+                return o1.getLable().compareTo(o2.getLable());
             }
         });
         return  appInfos;
@@ -179,6 +185,7 @@ public class AppPackagesHelper {
             Intent intent = pm.getLaunchIntentForPackage(packageName);
             if(intent != null){
                 context.startActivity(intent);
+                Environment.recordAppLaunch(context, packageName);
             }
             Log.i(IMEService.TAG, String.format("已运行应用包[%s]", packageName));
         }catch (Exception ex){

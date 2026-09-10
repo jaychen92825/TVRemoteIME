@@ -314,6 +314,38 @@ body {
 	border-bottom: 1px solid var(--color-border) !important;
 }
 
+/* 电源键/触控板要靠ADB才能生效，之前只能靠"点了没反应"猜是不是没连上；
+   这个小状态条用来提前告诉用户能不能用，不用等点了按钮才发现。灰色=未连接
+   (刚打开页面时的默认状态，也是探测中/没检测到adb的状态)，绿色=已连接。 */
+.adb-status {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	margin-top: 8px;
+	font-size: 11px;
+	color: var(--color-text-secondary);
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.adb-status-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: #c7cbd1;
+	flex-shrink: 0;
+	transition: background 0.2s ease;
+}
+
+.adb-status.connected .adb-status-dot {
+	background: #4caf50;
+}
+
+.adb-status.connected .adb-status-text {
+	color: #4caf50;
+}
+
 .mode-tabs {
 	display: flex;
 	justify-content: center;

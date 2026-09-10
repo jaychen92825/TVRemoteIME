@@ -620,9 +620,25 @@ function showCurrentVersion() {
 		$('#curVer').text(version);
 	});
 }
+//电源键、触控板/滚动条都依赖ADB才能生效，轮询一下连接状态显示给用户看，
+//不用非要点了按钮没反应才知道是没连上ADB。
+function refreshAdbStatus(){
+	$.get('/adbStatus', function(data){
+		var el = $('#adbStatus');
+		if(data && data.connected){
+			el.addClass('connected');
+			el.find('.adb-status-text').text('ADB已连接，电源键/触控板可用');
+		}else{
+			el.removeClass('connected');
+			el.find('.adb-status-text').text('ADB未连接，电源键/触控板暂不可用');
+		}
+	}, 'json');
+}
 reloadAppList();
 loadFileList("");
 getDiskSpace();
 loadTVList();
 loadTorrentItems();
 showCurrentVersion();
+refreshAdbStatus();
+setInterval(refreshAdbStatus, 4000);

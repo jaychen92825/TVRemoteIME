@@ -26,6 +26,7 @@ public class Environment {
 
     private static final String PREFS_NAME = "tvremoteime_settings";
     private static final String PREF_ACCESS_CODE = "access_code";
+    private static final String PREF_APP_LAUNCH_COUNT_PREFIX = "app_launch_count_";
     public static final String AUTH_REALM_USER = "tvremoteime";
 
     /**
@@ -53,6 +54,24 @@ public class Environment {
         SecureRandom random = new SecureRandom();
         int code = 100000 + random.nextInt(900000);
         return String.valueOf(code);
+    }
+
+    /**
+     * 应用管理里"常用应用置顶"用：每次通过控制端启动某个应用就计一次数，
+     * 应用列表按这个次数从高到低排（同类别内，不影响"非系统应用在前/
+     * 系统应用在后"这个大分组）。
+     */
+    public static void recordAppLaunch(Context context, String packageName){
+        SharedPreferences prefs = context.getApplicationContext()
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        int count = prefs.getInt(PREF_APP_LAUNCH_COUNT_PREFIX + packageName, 0);
+        prefs.edit().putInt(PREF_APP_LAUNCH_COUNT_PREFIX + packageName, count + 1).apply();
+    }
+
+    public static int getAppLaunchCount(Context context, String packageName){
+        SharedPreferences prefs = context.getApplicationContext()
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        return prefs.getInt(PREF_APP_LAUNCH_COUNT_PREFIX + packageName, 0);
     }
 
     public static void debug(String tag, String msg){

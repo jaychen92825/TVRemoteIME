@@ -34,6 +34,10 @@ public class AdbHelper {
         public final int x, y;
         public TapCommand(int x, int y){ this.x = x; this.y = y; }
     }
+    //控制端"ADB连接状态"指示灯用：在没有真正的按键/触控命令要发之前，主动
+    //探测一下能不能连上adb，这样用户还没点电源键/触控板之前就能看到能不能用，
+    //而不是非要先点一次、失败了才知道。"shell:echo"在设备上没有任何副作用。
+    private static final Object PROBE = new Object();
 
     private static String TAG = "AdbHelper";
     private AdbConnection connection = null;
@@ -43,6 +47,7 @@ public class AdbHelper {
     private ArrayDeque<Object> sendDataDeque = new ArrayDeque<>();
     private Thread sendDataThread = null;
     private boolean running = false;
+    private volatile boolean probing = false;
     private Context context;
 
     private AdbHelper(){
@@ -106,7 +111,9 @@ public class AdbHelper {
                             }
                         }
                         String msg = null;
-                        if(data instanceof Integer){
+                        if(data == PROBE){
+                            msg = "shell:echo probe";
+                        }else if(data instanceof Integer){
                             msg = "shell:input keyevent " + String.valueOf(data);
                         }else if(data instanceof SwipeCommand){
                             //坐标均为服务端计算得出的int，不含用户可控字符，无需转义
@@ -138,6 +145,9 @@ public class AdbHelper {
                                 Environment.debug(TAG, "发送adb命令时出错：" + msg, e);
                                 //Environment.toastInHandler(adbHelper.context, "TVRemoteIME向adb服务发送命令时出错。" + e.toString());
                             }
+                        }
+                        if(data == PROBE){
+                            probing = false;
                         }
                     }
                 }
@@ -199,9 +209,25 @@ public class AdbHelper {
         }
     }
 
+    public boolean isConnected(){
+        return connection != null;
+    }
+
     private static AdbHelper instance = null;
     public static AdbHelper getInstance(){
         return instance;
+    }
+    public static boolean isServiceConnected(){
+        return instance != null && instance.isConnected();
+    }
+    //控制端轮询"ADB连接状态"时调用：还没连上就顺手探测一次，让状态灯能在
+    //用户真正点电源键/触控板之前就自己变绿，而不是必须先点一次才知道行不行。
+    //probing标记避免轮询间隔比连接超时还短时反复堆积探测请求。
+    public static void probeConnection(){
+        if(instance != null && !instance.isConnected() && !instance.probing){
+            instance.probing = true;
+            instance.sendData(PROBE);
+        }
     }
     public static void createInstance(){
         if(instance == null){
