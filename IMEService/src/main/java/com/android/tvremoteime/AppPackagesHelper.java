@@ -6,7 +6,9 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.provider.Settings;
 import android.util.Log;
@@ -213,11 +215,36 @@ public class AppPackagesHelper {
     }
     public static byte[] getAppIcon(String packageName, Context context){
         ApplicationInfo applicationInfo = getApplicationInfo(packageName, context);
-        if(applicationInfo == null) return  null;
-        BitmapDrawable bitmap = (BitmapDrawable)applicationInfo.loadIcon(context.getPackageManager());
+        if(applicationInfo == null) return null;
+        try {
+            Drawable drawable = applicationInfo.loadIcon(context.getPackageManager());
+            Bitmap bitmap = drawableToBitmap(drawable);
+            ByteArrayOutputStream data = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, data);
+            return data.toByteArray();
+        } catch (Exception e) {
+            Log.e("AppPackagesHelper", "getAppIcon " + packageName, e);
+            return null;
+        }
+    }
 
-        ByteArrayOutputStream data = new ByteArrayOutputStream();
-        bitmap.getBitmap().compress(Bitmap.CompressFormat.PNG, 100, data);
-        return data.toByteArray();
+    //以前这里直接强转成BitmapDrawable，但loadIcon()拿到的不一定是BitmapDrawable——
+    //几乎所有targetSdk 26+的App用的都是自适应图标(AdaptiveIconDrawable，前景+
+    //背景两层合成，不是一张位图)，矢量图标(VectorDrawable)同理，强转会直接抛
+    //ClassCastException，导致/icon/请求失败，控制端网页上看到的就是图片加载失败的
+    //占位图标，而不是真实的App图标。改成不管拿到什么Drawable，都统一画到一张新建
+    //的Bitmap上，兼容位图/自适应图标/矢量图标等所有情况。
+    private static Bitmap drawableToBitmap(Drawable drawable){
+        if(drawable instanceof BitmapDrawable){
+            Bitmap bitmap = ((BitmapDrawable) drawable).getBitmap();
+            if(bitmap != null) return bitmap;
+        }
+        int width = Math.max(drawable.getIntrinsicWidth(), 1);
+        int height = Math.max(drawable.getIntrinsicHeight(), 1);
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+        drawable.draw(canvas);
+        return bitmap;
     }
 }
