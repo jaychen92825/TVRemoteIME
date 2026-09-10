@@ -458,7 +458,7 @@ body {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	margin-top: 8px;
+	margin: 8px 15px 0;
 }
 
 .elements-status {
@@ -466,12 +466,17 @@ body {
 	color: var(--color-text-secondary);
 }
 
+/* 之前这块嵌在给方向键大圆环用的300px窄栏里，文字本来就没多少宽度可用；
+   现在挪到了两个.remote-panel中间、吃满整个容器宽度，改用网格让每行能
+   并排放下好几个元素而不是一列到底，格子更密，同时不再强制单行省略号
+   截断——文字长就自动换到第二行整段显示出来，不会再出现只显示半截字的
+   情况。 */
 .elements-list {
-	margin-top: 8px;
-	max-height: 320px;
+	margin: 8px 15px 0;
+	max-height: 360px;
 	overflow-y: auto;
-	display: flex;
-	flex-direction: column;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
 	gap: 6px;
 }
 
@@ -479,13 +484,17 @@ body {
 	background: var(--color-card-bg);
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius-sm);
-	padding: 10px 12px;
+	padding: 8px 10px;
 	font-size: 13px;
+	line-height: 1.4;
 	color: var(--color-text);
 	cursor: pointer;
 	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	white-space: normal;
+	word-break: break-word;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
 	-webkit-user-select: none;
 	user-select: none;
 	-webkit-touch-callout: none;
@@ -501,6 +510,7 @@ body {
 	flex-direction: column;
 	align-items: center;
 	text-align: center;
+	margin: 0 15px;
 	padding: 20px 10px;
 	color: var(--color-text-secondary);
 	font-size: 12px;

@@ -205,9 +205,17 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 						if("cls".equalsIgnoreCase(keyCode)){
 							InputConnection ic = getCurrentInputConnection();
 							if(ic != null) {
-								ic.deleteSurroundingText(Integer.MAX_VALUE,Integer.MAX_VALUE);
-								//ic.performContextMenuAction(android.R.id.selectAll);
-								//ic.commitText("", 1);
+								//deleteSurroundingText(Integer.MAX_VALUE, Integer.MAX_VALUE)在很多
+								//InputConnection实现里会崩溃：BaseInputConnection内部用
+								//"光标位置 + afterLength"计算删除终点，Integer.MAX_VALUE会导致int
+								//溢出变成负数，最终变成"起点>终点"传入删除方法而抛异常——只有输入框
+								//里已经有文本时才会真正触发这条路径，这正好对应"输完字再点清空才崩"
+								//的现象。改为先取出光标前后的实际文本长度，再按真实长度删除，
+								//彻底避免溢出。
+								CharSequence before = ic.getTextBeforeCursor(5000, 0);
+								CharSequence after = ic.getTextAfterCursor(5000, 0);
+								ic.deleteSurroundingText(before != null ? before.length() : 0,
+										after != null ? after.length() : 0);
 							}
 						}else {
 							final int kc = KeyEvent.keyCodeFromString(keyCode);
