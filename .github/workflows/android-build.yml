@@ -23,6 +23,11 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # if:条件里不能直接引用secrets这个上下文（GitHub Actions工作流语法层面就不
+    # 支持，会在解析阶段直接报"Unrecognized named-value: 'secrets'"，跑都跑不
+    # 起来），得先在job级别的env里转一手，再在下面步骤的if里读env.*。
+    env:
+      HAS_RELEASE_SIGNING: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -90,7 +95,7 @@ jobs:
       # 这里会自然跳过，release包会退回未签名，安全默认值）。解码出来的keystore文件
       # 写到本次运行的临时目录，构建结束后随runner一起销毁，不会留存或进版本库。
       - name: Decode release keystore
-        if: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.HAS_RELEASE_SIGNING == 'true' }}
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         run: |
