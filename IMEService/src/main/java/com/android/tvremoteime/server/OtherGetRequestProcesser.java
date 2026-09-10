@@ -7,6 +7,7 @@ import android.os.StatFs;
 import android.text.TextUtils;
 
 import com.android.tvremoteime.AppPackagesHelper;
+import com.android.tvremoteime.DLNAUtils;
 import com.android.tvremoteime.VideoPlayHelper;
 import com.android.tvremoteime.accessibility.ScreenAccessibilityService;
 import com.android.tvremoteime.adb.AdbHelper;
@@ -35,6 +36,7 @@ public class OtherGetRequestProcesser implements RequestProcesser {
                 case "/sdcard_stat":
                 case "/adbStatus":
                 case "/accessibilityStatus":
+                case "/deviceName":
                     return true;
             }
         }
@@ -53,6 +55,13 @@ public class OtherGetRequestProcesser implements RequestProcesser {
             case "/accessibilityStatus":
                 return RemoteServer.createJSONResponse(NanoHTTPD.Response.Status.OK,
                         "{\"enabled\":" + ScreenAccessibilityService.isServiceEnabled() + "}");
+            case "/deviceName":
+                //复用已有的DLNA投屏名称(MainActivity"⑤DLNA投屏名称"卡片)当作
+                //设备名——本来就是用户为区分多台设备起的名字("如：客厅、卧室")，
+                //不需要再单独加一套配置。控制页拿这个名字当水印显示，同时开多台
+                //设备的控制页时才分得清哪个标签页对应哪台电视。
+                return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,
+                        DLNAUtils.getDLNANameSuffix(this.context));
             default:
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.NOT_FOUND, "Error 404, file not found.");
         }

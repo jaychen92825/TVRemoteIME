@@ -137,6 +137,20 @@ body {
 	pointer-events: none;
 	-webkit-user-select: none;
 	user-select: none;
+	max-width: 40vw;
+	overflow: hidden;
+}
+
+/* 设备名是用户自己起的，长度不可控——窄屏手机上"客厅"这种短名字问题不大，
+   但万一起了个长名字，不能让tabs可点的那几个字被越挤越少甚至滚没影，
+   超出这个宽度就省略号截断，保住tabs该有的显示空间。 */
+#deviceNameWatermark {
+	display: inline-block;
+	max-width: 15vw;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: bottom;
 }
 
 .btn-line {
@@ -746,13 +760,17 @@ body {
 	-webkit-overflow-scrolling: touch;
 }
 
+/* 窄屏(400px上下的手机)本来就刚好够放下4个Tab，水印区加上设备名前缀后
+   预留给Tab的宽度又少了一截，稍微收紧一点每个Tab的左右留白/图标间距，
+   腾出来的十几px刚好够放下"客厅"这种常见的2-4字短设备名，不用一加设备名
+   就把最后一个Tab挤到需要横向滑动才能看见。 */
 .tab {
 	box-sizing: border-box;
 	display: inline-flex;
 	flex: 0 0 auto;
 	align-items: center;
-	gap: 4px;
-	padding: 13px 9px;
+	gap: 3px;
+	padding: 13px 6px;
 	font-size: 13px;
 	color: var(--color-text-secondary);
 	background: transparent;

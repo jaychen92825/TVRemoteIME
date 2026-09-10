@@ -730,6 +730,20 @@ function showCurrentVersion() {
 		$('#curVer').text(version);
 	});
 }
+//设备名水印：复用MainActivity"⑤DLNA投屏名称"里用户自己起的名字("如：客厅、
+//卧室")，同时开着多台设备的控制页时，光看网页内容本身长得一样，区分不出来
+//是哪一台——水印文字直接显示在角标里，同时把它也写进页面标题，这样连浏览器
+//标签栏本身都能看出区别，不用先点进某个标签页才知道是哪台。没设置过名字时
+//什么都不显示，跟以前一样只有版本号。
+function loadDeviceName(){
+	$.get('/deviceName', function(name){
+		name = (name || '').trim();
+		if(name){
+			$('#deviceNameWatermark').text(name + ' · ');
+			document.title = name + ' - TV Remote IME';
+		}
+	});
+}
 //轻量提示条：短暂显示一行文字然后自动消失，用来在具体操作失败时给个理由，
 //不用像之前那样常驻一个状态栏一直占地方。
 var miniToastTimer = null;
@@ -759,3 +773,4 @@ getDiskSpace();
 loadTVList();
 loadTorrentItems();
 showCurrentVersion();
+loadDeviceName();

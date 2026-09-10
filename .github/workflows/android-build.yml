@@ -32,6 +32,13 @@ jobs:
     # 起来），得先在job级别的env里转一手，再在下面步骤的if里读env.*。
     env:
       HAS_RELEASE_SIGNING: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
+      # App内"检查更新"靠versionCode数值比较，如果这个数字要靠人每次手动改
+      # build.gradle才递增，几乎必然会有忘记改的时候（这个项目已经忘过好几次：
+      # 连续几个commit合入master都没提这个数，导致Release的APK内容早更新了，
+      # App却一直判断"已经是最新版"）。用github.run_number（这个workflow每次
+      # 运行都严格递增，不会重复/倒退）自动传给Gradle当versionCode，人不用再
+      # 记得改这个数字，参见IMEService/build.gradle里的APP_VERSION_CODE说明。
+      APP_VERSION_CODE: ${{ github.run_number }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -139,19 +146,18 @@ jobs:
       # 签名密钥（未签名的APK根本装不上，发布出去没有意义）时才发布，push和手动
       # 触发(workflow_dispatch，方便配完Secret后立刻手动跑一次验证整条链路，不用
       # 干等下一次真实代码改动)都算，PR不算(fork PR不带Secret，也不该在没合并前
-      # 就对外发布)。tag固定用
-      # "v<versionCode>"这个格式而不是滚动的"latest"标签——这样App直接从tag名解析
-      # 版本号做数值比较即可，不需要额外接口，也顺带保留了每个历史版本各自的下载
-      # 记录；versionCode没有变化时重复push到master会更新同一个tag对应的Release
-      # (软件行为，不是bug)，版本号变了则会创建一个新的Release。
+      # 就对外发布)。tag固定用"v<versionCode>"这个格式而不是滚动的"latest"标签——
+      # 这样App直接从tag名解析版本号做数值比较即可，不需要额外接口。versionCode
+      # 现在是github.run_number，每次运行都严格递增，所以master上的每一次绿灯
+      # 合入都会开一个新的Release、带一个新的版本号，不会再出现"push了新代码但
+      # 版本号没变、App一直误判已是最新版"的情况。
       - name: Extract version info
         if: ${{ github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && env.HAS_RELEASE_SIGNING == 'true' }}
         id: appver
         run: |
           set -e
-          VERSION_CODE=$(grep -oP 'versionCode\s+\K[0-9]+' IMEService/build.gradle)
           VERSION_NAME=$(grep -oP 'versionName\s+"\K[^"]+' IMEService/build.gradle)
-          echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "code=$APP_VERSION_CODE" >> "$GITHUB_OUTPUT"
           echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Publish release APK to GitHub Release

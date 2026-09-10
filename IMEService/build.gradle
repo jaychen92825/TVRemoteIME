@@ -16,6 +16,16 @@ def releaseKeyPassword = System.getenv("RELEASE_KEY_PASSWORD")
 def hasReleaseSigning = releaseKeystorePath && new File(releaseKeystorePath).exists() &&
         releaseKeystorePassword && releaseKeyAlias && releaseKeyPassword
 
+// App内"检查更新"功能靠versionCode数值比较判断有没有新版本；如果这个数字靠人
+// 每次改动手动去改build.gradle才递增，几乎必然会有忘记改的时候（这个项目本身
+// 就已经忘过好几次——一连四个commit合入master都没提这个数，导致GitHub Release
+// 的tag/APK内容早就更新了，但App一直以为"已经是最新版"检测不出来）。改成CI
+// 构建时通过APP_VERSION_CODE环境变量传入github.run_number（每次工作流运行都
+// 严格递增，不会重复/倒退），彻底交给CI自动维护，人不用再记得手动改这个数字；
+// 本地不设这个环境变量时用后面这个静态兜底值（只影响开发机本地调试安装，不会
+// 进CI发布的Release，取值多少不重要）。
+def ciVersionCode = System.getenv("APP_VERSION_CODE")
+
 android {
     compileSdkVersion 26
     buildToolsVersion '27.0.3'
@@ -24,7 +34,7 @@ android {
         applicationId 'com.android.tvremoteime'
         minSdkVersion 14
         targetSdkVersion 15
-        versionCode 12
+        versionCode ciVersionCode ? ciVersionCode.toInteger() : 12
         versionName "1.4.2"
     }
     signingConfigs {
