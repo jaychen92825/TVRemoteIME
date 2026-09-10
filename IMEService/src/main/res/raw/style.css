@@ -486,10 +486,23 @@ body {
 	width: 74%
 }
 
+/* 这些class之前都是<input type=button>/纯文字按钮，原生表单控件本来就不会被
+   当作可选中文字；这次为了加图标改成了<div>/<a>包着真实汉字文本，安卓Chrome
+   长按文字会触发系统的"选词/在Google上搜索/词典"弹层，把点击手势整个劫持掉，
+   点击事件也就不会再触发——统一关掉这些元素的文字选中/长按菜单，恢复成点击
+   立即生效的按钮观感。 */
+.tab, .mode-tab, .btn, .app-btn1, .upload-btn, .showSettings {
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-touch-callout: none;
+}
+
 .tabs {
 	display: flex;
-	flex-wrap: wrap;
+	flex-wrap: nowrap;
 	align-items: center;
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
 	font-size: 24rpx;
 	margin-top: 10rpx;
 	white-space: nowrap;
@@ -499,9 +512,10 @@ body {
 .tab {
 	box-sizing: border-box;
 	display: inline-flex;
+	flex: 0 0 auto;
 	align-items: center;
 	gap: 4px;
-	padding: 12px 16px;
+	padding: 10px 13px;
 	border-radius: 5px;
 	border-bottom-color: transparent;
 	border-bottom-left-radius: 0;
