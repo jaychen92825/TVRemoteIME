@@ -1,5 +1,21 @@
 apply plugin: 'com.android.application'
 
+// release签名：之前release构建没有配signingConfig，CI每次都产出未签名包，debug构建
+// 则是用Gradle默认行为（每台机器/每次CI运行如果本地没有~/.android/debug.keystore就
+// 现场随机生成一个）——这导致不同批次构建出来的APK签名互不相同，覆盖式安装时系统会报
+// "签名不一致"必须先卸载旧版。debug.keystore直接提交进仓库（debug key本来就不是用来
+// 代表"可信任的正式发布者"身份的，密码是Android官方约定俗成的公开值，提交它没有额外
+// 安全风险，只是为了让每一次构建都用同一把debug key），保证所有人、所有CI跑出来的
+// debug包永远同一个签名，可以互相覆盖安装。
+// release签名走的是环境变量（CI里由GitHub仓库Secret注入、解码成文件），私钥本身
+// 不会进版本库；本地不设这些环境变量时release构建保持未签名，行为跟之前一致。
+def releaseKeystorePath = System.getenv("RELEASE_KEYSTORE_PATH")
+def releaseKeystorePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+def releaseKeyAlias = System.getenv("RELEASE_KEY_ALIAS")
+def releaseKeyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+def hasReleaseSigning = releaseKeystorePath && new File(releaseKeystorePath).exists() &&
+        releaseKeystorePassword && releaseKeyAlias && releaseKeyPassword
+
 android {
     compileSdkVersion 26
     buildToolsVersion '27.0.3'
@@ -11,14 +27,34 @@ android {
         versionCode 11
         versionName "1.4.1"
     }
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseKeystorePath)
+                storePassword releaseKeystorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
         debug{
             minifyEnabled false
+            signingConfig signingConfigs.debug
         }
         release{
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), '../proguard-project.txt'
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

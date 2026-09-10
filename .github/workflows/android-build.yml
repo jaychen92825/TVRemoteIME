@@ -86,7 +86,21 @@ jobs:
           done
           exit 1
 
-      - name: Build release APK (unsigned)
+      # 仓库Secret里配了RELEASE_KEYSTORE_BASE64才会走这一步（fork PR不带Secret，
+      # 这里会自然跳过，release包会退回未签名，安全默认值）。解码出来的keystore文件
+      # 写到本次运行的临时目录，构建结束后随runner一起销毁，不会留存或进版本库。
+      - name: Decode release keystore
+        if: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+          echo "RELEASE_KEYSTORE_PASSWORD=${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+          echo "RELEASE_KEY_ALIAS=${{ secrets.RELEASE_KEY_ALIAS }}" >> "$GITHUB_ENV"
+          echo "RELEASE_KEY_PASSWORD=${{ secrets.RELEASE_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+
+      - name: Build release APK
         run: |
           set +e
           for i in 1 2 3 4 5; do
@@ -105,9 +119,9 @@ jobs:
           path: IMEService/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-      - name: Upload release APK (unsigned)
+      - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: IMEService-release-unsigned
+          name: IMEService-release
           path: IMEService/build/outputs/apk/release/*.apk
           if-no-files-found: error
