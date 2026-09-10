@@ -97,23 +97,26 @@ public class ScreenAccessibilityService extends AccessibilityService {
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if(root == null) return result;
         try {
-            collectClickableNodes(root, result, 400);
+            collectClickableNodes(root, result, 400, null);
         } finally {
             root.recycle();
         }
         return result;
     }
 
-    private void collectClickableNodes(AccessibilityNodeInfo node, List<ElementInfo> result, int maxCount){
+    private void collectClickableNodes(AccessibilityNodeInfo node, List<ElementInfo> result, int maxCount, ElementInfo nearestAncestor){
         if(node == null || result.size() >= maxCount) return;
+        ElementInfo ancestorForChildren = nearestAncestor;
         if(node.isVisibleToUser() && node.isClickable()){
             String label = extractLabel(node);
             if(label != null){
                 Rect bounds = new Rect();
                 node.getBoundsInScreen(bounds);
-                if(!bounds.isEmpty()){
+                if(!bounds.isEmpty() && !isDuplicateOfAncestor(label, bounds, nearestAncestor)){
                     cachedNodes.add(AccessibilityNodeInfo.obtain(node));
-                    result.add(new ElementInfo(cachedNodes.size() - 1, label, bounds));
+                    ElementInfo info = new ElementInfo(cachedNodes.size() - 1, label, bounds);
+                    result.add(info);
+                    ancestorForChildren = info;
                 }
             }
         }
@@ -121,10 +124,23 @@ public class ScreenAccessibilityService extends AccessibilityService {
         for(int i = 0; i < childCount && result.size() < maxCount; i++){
             AccessibilityNodeInfo child = node.getChild(i);
             if(child != null){
-                collectClickableNodes(child, result, maxCount);
+                collectClickableNodes(child, result, maxCount, ancestorForChildren);
                 child.recycle();
             }
         }
+    }
+
+    //整行可点击的容器自己没有文字时，标签是从内部子控件"借"来的（见extractLabel）；
+    //如果那个被借用文字的子控件自己也单独可点击（很常见，比如外层行+里面的文字
+    //TextView都标了clickable=true），同一个视觉按钮就会在列表里出现两次：一次是
+    //外层容器（范围更大），一次是内部子控件（范围被外层完全包住）。这里按"标签
+    //相同 且 范围被上一个已收录的祖先元素包住"过滤掉后者——包住关系同时覆盖了
+    //"范围完全相同"和"子控件范围更小"两种情况，不会误伤真正独立、不重叠的子元素
+    //（比如同一行里图标按钮和文字各自可点、标签也不同的情况）。
+    private boolean isDuplicateOfAncestor(String label, Rect bounds, ElementInfo ancestor){
+        if(ancestor == null || !label.equals(ancestor.label)) return false;
+        Rect ancestorBounds = new Rect(ancestor.left, ancestor.top, ancestor.right, ancestor.bottom);
+        return ancestorBounds.contains(bounds);
     }
 
     //很多可点击项本身没有文字（比如整块都能点的列表条目），文字其实放在它
