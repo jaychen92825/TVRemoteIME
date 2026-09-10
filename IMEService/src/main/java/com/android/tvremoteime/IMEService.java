@@ -180,6 +180,20 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		return false;
 	}
 
+	//电源键没有原生InputConnection替代方案（PhoneWindowManager只在系统级输入
+	//分发时才特殊处理它，IME往聚焦控件注入的合成按键走不到那一层），任何时候
+	//都应该优先尝试ADB；触控板的滑动/点击同理，走的是SwipeCommand/TapCommand，
+	//不经过这个方法。但方向键/音量/主页/返回/菜单这些键本来就有正常能用的
+	//原生注入路径——只有在本App不是默认输入法（原生路径本来就用不了，
+	//MainActivity的"手动启动"按钮会显式走这条兜底逻辑）时，才需要连它们也
+	//一起改道ADB。之前这里没做区分，只要AdbHelper的实例对象存在（哪怕只是
+	//被控制页轮询ADB连接状态这种完全无关的操作顺手创建出来的，实际根本没连上）
+	//就会把所有按键都吞进ADB队列，连不上ADB时这些本来能正常工作的按键就全部
+	//失效了——这正是新增"ADB连接状态指示"功能后按键突然全部失灵的根因。
+	private boolean shouldRouteKeyThroughAdb(int keyCode){
+		return keyCode == KeyEvent.KEYCODE_POWER || !Environment.isDefaultIME(this);
+	}
+
 	private void startRemoteServer(){
 		int basePort = RemoteServer.serverPort;
 		do {
@@ -204,7 +218,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 											@Override
 											public void run() {
 												if (!handleKeyboardFocusEvent(kc)) {
-													if(!isSendToAdbService(kc)) sendKeyCode(kc);
+													if(!(shouldRouteKeyThroughAdb(kc) && isSendToAdbService(kc))) sendKeyCode(kc);
 												}
 											}
 										});
@@ -215,10 +229,10 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 									InputConnection ic = getCurrentInputConnection();
 									switch (keyAction) {
 										case KEY_ACTION_PRESSED:
-											if(!isSendToAdbService(kc)) sendKeyCode(kc);
+											if(!(shouldRouteKeyThroughAdb(kc) && isSendToAdbService(kc))) sendKeyCode(kc);
 											break;
 										case KEY_ACTION_DOWN:
-											if(!isSendToAdbService(kc) && ic != null) {
+											if(!(shouldRouteKeyThroughAdb(kc) && isSendToAdbService(kc)) && ic != null) {
 												ic.sendKeyEvent(new KeyEvent(eventTime, eventTime,
 														KeyEvent.ACTION_DOWN, kc, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
 														KeyEvent.FLAG_SOFT_KEYBOARD | KeyEvent.FLAG_KEEP_TOUCH_MODE));
