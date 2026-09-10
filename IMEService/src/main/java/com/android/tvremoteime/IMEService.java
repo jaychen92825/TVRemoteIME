@@ -172,6 +172,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	}
 
 	private void startRemoteServer(){
+		int basePort = RemoteServer.serverPort;
 		do {
 			mServer = new RemoteServer(RemoteServer.serverPort, this);
 			mServer.setDataReceiver(new RemoteServer.DataReceiver() {
@@ -245,7 +246,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 				RemoteServer.serverPort ++;
 				mServer.stop();
 			}
-		}while (RemoteServer.serverPort < 9999);
+		}while (RemoteServer.serverPort < basePort + 50);
 	}
 
 	private boolean commitText(String text){
@@ -493,10 +494,11 @@ public class IMEService extends InputMethodService implements View.OnClickListen
             TextView title = helpDialog.findViewById(R.id.title);
             title.setText(title.getText() + " " + version);
             String address = mServer.getServerAddress();
+            String accessCode = Environment.getAccessCode(this);
             addressView.setText(address
                     + "\n固定地址：" + MDnsHelper.getAddress()
-                    + "\n访问口令：" + Environment.getAccessCode(this));
-            qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(address, 300, 300));
+                    + "\n访问口令：" + accessCode + "（扫码可自动登录）");
+            qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(address + "login.html#code=" + accessCode, 300, 300));
         }
 
 		helpDialog.setVisibility(View.VISIBLE);

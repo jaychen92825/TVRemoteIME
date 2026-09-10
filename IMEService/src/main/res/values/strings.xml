@@ -2,6 +2,6 @@
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_name">&name;</string>
     <string name="keyboard_name">&name;</string>
-    <string name="step1">第一步：激活启用“&name;”输入法</string>
-    <string name="step2">第二步：设置“&name;”为系统默认输入法</string>
+    <string name="step1">激活启用“&name;”输入法</string>
+    <string name="step2">设置“&name;”为系统默认输入法</string>
 </resources>

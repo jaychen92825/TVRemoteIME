@@ -22,6 +22,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
     private ImageView qrCodeImage;
     private TextView addressView;
     private EditText dlnaNameText;
+    private EditText accessCodeText;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -30,9 +31,11 @@ public class MainActivity extends Activity implements View.OnClickListener {
         qrCodeImage = this.findViewById(R.id.ivQRCode);
         addressView = this.findViewById(R.id.tvAddress);
         dlnaNameText = this.findViewById(R.id.etDLNAName);
+        accessCodeText = this.findViewById(R.id.etAccessCode);
 
         this.setTitle(this.getResources().getString( R.string.app_name) + "  V" + AppPackagesHelper.getCurrentPackageVersion(this));
         dlnaNameText.setText(DLNAUtils.getDLNANameSuffix(this.getApplicationContext()));
+        accessCodeText.setText(Environment.getAccessCode(this));
 
         refreshQRCode();
     }
@@ -71,6 +74,16 @@ public class MainActivity extends Activity implements View.OnClickListener {
             case R.id.btnSetDLNA:
                 DLNAUtils.setDLNANameSuffix(this.getApplicationContext(), dlnaNameText.getText().toString());
                 break;
+            case R.id.btnSetAccessCode:
+                String newCode = accessCodeText.getText().toString().trim();
+                if(newCode.isEmpty()){
+                    Environment.toast(getApplicationContext(), "口令不能为空，留空会导致控制端无鉴权，未做修改。");
+                    accessCodeText.setText(Environment.getAccessCode(this));
+                }else{
+                    Environment.setAccessCode(this, newCode);
+                    Environment.toast(getApplicationContext(), "访问口令已修改！");
+                }
+                break;
         }
         refreshQRCode();
     }
@@ -83,10 +96,12 @@ public class MainActivity extends Activity implements View.OnClickListener {
     }
     private void refreshQRCode(){
         String address = RemoteServer.getServerAddress(this);
+        String accessCode = Environment.getAccessCode(this);
         addressView.setText(address
                 + "\n固定地址（IP变化后依旧可用，需浏览器支持mDNS）：" + MDnsHelper.getAddress()
-                + "\n访问口令：" + Environment.getAccessCode(this) + "（浏览器首次访问时会要求输入此口令）");
-        qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(address, 150, 150));
+                + "\n访问口令：" + accessCode + "（扫码可自动登录；手动访问时浏览器会要求输入此口令）");
+        String loginUrl = address + "login.html#code=" + accessCode;
+        qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(loginUrl, 150, 150));
     }
 
 

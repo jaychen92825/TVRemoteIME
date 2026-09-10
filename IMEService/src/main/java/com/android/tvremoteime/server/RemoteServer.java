@@ -45,7 +45,7 @@ public class RemoteServer extends NanoHTTPD
         void onTextReceived(String text);
     }
 
-    public static int serverPort = 9978;
+    public static int serverPort = 12345;
     private boolean isStarted = false;
     private DataReceiver mDataReceiver = null;
     private Context mContext = null;
@@ -141,6 +141,7 @@ public class RemoteServer extends NanoHTTPD
         this.getRequestProcessers.add(new RawRequestProcesser(this.mContext, "/ic_dl_other.png", R.raw.ic_dl_other, "image/png"));
         this.getRequestProcessers.add(new RawRequestProcesser(this.mContext, "/ic_dl_video.png", R.raw.ic_dl_video, "image/png"));
         this.getRequestProcessers.add(new RawRequestProcesser(this.mContext, "/favicon.ico", R.drawable.ic_launcher, "image/x-icon"));
+        this.getRequestProcessers.add(new RawRequestProcesser(this.mContext, "/login.html", R.raw.login, NanoHTTPD.MIME_HTML));
         this.getRequestProcessers.add(new FileRequestProcesser(this.mContext));
         this.getRequestProcessers.add(new AppIconRequestProcesser(this.mContext));
         this.getRequestProcessers.add(new TVRequestProcesser(this.mContext));
@@ -166,6 +167,16 @@ public class RemoteServer extends NanoHTTPD
     private Response checkAuth(IHTTPSession session){
         String accessCode = Environment.getAccessCode(mContext);
         if(TextUtils.isEmpty(accessCode)) return null;
+
+        //login.html本身不做任何敏感操作，口令通过URL的#片段传给它（片段不会发到
+        //服务端），由它在浏览器端用带Authorization头的请求换取免密跳转，所以这一个
+        //页面要放行，否则会变成先有鸡还是先有蛋的死循环
+        String uri = session.getUri();
+        if(uri != null){
+            int q = uri.indexOf('?');
+            if(q >= 0) uri = uri.substring(0, q);
+            if("/login.html".equals(uri)) return null;
+        }
 
         String authHeader = session.getHeaders().get("authorization");
         if(authHeader != null && authHeader.toLowerCase().startsWith("basic ")){
