@@ -311,8 +311,17 @@ $("#inputarea").on("input", function(){
 			active = true;
 			lastX = x; lastY = y;
 			totalMove = 0;
+			pendingDx = 0;
+			pendingDy = 0;
 			el.classList.add("pressed");
 		}
+		//节流窗口内被跳过的位移不能直接扔掉——之前的写法不管这次要不要真的发送，
+		//lastX/lastY都会更新成当前坐标，两次真正发送之间夹着的那些touchmove
+		//增量就凭空消失了。安卓原生touchmove通常每十几毫秒触发一次，40ms的节流
+		//窗口下大部分增量都会被吞掉，实际发到服务端的位移远小于手指真实划动的
+		//距离，表现出来就是"划半天挪不动/一直在原地"。改成把跳过的增量累积进
+		//pendingDx/pendingDy，到了发送时机再连着这次的一起发出去，不丢量。
+		var pendingDx = 0, pendingDy = 0;
 		function move(x, y){
 			if(!active) return;
 			var dx = x - lastX, dy = y - lastY;
@@ -320,9 +329,13 @@ $("#inputarea").on("input", function(){
 			totalMove += Math.abs(dx) + Math.abs(dy);
 			if(lockX) dy = 0;
 			if(lockY) dx = 0;
+			pendingDx += dx;
+			pendingDy += dy;
 			var now = Date.now();
-			if(now - lastSendTime >= SEND_INTERVAL_MS && (dx !== 0 || dy !== 0)){
-				sendMove(dx * SENSITIVITY, dy * SENSITIVITY);
+			if(now - lastSendTime >= SEND_INTERVAL_MS && (pendingDx !== 0 || pendingDy !== 0)){
+				sendMove(pendingDx * SENSITIVITY, pendingDy * SENSITIVITY);
+				pendingDx = 0;
+				pendingDy = 0;
 				lastSendTime = now;
 			}
 		}
@@ -330,6 +343,12 @@ $("#inputarea").on("input", function(){
 			if(!active) return;
 			active = false;
 			el.classList.remove("pressed");
+			//松手前最后一小段还没到发送时机的位移也不能丢，抬手时一起补发出去
+			if(pendingDx !== 0 || pendingDy !== 0){
+				sendMove(pendingDx * SENSITIVITY, pendingDy * SENSITIVITY);
+				pendingDx = 0;
+				pendingDy = 0;
+			}
 			if(allowClick && totalMove < CLICK_MOVE_THRESHOLD){
 				sendClick();
 			}
