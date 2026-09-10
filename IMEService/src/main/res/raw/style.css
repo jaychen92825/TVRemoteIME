@@ -67,6 +67,7 @@ body {
 	padding: 0 10px;
 	box-sizing: border-box;
 	font-size: 14px;
+	white-space: nowrap;
 	cursor: pointer;
 }
 
@@ -75,16 +76,26 @@ body {
 	background-color: #EC9900
 }
 
+/* 水印做成叠在tabs右上角的浮层而不是tabs里的一个flex子项——tabs内容一多
+   (加了图标以后)就可能把它挤到横向滚动区域之外看不见，脱离文档流悬浮
+   就不受tabs内容多少影响，永远可见又不占用任何一行的排版空间。 */
+.container {
+	position: relative;
+}
+
 .version-watermark {
-	margin-left: auto;
-	align-self: center;
+	position: absolute;
+	top: 8px;
+	right: 8px;
 	font-size: 11px;
-	color: #d6d9de;
-	white-space: nowrap;
-	flex-shrink: 0;
+	color: #b8bcc2;
+	background: rgba(255,255,255,0.75);
+	padding: 1px 5px;
+	border-radius: 4px;
 	pointer-events: none;
 	-webkit-user-select: none;
 	user-select: none;
+	z-index: 3;
 }
 
 .btn-line {
@@ -103,7 +114,7 @@ body {
 }
 
 .remote-panel {
-	width: 260px;
+	width: 300px;
 	margin: 0 auto;
 }
 
@@ -114,7 +125,7 @@ body {
 }
 
 .remote-row-secondary {
-	margin-bottom: 18px;
+	margin-bottom: 12px;
 }
 
 .remote-row-secondary .otherbtn {
@@ -122,7 +133,7 @@ body {
 }
 
 .remote-row-nav {
-	margin-top: 18px;
+	margin-top: 14px;
 }
 
 .remote-row-nav .otherbtn {
@@ -130,7 +141,7 @@ body {
 }
 
 .remote-row-volume {
-	margin-top: 18px;
+	margin-top: 14px;
 }
 
 .otherbtn {
@@ -261,7 +272,7 @@ body {
 .mode-tabs {
 	display: flex;
 	justify-content: center;
-	margin: 16px 0 4px;
+	margin: 10px 0 4px;
 }
 
 .mode-tab {
@@ -291,9 +302,17 @@ body {
 	border-color: #3ea6ff;
 }
 
-.touchpad {
+.touchpad-wrapper {
 	margin-top: 8px;
-	height: 140px;
+	display: grid;
+	grid-template-columns: 1fr 30px;
+	grid-template-rows: 220px 30px;
+	gap: 6px;
+}
+
+.touchpad {
+	grid-column: 1;
+	grid-row: 1;
 	background: #fff;
 	border: 1px solid #e0e0e6;
 	border-radius: 10px;
@@ -317,6 +336,41 @@ body {
 .touchpad-hint {
 	font-size: 11px;
 	color: #c3c3ca;
+	padding: 0 10px;
+}
+
+/* 触控板侧边/底边的滚动条：只在单一方向上取位移，方便做纯上下或纯左右的
+   滚动手势，不用像在触控板主区域里那样得非常小心才能划出一条直线。 */
+.scroll-rail {
+	background: #fff;
+	border: 1px solid #e0e0e6;
+	border-radius: 8px;
+	box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #c7cbd1;
+	touch-action: none;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.scroll-rail.pressed {
+	background: #f5f6f8;
+}
+
+.scroll-rail-v {
+	grid-column: 2;
+	grid-row: 1;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.scroll-rail-h {
+	grid-column: 1;
+	grid-row: 2;
+	flex-direction: row;
+	gap: 3px;
 }
 .app-panel{
 	margin-top: 10px;
@@ -384,6 +438,7 @@ body {
 	gap: 3px;
 	padding: 0 8px;
 	box-sizing: border-box;
+	white-space: nowrap;
 	cursor: pointer;
 }
 
@@ -412,7 +467,7 @@ body {
 }
 
 #upfile {
-	width: 92px;
+	width: 112px;
 	height: 35px;
 	position: absolute;
 	left: 15px;
@@ -426,12 +481,13 @@ body {
 	background-color: #d0d7da;
 	color: #1e5791;
 	border: 1px solid #ccc;
-	width: 92px;
+	width: 112px;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	gap: 3px;
 	box-sizing: border-box;
+	white-space: nowrap;
 	cursor: pointer;
 }
 
@@ -477,6 +533,24 @@ body {
 	border-top: 1px solid #ccc;
 	padding: 10px;
 	font-size: 14px;
+}
+
+.video-section {
+	background: #fff;
+	border: 1px solid #e5e5ea;
+	border-radius: 8px;
+	padding: 12px;
+}
+
+.video-section + .video-section {
+	margin-top: 10px;
+}
+
+.video-section-title {
+	font-size: 13px;
+	font-weight: bold;
+	color: #444;
+	margin-bottom: 8px;
 }
 
 #playUrl {
@@ -620,7 +694,7 @@ body {
 	padding:8px 8px;
 }
 #upfile2 {
-	width: 92px;
+	width: 112px;
 	height: 30px;
 	position: absolute;
 	left: 12px;
@@ -630,8 +704,9 @@ body {
 }
 
 #btnUpload2 {
-	width: 92px;
+	width: 112px;
 	box-sizing: border-box;
+	white-space: nowrap;
 }
 
 .file-oper{
@@ -694,11 +769,15 @@ body {
 	padding:4px;
 }
 
+/* "种子视频"这个标题文字挪到卡片标题里了，这个透明文件选择框叠加层原来的
+   left:72px是按"'种子视频：'这行内文字+按钮"这种旧布局量出来的坐标；现在
+   "上传种子"按钮是这个容器里第一个可见内容，直接从左边缘开始，所以改成
+   left:0，宽度大致按无图标版.btn渲染"上传种子"四个字的宽度估的。 */
 #upfile3 {
-	width: 68px;
+	width: 76px;
 	height: 30px;
 	position: absolute;
-	left: 72px;
+	left: 0px;
 	top: 0px;
 	opacity: 0;
 	filter: alpha(opacity=0)

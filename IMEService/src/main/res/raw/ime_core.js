@@ -279,22 +279,16 @@ $("#inputarea").on("input", function(){
 		});
 	}, 150);
 });
-//触控板：拖动模拟鼠标移动（服务端换算成"adb shell input swipe"手势），
-//轻触（没有明显拖动的按下+抬起）模拟点击（"adb shell input tap"）。
-//这条路径依赖ADB连接，跟电源键是同一套机制。
+//触控板/滚动条：拖动模拟鼠标移动或单方向滚动（服务端换算成"adb shell input
+//swipe"手势），轻触（没有明显拖动的按下+抬起）模拟点击（"adb shell input
+//tap"）。这条路径依赖ADB连接，跟电源键是同一套机制。
 //注意：前面这个语句结尾的分号不能省——上一句$(...).on(...)后面如果不加分号，
 //JS会把下面这个IIFE的开头"("解析成"调用上一句返回值"，导致抛
 //"$(...).on(...) is not a function"，把整个脚本执行中断在这里，后面所有的
 //click绑定（包括主Tab/方向键触控板子Tab切换）都不会被注册——这正是实测中
-//"点击Tab完全没反应"的根本原因。
+//"点击Tab完全没反应"的根本原因，记录一下避免以后再踩。
 ;(function(){
-	var pad = document.getElementById('touchpad');
-	if(!pad) return;
-	var active = false;
-	var lastX = 0, lastY = 0;
-	var totalMove = 0;
-	var lastSendTime = 0;
-	var sensitivity = 2.5; //触控板物理位移->电视屏幕像素位移的放大倍数
+	var SENSITIVITY = 2.5; //物理位移->电视屏幕像素位移的放大倍数
 	var CLICK_MOVE_THRESHOLD = 8; //小于这个累计位移(px)才算"轻触"而不是"拖动"
 	var SEND_INTERVAL_MS = 40;
 	function sendMove(dx, dy){
@@ -304,58 +298,73 @@ $("#inputarea").on("input", function(){
 		vibrateShort();
 		$.post("/mouseClick");
 	}
-	function start(x, y){
-		active = true;
-		lastX = x; lastY = y;
-		totalMove = 0;
-		pad.classList.add("pressed");
-	}
-	function move(x, y){
-		if(!active) return;
-		var dx = x - lastX, dy = y - lastY;
-		lastX = x; lastY = y;
-		totalMove += Math.abs(dx) + Math.abs(dy);
-		var now = Date.now();
-		if(now - lastSendTime >= SEND_INTERVAL_MS && (dx !== 0 || dy !== 0)){
-			sendMove(dx * sensitivity, dy * sensitivity);
-			lastSendTime = now;
+	//el: 触控区域元素；lockX/lockY: 只取横向或纵向位移(滚动条用)；
+	//allowClick: 抬手时如果全程没怎么移动是否当作一次点击(触控板主区域用，
+	//滚动条不需要，纯粹用来滚动)。
+	function bindDragArea(el, lockX, lockY, allowClick){
+		if(!el) return;
+		var active = false;
+		var lastX = 0, lastY = 0;
+		var totalMove = 0;
+		var lastSendTime = 0;
+		function start(x, y){
+			active = true;
+			lastX = x; lastY = y;
+			totalMove = 0;
+			el.classList.add("pressed");
+		}
+		function move(x, y){
+			if(!active) return;
+			var dx = x - lastX, dy = y - lastY;
+			lastX = x; lastY = y;
+			totalMove += Math.abs(dx) + Math.abs(dy);
+			if(lockX) dy = 0;
+			if(lockY) dx = 0;
+			var now = Date.now();
+			if(now - lastSendTime >= SEND_INTERVAL_MS && (dx !== 0 || dy !== 0)){
+				sendMove(dx * SENSITIVITY, dy * SENSITIVITY);
+				lastSendTime = now;
+			}
+		}
+		function end(){
+			if(!active) return;
+			active = false;
+			el.classList.remove("pressed");
+			if(allowClick && totalMove < CLICK_MOVE_THRESHOLD){
+				sendClick();
+			}
+		}
+		if(isSupportTouch){
+			el.addEventListener("touchstart", function(e){
+				var t = e.touches[0];
+				start(t.clientX, t.clientY);
+			}, {passive:true});
+			el.addEventListener("touchmove", function(e){
+				var t = e.touches[0];
+				move(t.clientX, t.clientY);
+				e.preventDefault();
+			}, {passive:false});
+			el.addEventListener("touchend", function(){
+				end();
+			});
+			el.addEventListener("touchcancel", function(){
+				end();
+			});
+		}else{
+			el.addEventListener("mousedown", function(e){
+				start(e.clientX, e.clientY);
+			});
+			document.addEventListener("mousemove", function(e){
+				move(e.clientX, e.clientY);
+			});
+			document.addEventListener("mouseup", function(){
+				end();
+			});
 		}
 	}
-	function end(){
-		if(!active) return;
-		active = false;
-		pad.classList.remove("pressed");
-		if(totalMove < CLICK_MOVE_THRESHOLD){
-			sendClick();
-		}
-	}
-	if(isSupportTouch){
-		pad.addEventListener("touchstart", function(e){
-			var t = e.touches[0];
-			start(t.clientX, t.clientY);
-		}, {passive:true});
-		pad.addEventListener("touchmove", function(e){
-			var t = e.touches[0];
-			move(t.clientX, t.clientY);
-			e.preventDefault();
-		}, {passive:false});
-		pad.addEventListener("touchend", function(){
-			end();
-		});
-		pad.addEventListener("touchcancel", function(){
-			end();
-		});
-	}else{
-		pad.addEventListener("mousedown", function(e){
-			start(e.clientX, e.clientY);
-		});
-		document.addEventListener("mousemove", function(e){
-			move(e.clientX, e.clientY);
-		});
-		document.addEventListener("mouseup", function(){
-			end();
-		});
-	}
+	bindDragArea(document.getElementById('touchpad'), false, false, true);
+	bindDragArea(document.getElementById('scrollRailV'), true, false, false);
+	bindDragArea(document.getElementById('scrollRailH'), false, true, false);
 })();
 $('.app-list').on('click', '.app-item', function(){
 	var idx = $(this).attr('data-index');
