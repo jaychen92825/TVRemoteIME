@@ -13,13 +13,14 @@ import javax.jmdns.JmDNS;
 import javax.jmdns.ServiceInfo;
 
 /**
- * 在局域网内注册一个固定的mDNS主机名（tvremoteime.local），这样盒子的局域网IP
- * 因DHCP重新分配而改变时，控制端书签（http://tvremoteime.local:端口/）依旧可用，
- * 不需要每次都重新扫描二维码。
+ * 在局域网内注册一个固定的mDNS主机名（remote.local），这样盒子的局域网IP
+ * 因DHCP重新分配而改变时，控制端书签（http://remote.local:端口/）依旧可用，
+ * 不需要每次都重新扫描二维码。注：如果同一局域网内已有别的设备也叫这个名字，
+ * JmDNS会按mDNS协议自动探测冲突并加数字后缀（如remote-2.local）。
  */
 public class MDnsHelper {
     private static final String TAG = "MDnsHelper";
-    public static final String HOSTNAME = "tvremoteime";
+    public static final String HOSTNAME = "remote";
 
     private static JmDNS jmdns = null;
     private static WifiManager.MulticastLock multicastLock = null;

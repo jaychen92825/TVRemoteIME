@@ -497,7 +497,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
             String accessCode = Environment.getAccessCode(this);
             addressView.setText(address
                     + "\n固定地址：" + MDnsHelper.getAddress()
-                    + "\n访问口令：" + accessCode + "（扫码可自动登录）");
+                    + "\n访问口令：" + accessCode);
             qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(address + "login.html#code=" + accessCode, 300, 300));
         }
 

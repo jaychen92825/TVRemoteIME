@@ -3,11 +3,10 @@ package com.android.tvremoteime;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.view.View;
+import android.view.Window;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -15,29 +14,34 @@ import android.widget.TextView;
 
 import com.android.tvremoteime.server.RemoteServer;
 import com.android.tvremoteime.adb.AdbHelper;
-import com.zxt.dlna.dmr.ZxtMediaRenderer;
 
 public class MainActivity extends Activity implements View.OnClickListener {
 
     private ImageView qrCodeImage;
     private TextView addressView;
+    private TextView imeEnabledStatusView;
+    private TextView imeDefaultStatusView;
     private EditText dlnaNameText;
     private EditText accessCodeText;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
         setContentView(R.layout.activity_main);
 
         qrCodeImage = this.findViewById(R.id.ivQRCode);
         addressView = this.findViewById(R.id.tvAddress);
+        imeEnabledStatusView = this.findViewById(R.id.tvIMEEnabledStatus);
+        imeDefaultStatusView = this.findViewById(R.id.tvIMEDefaultStatus);
         dlnaNameText = this.findViewById(R.id.etDLNAName);
         accessCodeText = this.findViewById(R.id.etAccessCode);
 
         this.setTitle(this.getResources().getString( R.string.app_name) + "  V" + AppPackagesHelper.getCurrentPackageVersion(this));
+        ((TextView)findViewById(R.id.tvVersion)).setText("V" + AppPackagesHelper.getCurrentPackageVersion(this));
         dlnaNameText.setText(DLNAUtils.getDLNANameSuffix(this.getApplicationContext()));
         accessCodeText.setText(Environment.getAccessCode(this));
 
-        refreshQRCode();
+        refreshStatus();
     }
 
     @Override
@@ -85,7 +89,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
                 }
                 break;
         }
-        refreshQRCode();
+        refreshStatus();
     }
     private void openInputMethodSettings(){
         try {
@@ -94,17 +98,20 @@ public class MainActivity extends Activity implements View.OnClickListener {
             Environment.toast(getApplicationContext(), "抱歉，无法激活启用输入法，请手动启动服务！");
         }
     }
-    private void refreshQRCode(){
+    private void refreshStatus(){
+        boolean enabled = Environment.isEnableIME(this);
+        boolean isDefault = Environment.isDefaultIME(this);
+        imeEnabledStatusView.setText(enabled ? "已启用" : "未启用");
+        imeEnabledStatusView.setTextColor(getResources().getColor(enabled ? R.color.status_ok : R.color.text_secondary));
+        imeDefaultStatusView.setText(isDefault ? "已是默认" : "未设默认");
+        imeDefaultStatusView.setTextColor(getResources().getColor(isDefault ? R.color.status_ok : R.color.text_secondary));
+
         String address = RemoteServer.getServerAddress(this);
         String accessCode = Environment.getAccessCode(this);
         addressView.setText(address
-                + "\n固定地址（IP变化后依旧可用，需浏览器支持mDNS）：" + MDnsHelper.getAddress()
-                + "\n访问口令：" + accessCode + "（扫码可自动登录；手动访问时浏览器会要求输入此口令）");
+                + "\n固定地址：" + MDnsHelper.getAddress()
+                + "\n访问口令：" + accessCode);
         String loginUrl = address + "login.html#code=" + accessCode;
-        qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(loginUrl, 150, 150));
+        qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(loginUrl, 130, 130));
     }
-
-
-
-
 }
