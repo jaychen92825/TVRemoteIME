@@ -1,4 +1,8 @@
 var isSupportTouch = "ontouchend" in document ? true : false;
+function vibrateShort(){
+	//部分浏览器（如iOS Safari）不支持震动反馈API，做个特性检测，不支持就静默跳过
+	if(navigator.vibrate) navigator.vibrate(15);
+}
 var processbar1=$("#processbar1");
 var processbar2=$("#processbar2");
 var tabs = $('div[data-tab]');
@@ -138,21 +142,12 @@ function reloadAppList(){
 	$.post("/apps",{system:$("#cbListSystem")[0].checked},function(data){
 		var appList=$(".app-list");
 		appList.empty();
-		var uninstallChecked = $("#cbUninstall")[0].checked;
 		var html=[];
 		for(var i=0;i<data.length;i++){
 			var app=data[i];
-			html.push('<div class="app-item">');
+			html.push('<div class="app-item" data-index="'+i+'" data-sysapp="'+(app.isSysApp?1:0)+'" title="'+escapeHtml(app.lable)+'">');
 			html.push('<img src="/icon/'+encodeURIComponent(app.packageName)+'" class="app-icon" />');
 			html.push('<div class="app-name'+(app.isSysApp?" blue":"")+'" id="app-'+i+'" data-packageName="'+escapeHtml(app.packageName)+'">'+escapeHtml(app.lable)+"</div>");
-			html.push('<div class="app-btn">');
-			if(app.isSysApp){
-				html.push('   <input type="button" value="运行" class="btn" onclick="clickApp('+i+', 1);" />');
-			}else{
-				html.push('   <input type="button" value="运行" class="btn1 app-btn1' + (uninstallChecked ? ' hide' : '') + '" onclick="clickApp('+i+', 1);" />');
-				html.push('\t  <input type="button" value="卸载" class="btn2 app-btn1' + (uninstallChecked ? '' : ' hide') + '" onclick="clickApp('+i+', 2);" />');
-			}
-			html.push("</div>");
 			html.push("</div>");
 		}
 		for(i=0;i<3;i++){
@@ -272,15 +267,38 @@ $("#confirm").on("click",function(){
 		});
 	}
 })
-$("#cbUninstall").on("click",function(){
-	if(this.checked){
-		$(".btn1").addClass("hide");
-		$(".btn2").removeClass("hide");
+$("#btnEnter").on("click", function(){
+	vibrateShort();
+	var $input = $("#inputarea");
+	var text = $input.val();
+	if(text != ""){
+		$input.val("");
+		$.post("/text", {text: text}, function(){
+			postKeyCode("66");
+		});
+	}else{
+		postKeyCode("66");
 	}
-	else{
-		$(".btn1").removeClass("hide");
-		$(".btn2").addClass("hide");
-	}
+})
+//输入框内容实时同步到电视端（对应输入法的组字预览状态，还没真正提交），
+//加个小延迟避免每敲一下都发一次请求
+var composingTimer = null;
+$("#inputarea").on("input", function(){
+	var text = $(this).val();
+	if(composingTimer) clearTimeout(composingTimer);
+	composingTimer = setTimeout(function(){
+		$.post("/textLive", {text: text}, function(data){
+			console.log(data);
+		});
+	}, 150);
+})
+$('.app-list').on('click', '.app-item', function(){
+	var idx = $(this).attr('data-index');
+	if(idx == null || idx == "") return; //占位的空白格子
+	vibrateShort();
+	var isSysApp = $(this).attr('data-sysapp') === '1';
+	var uninstallMode = $("#cbUninstall")[0].checked;
+	clickApp(idx, (!isSysApp && uninstallMode) ? 2 : 1);
 })
 $('#btnShowTVEdit,#btnTVEdit,#btnTVCancel').on('click',function(){
 	switch(this.id){
@@ -325,11 +343,13 @@ $("div.tab").on("click", function(){
 	o.addClass('cur');
 })
 $("#btnCls").on("click",function(){
+	vibrateShort();
 	postKeyCode($(this).attr("data-key"))
 })
 $(".direction, #btnDel").on(isSupportTouch ? "touchstart" : "mousedown",function(){
 		var o=$(this);
 		o.addClass("pressed");
+		vibrateShort();
 		postKeyActionCode(o.attr("data-key"), 1);
 		console.log("onkeydown:" + o.attr("data-key"));
 })
@@ -341,6 +361,7 @@ $(".direction, #btnDel").on(isSupportTouch ? "touchend" : "mouseup",function(){
 $(".otherbtn").on(isSupportTouch ? "touchstart" : "mousedown", function() {
 	var o = $(this);
 	o.addClass("pressed");
+	vibrateShort();
 	postKeyCode(o.attr("data-key"));
 })
 $(".direction,.otherbtn").on(isSupportTouch ? "touchend touchmove" : "mouseup mousemove", function() {

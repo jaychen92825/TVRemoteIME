@@ -85,23 +85,14 @@ body {
 	background-color: #EC9900
 }
 
-.version {
-	height: 30px;
-	line-height: 30px;
-	font-size: 12px;
-	color: #800040;
-	padding-left: 20px;
-	padding-right: 20px;
-	text-align: right;
-	flex: 1
-}
-
-.version a {
-	color: #800040
-}
-
-.version-code {
-	color: #ff8000
+.version-watermark {
+	text-align: center;
+	font-size: 13px;
+	letter-spacing: 1px;
+	color: #cdd0d6;
+	padding: 4px 0 8px;
+	-webkit-user-select: none;
+	user-select: none;
 }
 
 .btn-wd {
@@ -137,10 +128,6 @@ body {
 	display: flex;
 	justify-content: center;
 	align-items: center;
-}
-
-.remote-row-power {
-	margin-bottom: 14px;
 }
 
 .remote-row-secondary {
@@ -182,16 +169,6 @@ body {
 	width: 52px;
 	height: 52px;
 	border-radius: 50%;
-}
-
-.power-btn {
-	color: #e2483d;
-}
-
-.pill-btn {
-	width: 96px;
-	height: 52px;
-	border-radius: 26px;
 }
 
 .direction-btns {
@@ -304,35 +281,42 @@ body {
 	display: flex;
 	flex-direction: row;
 	flex-wrap: wrap;
-	justify-content: space-between;
 	margin-top: 10px;
 	border-top: 1px solid #ccc;
 	padding: 15px
 }
 
 .app-item {
-	width: 100px;
+	width: 90px;
 	font-size: 12px;
-	border: 1px solid #ccc;
-	padding: 5px;
-	background: #fff;
-	margin-bottom: 10px;
-	display:flex;
+	padding: 8px 4px;
+	margin-bottom: 6px;
+	display: flex;
 	flex-direction: column;
+	align-items: center;
+	border-radius: 10px;
+	cursor: pointer;
+}
+
+.app-item:not(.item-empty):active {
+	background: #e9ecf1;
 }
 
 .app-icon {
-	width: 84px;
-	height: 84px
+	width: 60px;
+	height: 60px;
+	border-radius: 14px;
+	pointer-events: none;
 }
 
 .app-name {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	width: 92px;
+	width: 84px;
 	text-align: center;
-	flex: 1;
+	margin-top: 6px;
+	pointer-events: none;
 }
 
 .blue {

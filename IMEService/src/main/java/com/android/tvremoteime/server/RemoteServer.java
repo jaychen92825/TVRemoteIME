@@ -17,10 +17,14 @@ import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
+import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import fi.iki.elonen.*;
 
@@ -39,10 +43,17 @@ public class RemoteServer extends NanoHTTPD
         void onKeyEventReceived(String keyCode, int keyAction);
 
         /**
-         *
+         * 提交（最终确定）一段文本，等价于用户在软键盘上把这段文字敲完了。
          * @param text
          */
         void onTextReceived(String text);
+
+        /**
+         * 输入过程中的实时预览文本（对应输入法的"正在输入/组字"状态，尚未提交），
+         * 每次控制端文本框内容变化都会调用，用于实现输入内容与电视端实时同步。
+         * @param text
+         */
+        void onComposingTextReceived(String text);
     }
 
     public static int serverPort = 12345;
@@ -140,7 +151,9 @@ public class RemoteServer extends NanoHTTPD
         this.getRequestProcessers.add(new RawRequestProcesser(this.mContext, "/ic_dl_other.png", R.raw.ic_dl_other, "image/png"));
         this.getRequestProcessers.add(new RawRequestProcesser(this.mContext, "/ic_dl_video.png", R.raw.ic_dl_video, "image/png"));
         this.getRequestProcessers.add(new RawRequestProcesser(this.mContext, "/favicon.ico", R.drawable.ic_launcher, "image/x-icon"));
-        this.getRequestProcessers.add(new RawRequestProcesser(this.mContext, "/login.html", R.raw.login, NanoHTTPD.MIME_HTML));
+        this.getRequestProcessers.add(new RawRequestProcesser(this.mContext, "/manifest.json", R.raw.manifest, "application/manifest+json"));
+        this.getRequestProcessers.add(new RawRequestProcesser(this.mContext, "/sw.js", R.raw.sw, "application/javascript"));
+        this.getRequestProcessers.add(new RawRequestProcesser(this.mContext, "/icon.png", R.drawable.ic_launcher, "image/png"));
         this.getRequestProcessers.add(new FileRequestProcesser(this.mContext));
         this.getRequestProcessers.add(new AppIconRequestProcesser(this.mContext));
         this.getRequestProcessers.add(new TVRequestProcesser(this.mContext));
@@ -158,24 +171,70 @@ public class RemoteServer extends NanoHTTPD
     }
 
 
+    //扫二维码免密登录用的会话口令，登录成功后种一个cookie，服务重启（进程内存清空）
+    //后所有会话失效，需要重新扫码或手动输入口令——不做持久化存储，简单换取安全。
+    private static final String SESSION_COOKIE_NAME = "tvrc_auth";
+    private static final Set<String> validSessionTokens =
+            Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+
+    private static String stripQuery(String uri){
+        if(uri == null) return "";
+        int q = uri.indexOf('?');
+        return q >= 0 ? uri.substring(0, q) : uri;
+    }
+
+    private static String generateSessionToken(){
+        byte[] buf = new byte[16];
+        new SecureRandom().nextBytes(buf);
+        StringBuilder sb = new StringBuilder();
+        for(byte b : buf) sb.append(String.format("%02x", b));
+        return sb.toString();
+    }
+
+    private static boolean hasValidSessionCookie(IHTTPSession session){
+        String cookieHeader = session.getHeaders().get("cookie");
+        if(TextUtils.isEmpty(cookieHeader)) return false;
+        for(String part : cookieHeader.split(";")){
+            String[] kv = part.trim().split("=", 2);
+            if(kv.length == 2 && SESSION_COOKIE_NAME.equals(kv[0]) && validSessionTokens.contains(kv[1])){
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
-     * 控制端接口的HTTP Basic鉴权。口令保存在应用私有SharedPreferences中，
-     * 首次运行自动生成，在应用主界面/输入法帮助页可查看。避免局域网内任意设备或
-     * 网页（CSRF）无鉴权即可访问文件管理、装卸载应用、按键输入等接口。
+     * 扫二维码免密登录：二维码里编码的是 /login?code=口令 这个直接可访问的地址，
+     * 用普通GET+浏览器原生跳转即可完成，不需要任何JS技巧。验证通过后种一个
+     * HttpOnly的session cookie，此后同一浏览器的所有请求都会自动带上，不会再弹
+     * 原生的Basic Auth登录框。
+     */
+    private Response handleLogin(IHTTPSession session){
+        String code = session.getParms().get("code");
+        String accessCode = Environment.getAccessCode(mContext);
+        if(TextUtils.isEmpty(accessCode) || !accessCode.equals(code)){
+            return createPlainTextResponse(Response.Status.FORBIDDEN, "口令错误，请重新扫码或在应用主界面查看当前口令。");
+        }
+        String token = generateSessionToken();
+        validSessionTokens.add(token);
+        Response resp = newFixedLengthResponse(Response.Status.OK, NanoHTTPD.MIME_HTML,
+                "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>location.replace('/');</script></head><body>登录成功，正在跳转…</body></html>");
+        resp.addHeader("Set-Cookie", SESSION_COOKIE_NAME + "=" + token + "; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax");
+        return resp;
+    }
+
+    /**
+     * 控制端接口的鉴权：优先看有没有登录成功后种下的session cookie，没有的话退回
+     * HTTP Basic鉴权（手动访问地址、没走过/login的场景）。口令保存在应用私有
+     * SharedPreferences中，首次运行自动生成，在应用主界面/输入法帮助页可查看。
+     * 避免局域网内任意设备或网页（CSRF）无鉴权即可访问文件管理、装卸载应用、
+     * 按键输入等接口。
      */
     private Response checkAuth(IHTTPSession session){
         String accessCode = Environment.getAccessCode(mContext);
         if(TextUtils.isEmpty(accessCode)) return null;
 
-        //login.html本身不做任何敏感操作，口令通过URL的#片段传给它（片段不会发到
-        //服务端），由它在浏览器端用带Authorization头的请求换取免密跳转，所以这一个
-        //页面要放行，否则会变成先有鸡还是先有蛋的死循环
-        String uri = session.getUri();
-        if(uri != null){
-            int q = uri.indexOf('?');
-            if(q >= 0) uri = uri.substring(0, q);
-            if("/login.html".equals(uri)) return null;
-        }
+        if(hasValidSessionCookie(session)) return null;
 
         String authHeader = session.getHeaders().get("authorization");
         if(authHeader != null && authHeader.toLowerCase().startsWith("basic ")){
@@ -197,14 +256,17 @@ public class RemoteServer extends NanoHTTPD
 
     @Override
     public Response serve(IHTTPSession session) {
-        Log.i(IMEService.TAG, "接收到HTTP请求：" + session.getMethod() + " " + session.getUri());
+        String path = stripQuery(session.getUri());
+        Log.i(IMEService.TAG, "接收到HTTP请求：" + session.getMethod() + " " + path);
+
+        if(session.getMethod() == Method.GET && "/login".equals(path)){
+            return handleLogin(session);
+        }
+
         Response authFailure = checkAuth(session);
         if(authFailure != null) return authFailure;
         if(!session.getUri().isEmpty()) {
-            String fileName = session.getUri().trim();
-            if (fileName.indexOf('?') >= 0) {
-                fileName = fileName.substring(0, fileName.indexOf('?'));
-            }
+            String fileName = path;
             if (session.getMethod() == Method.GET) {
                 for(RequestProcesser processer : this.getRequestProcessers){
                     if(processer.isRequest(session, fileName)){

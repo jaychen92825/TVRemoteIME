@@ -26,6 +26,7 @@ public class InputRequestProcesser implements RequestProcesser {
         if(session.getMethod() == NanoHTTPD.Method.POST){
             switch (fileName) {
                 case "/text":
+                case "/textLive":
                 case "/key":
                 case "/keydown":
                 case "/keyup":
@@ -42,6 +43,12 @@ public class InputRequestProcesser implements RequestProcesser {
             case "/text":
                 if (params.get("text") != null && mDataReceiver != null) {
                     mDataReceiver.onTextReceived(params.get("text"));
+                }
+                return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
+            case "/textLive":
+                if (mDataReceiver != null) {
+                    //text参数可能为空字符串（用户把控制端输入框删空了），也要同步过去
+                    mDataReceiver.onComposingTextReceived(params.get("text") == null ? "" : params.get("text"));
                 }
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
             case "/key":

@@ -15,6 +15,9 @@ import android.widget.TextView;
 import com.android.tvremoteime.server.RemoteServer;
 import com.android.tvremoteime.adb.AdbHelper;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+
 public class MainActivity extends Activity implements View.OnClickListener {
 
     private ImageView qrCodeImage;
@@ -118,7 +121,16 @@ public class MainActivity extends Activity implements View.OnClickListener {
         addressView.setText(address
                 + "\n固定地址：" + MDnsHelper.getAddress()
                 + "\n访问口令：" + accessCode);
-        String loginUrl = address + "login.html#code=" + accessCode;
+        String loginUrl = address + "login?code=" + encodeParam(accessCode);
         qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(loginUrl, 130, 130));
+    }
+
+    //访问口令现在支持自定义，可能包含&/=/空格等字符，拼进URL查询参数前必须编码
+    private static String encodeParam(String value){
+        try {
+            return URLEncoder.encode(value, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            return value;
+        }
     }
 }

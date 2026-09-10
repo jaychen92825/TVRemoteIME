@@ -1,0 +1,12 @@
+{
+	"name": "小盒精灵",
+	"short_name": "小盒精灵",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"background_color": "#1b1f24",
+	"theme_color": "#3ea6ff",
+	"icons": [
+		{ "src": "/icon.png", "sizes": "256x256", "type": "image/png" }
+	]
+}

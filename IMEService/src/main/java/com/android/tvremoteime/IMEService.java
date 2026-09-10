@@ -235,6 +235,17 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 						if(!isSendToAdbService(text))commitText(text);
 					}
 				}
+
+				@Override
+				public void onComposingTextReceived(String text) {
+					//ADB遥控模式下没有"组字预览"这个概念（每次adb input text都是真敲
+					//字符），实时同步只在本App就是当前激活输入法、有InputConnection
+					//时才有意义，没有的话直接忽略，靠最终的onTextReceived提交兜底。
+					InputConnection ic = getCurrentInputConnection();
+					if(text != null && ic != null){
+						ic.setComposingText(text, 1);
+					}
+				}
 			});
 			try {
 				mServer.start();
@@ -498,7 +509,13 @@ public class IMEService extends InputMethodService implements View.OnClickListen
             addressView.setText(address
                     + "\n固定地址：" + MDnsHelper.getAddress()
                     + "\n访问口令：" + accessCode);
-            qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(address + "login.html#code=" + accessCode, 300, 300));
+            String encodedCode;
+            try {
+                encodedCode = java.net.URLEncoder.encode(accessCode, "UTF-8");
+            } catch (java.io.UnsupportedEncodingException e) {
+                encodedCode = accessCode;
+            }
+            qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(address + "login?code=" + encodedCode, 300, 300));
         }
 
 		helpDialog.setVisibility(View.VISIBLE);

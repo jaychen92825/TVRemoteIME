@@ -5,30 +5,26 @@
 	<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 	<title>TV Remote IME</title>
 	<meta name="layoutmode" content="standard">
+	<meta name="theme-color" content="#3ea6ff">
+	<link rel="manifest" href="/manifest.json">
+	<link rel="icon" href="/icon.png">
+	<link rel="apple-touch-icon" href="/icon.png">
 	<link rel="stylesheet" type="text/css" href="style.css">
 </head>
 <body>
 	<div class="container">
-		<div class="version">当前版本：<span class="version-code" id="curVer">1.0</span></div>
 	    <div class="tabs">
 		  <div class="tab cur" data-rel="controls">输入遥控</div>
 		  <div class="tab" data-rel="app">应用管理</div>
 		  <div class="tab" data-rel="file">文件管理</div>
 		  <div class="tab" data-rel="video">视频直播</div>
 		</div>
+		<div class="version-watermark">V<span id="curVer">1.0</span></div>
 		<div class="keys" data-tab="controls">
 			<div class="remote-panel">
-				<div class="remote-row remote-row-power">
-					<div class="otherbtn round-btn power-btn" id="power-btn" data-key='26' title="电源">
-						<svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 3v9" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
-					</div>
-				</div>
 				<div class="remote-row remote-row-secondary">
 					<div class="otherbtn round-btn" id="vol-btn" data-key='164' title="静音">
 						<svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 9v6h4l5 5V4L8 9H4z" fill="currentColor"/><path d="M17 8l4 8M21 8l-4 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-					</div>
-					<div class="otherbtn pill-btn" id="search-btn" data-key='84' title="搜索">
-						<svg viewBox="0 0 24 24" width="20" height="20"><circle cx="10" cy="10" r="6" stroke="currentColor" stroke-width="2" fill="none"/><line x1="15" y1="15" x2="20" y2="20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
 					</div>
 				</div>
 				<div id="direction-btns" class="direction-btns">
@@ -65,6 +61,7 @@
 		</div>
 		<div class="btn-line" data-tab="controls">
 		    <input type="button" value="退格" class="btn" id="btnDel" data-key='67' />
+		    <input type="button" value="回车" class="btn" id="btnEnter" />
 		    <input type="button" value="清空" class="btn" id="btnCls" data-key='cls' />
 		</div>
 		<div class="app-panel hide" data-tab="app">
@@ -145,5 +142,14 @@
 	</div>
 	<script src="/jquery_min.js"></script>
 	<script src="/ime_core.js"></script>
+	<script>
+	if("serviceWorker" in navigator){
+		window.addEventListener("load", function(){
+			navigator.serviceWorker.register("/sw.js").catch(function(e){
+				console.log("service worker注册失败", e);
+			});
+		});
+	}
+	</script>
 </body>
 </html>
