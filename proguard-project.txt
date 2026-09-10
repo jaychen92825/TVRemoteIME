@@ -115,5 +115,8 @@
 -keep class org.fourthline.cling.** { *;}
 -keep class com.zxt.dlna.** { *;}
 
--keep class com.tencent.stat.** { *;}
--keep class com.tencent.mid.** { *;}
+#mDNS(tvremoteime.local主机名注册)
+-dontwarn javax.jmdns.**
+-keep class javax.jmdns.** { *;}
+-dontwarn org.slf4j.**
+-keep class org.slf4j.** { *;}

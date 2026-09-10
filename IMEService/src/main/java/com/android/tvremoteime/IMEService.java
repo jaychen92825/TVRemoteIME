@@ -67,6 +67,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		RemoteServerFileManager.resetBaseDir(this);
 		startRemoteServer();
 		DLNAUtils.startDLNAService(this.getApplicationContext());
+		MDnsHelper.start(this.getApplicationContext());
 		new AutoUpdateManager(this, this.handler);
 		//xllib.DownloadManager.instance().init(this);
 
@@ -284,6 +285,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 			mServer.stop();
 		}
 		DLNAUtils.stopDLNAService();
+		MDnsHelper.stop();
 		AdbHelper.stopService();
 		Environment.toastInHandler(this, getString(R.string.app_name)  + "服务已停止");
     	super.onDestroy();    	
@@ -491,7 +493,9 @@ public class IMEService extends InputMethodService implements View.OnClickListen
             TextView title = helpDialog.findViewById(R.id.title);
             title.setText(title.getText() + " " + version);
             String address = mServer.getServerAddress();
-            addressView.setText(address + "\n访问口令：" + Environment.getAccessCode(this));
+            addressView.setText(address
+                    + "\n固定地址：" + MDnsHelper.getAddress()
+                    + "\n访问口令：" + Environment.getAccessCode(this));
             qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(address, 300, 300));
         }
 

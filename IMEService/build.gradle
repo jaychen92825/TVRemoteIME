@@ -28,5 +28,13 @@ dependencies {
     compile project(path: ':ijkplayer')
     compile project(path: ':AdbLib')
     compile project(path: ':DroidDLNA')
+    // 用于注册tvremoteime.local这个mDNS主机名，局域网IP变化时控制端地址依旧可用。
+    // 排除jmdns自带的slf4j-api 2.0.7：一是它的字节码老版D8/AGP 3.1.0编译不了，
+    // 二是DroidDLNA（给Cling用）已经内置了slf4j-api-1.6.1.jar，会跟任何新引入的
+    // slf4j-api版本在dex合并阶段发生类重复冲突。slf4j的基础日志接口很多年没变过，
+    // 复用DroidDLNA现有的1.6.1完全够用。
+    compile('org.jmdns:jmdns:3.5.9') {
+        exclude group: 'org.slf4j', module: 'slf4j-api'
+    }
 
 }

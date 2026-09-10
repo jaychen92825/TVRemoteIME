@@ -83,7 +83,9 @@ public class MainActivity extends Activity implements View.OnClickListener {
     }
     private void refreshQRCode(){
         String address = RemoteServer.getServerAddress(this);
-        addressView.setText(address + "\n访问口令：" + Environment.getAccessCode(this) + "（浏览器首次访问时会要求输入此口令）");
+        addressView.setText(address
+                + "\n固定地址（IP变化后依旧可用，需浏览器支持mDNS）：" + MDnsHelper.getAddress()
+                + "\n访问口令：" + Environment.getAccessCode(this) + "（浏览器首次访问时会要求输入此口令）");
         qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(address, 150, 150));
     }
 
