@@ -278,11 +278,16 @@ $("#inputarea").on("input", function(){
 			console.log(data);
 		});
 	}, 150);
-})
+});
 //触控板：拖动模拟鼠标移动（服务端换算成"adb shell input swipe"手势），
 //轻触（没有明显拖动的按下+抬起）模拟点击（"adb shell input tap"）。
 //这条路径依赖ADB连接，跟电源键是同一套机制。
-(function(){
+//注意：前面这个语句结尾的分号不能省——上一句$(...).on(...)后面如果不加分号，
+//JS会把下面这个IIFE的开头"("解析成"调用上一句返回值"，导致抛
+//"$(...).on(...) is not a function"，把整个脚本执行中断在这里，后面所有的
+//click绑定（包括主Tab/方向键触控板子Tab切换）都不会被注册——这正是实测中
+//"点击Tab完全没反应"的根本原因。
+;(function(){
 	var pad = document.getElementById('touchpad');
 	if(!pad) return;
 	var active = false;
