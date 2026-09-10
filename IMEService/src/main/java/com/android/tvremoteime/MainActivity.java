@@ -40,7 +40,14 @@ public class MainActivity extends Activity implements View.OnClickListener {
         ((TextView)findViewById(R.id.tvVersion)).setText("V" + AppPackagesHelper.getCurrentPackageVersion(this));
         dlnaNameText.setText(DLNAUtils.getDLNANameSuffix(this.getApplicationContext()));
         accessCodeText.setText(Environment.getAccessCode(this));
+    }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        //启用输入法/设为默认输入法都是跳到系统设置或系统选择器里操作的，
+        //用户实际点击生效是在离开这个Activity之后，onClick里那次刷新看到的
+        //还是旧状态；真正应该刷新的时机是操作完、返回到这个页面的时候。
         refreshStatus();
     }
 
