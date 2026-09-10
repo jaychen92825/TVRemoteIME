@@ -18,11 +18,14 @@
 		  <div class="tab" data-rel="app">应用管理</div>
 		  <div class="tab" data-rel="file">文件管理</div>
 		  <div class="tab" data-rel="video">视频直播</div>
+		  <div class="version-watermark">V<span id="curVer">1.0</span></div>
 		</div>
-		<div class="version-watermark">V<span id="curVer">1.0</span></div>
 		<div class="keys" data-tab="controls">
 			<div class="remote-panel">
 				<div class="remote-row remote-row-secondary">
+					<div class="otherbtn round-btn" id="power-btn" data-key='26' title="电源（需电视盒子开启并信任USB调试后才能生效）">
+						<svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 3v8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M7 6a8 8 0 1 0 10 0" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>
+					</div>
 					<div class="otherbtn round-btn" id="vol-btn" data-key='164' title="静音">
 						<svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 9v6h4l5 5V4L8 9H4z" fill="currentColor"/><path d="M17 8l4 8M21 8l-4 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
 					</div>
@@ -57,7 +60,6 @@
 			<div class="inputarea-wrapper">
 				<textarea id="inputarea" rows="2" placeholder="点此为电视输入文字"></textarea>
 			</div>
-			<div id="confirm" class="btn-nowd btn-wd">输入</div>
 		</div>
 		<div class="btn-line" data-tab="controls">
 		    <input type="button" value="退格" class="btn" id="btnDel" data-key='67' />

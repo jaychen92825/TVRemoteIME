@@ -36,7 +36,6 @@ body {
 
 .inputarea-wrapper {
 	position: relative;
-	width: 75%;
 	margin: 0 15px;
 	background-color: #fff;
 	border: 1px solid #d1d6db
@@ -55,23 +54,6 @@ body {
 	height: 55px
 }
 
-.btn-nowd {
-	position: absolute;
-	width: 15%;
-	height: 55px;
-	right: 15px;
-	top: 50%;
-	transform: translateY(-50%);
-	-o-transform: translateY(-50%);
-	-moz-transform: translateY(-50%);
-	-webkit-transform: translateY(-50%);
-	background-color: #d0d7da;
-	line-height: 55px;
-	text-align: center;
-	color: #1e5791;
-	font-size: 1rem
-}
-
 .btn {
 	height: 30px;
 	background-color: #d0d7da;
@@ -86,22 +68,15 @@ body {
 }
 
 .version-watermark {
-	text-align: center;
-	font-size: 13px;
-	letter-spacing: 1px;
-	color: #cdd0d6;
-	padding: 4px 0 8px;
+	margin-left: auto;
+	align-self: center;
+	font-size: 11px;
+	color: #d6d9de;
+	white-space: nowrap;
+	flex-shrink: 0;
+	pointer-events: none;
 	-webkit-user-select: none;
 	user-select: none;
-}
-
-.btn-wd {
-	color: #fff;
-	background-color: #ffa300
-}
-
-.btn-wd:active {
-	background-color: #EC9900
 }
 
 .btn-line {
@@ -278,16 +253,17 @@ body {
 	margin-top: 10px;
 }
 .app-list {
-	display: flex;
-	flex-direction: row;
-	flex-wrap: wrap;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
 	margin-top: 10px;
 	border-top: 1px solid #ccc;
 	padding: 15px
 }
 
 .app-item {
-	width: 90px;
+	max-width: 90px;
+	width: 100%;
+	justify-self: center;
 	font-size: 12px;
 	padding: 8px 4px;
 	margin-bottom: 6px;
@@ -426,6 +402,9 @@ body {
 }
 
 .tabs {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
 	font-size: 24rpx;
 	margin-top: 10rpx;
 	white-space: nowrap;

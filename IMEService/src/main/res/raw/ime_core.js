@@ -150,9 +150,6 @@ function reloadAppList(){
 			html.push('<div class="app-name'+(app.isSysApp?" blue":"")+'" id="app-'+i+'" data-packageName="'+escapeHtml(app.packageName)+'">'+escapeHtml(app.lable)+"</div>");
 			html.push("</div>");
 		}
-		for(i=0;i<3;i++){
-			html.push('<div class="app-item item-empty"></div>');
-		}
 		appList.html(html.join("\r\n"));
 	});
 }
@@ -257,16 +254,6 @@ function loadTVList(){
 		tvItems.html(html.join("\r\n"));
 	}, "text");
 }
-$("#confirm").on("click",function(){
-	var $input=$("#inputarea");
-	var text=$input.val();
-	if(""!=text){
-		$input.val("");
-		$.post("/text",{text:text},function(data){
-			console.log(data);
-		});
-	}
-})
 $("#btnEnter").on("click", function(){
 	vibrateShort();
 	var $input = $("#inputarea");
