@@ -89,6 +89,15 @@ public class AppPackagesHelper {
         return version;
     }
 
+    public static int getCurrentVersionCode(Context context){
+        try {
+            PackageInfo packageInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            return packageInfo.versionCode;
+        }catch (PackageManager.NameNotFoundException e){
+            return 0;
+        }
+    }
+
     public static List<AppInfo> queryAppInfo(final Context context, boolean containSysApp){
         PackageManager pm = context.getPackageManager();
         List<ApplicationInfo> listAppcations = pm

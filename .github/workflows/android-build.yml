@@ -23,6 +23,10 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # 发布Release需要contents:write，覆盖掉workflow级别默认的contents:read
+    # （只影响这一个job，其它job/未来新增的job仍然维持只读的默认最小权限）。
+    permissions:
+      contents: write
     # if:条件里不能直接引用secrets这个上下文（GitHub Actions工作流语法层面就不
     # 支持，会在解析阶段直接报"Unrecognized named-value: 'secrets'"，跑都跑不
     # 起来），得先在job级别的env里转一手，再在下面步骤的if里读env.*。
@@ -130,3 +134,33 @@ jobs:
           name: IMEService-release
           path: IMEService/build/outputs/apk/release/*.apk
           if-no-files-found: error
+
+      # App内"检查更新"功能读的就是这个Release：只在push到master、且配置了release
+      # 签名密钥（未签名的APK根本装不上，发布出去没有意义）时才发布。tag固定用
+      # "v<versionCode>"这个格式而不是滚动的"latest"标签——这样App直接从tag名解析
+      # 版本号做数值比较即可，不需要额外接口，也顺带保留了每个历史版本各自的下载
+      # 记录；versionCode没有变化时重复push到master会更新同一个tag对应的Release
+      # (软件行为，不是bug)，版本号变了则会创建一个新的Release。
+      - name: Extract version info
+        if: ${{ github.ref == 'refs/heads/master' && github.event_name == 'push' && env.HAS_RELEASE_SIGNING == 'true' }}
+        id: appver
+        run: |
+          set -e
+          VERSION_CODE=$(grep -oP 'versionCode\s+\K[0-9]+' IMEService/build.gradle)
+          VERSION_NAME=$(grep -oP 'versionName\s+"\K[^"]+' IMEService/build.gradle)
+          echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release APK to GitHub Release
+        if: ${{ github.ref == 'refs/heads/master' && github.event_name == 'push' && env.HAS_RELEASE_SIGNING == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.appver.outputs.code }}
+          name: "TVRemoteIME v${{ steps.appver.outputs.name }} (build ${{ steps.appver.outputs.code }})"
+          body: |
+            自动构建发布，来自commit ${{ github.sha }}。
+
+            App内"检查更新"功能依赖这个Release的tag格式(v<versionCode>)和附带的
+            release APK，请不要手动修改/删除。
+          files: IMEService/build/outputs/apk/release/*.apk
+          token: ${{ secrets.GITHUB_TOKEN }}

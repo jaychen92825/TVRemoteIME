@@ -12,6 +12,10 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- "检查更新"功能：从本机跳系统安装器安装下载好的APK需要这个权限（Android 8+
+         上是按调用方App单独授权的"安装未知应用"开关，MainActivity里会在没有这个
+         权限时引导用户去系统设置页手动开一次）。 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:allowBackup="true"
@@ -112,6 +116,19 @@
         </receiver>
 
         <activity android:name=".widget.ScreenShotActivity"></activity>
+
+        <!-- "检查更新"下载下来的APK文件在自己的私有外部存储目录里，Android 7+
+             不允许把裸file://路径传给别的组件（系统安装器）用，必须通过FileProvider
+             换成content://Uri，否则会抛FileUriExposedException。 -->
+        <provider
+            android:name="android.support.v4.content.FileProvider"
+            android:authorities="com.android.tvremoteime.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>
