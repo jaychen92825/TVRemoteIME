@@ -249,6 +249,34 @@ body {
 .vol-up {
 	border-bottom: 1px solid #e0e0e6 !important;
 }
+
+.touchpad {
+	margin-top: 18px;
+	height: 140px;
+	background: #fff;
+	border: 1px solid #e0e0e6;
+	border-radius: 10px;
+	box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	color: #a8a8ae;
+	font-size: 14px;
+	text-align: center;
+	-webkit-user-select: none;
+	user-select: none;
+	touch-action: none;
+}
+
+.touchpad.pressed {
+	background: #f5f6f8;
+}
+
+.touchpad-hint {
+	font-size: 11px;
+	color: #c3c3ca;
+}
 .app-panel{
 	margin-top: 10px;
 }

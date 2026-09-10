@@ -54,6 +54,19 @@ public class RemoteServer extends NanoHTTPD
          * @param text
          */
         void onComposingTextReceived(String text);
+
+        /**
+         * 触控板相对位移（单位：屏幕像素，已在服务端按灵敏度换算），
+         * 用来模拟"手指在电视屏幕上拖动光标"。
+         * @param dx
+         * @param dy
+         */
+        void onMouseMoveReceived(int dx, int dy);
+
+        /**
+         * 触控板轻触（未产生明显拖动的一次按下+抬起），等价于鼠标左键单击/触屏点击。
+         */
+        void onMouseClickReceived();
     }
 
     public static int serverPort = 12345;

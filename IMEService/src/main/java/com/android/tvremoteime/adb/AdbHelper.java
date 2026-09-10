@@ -22,6 +22,19 @@ import java.util.ArrayDeque;
  */
 
 public class AdbHelper {
+    //触控板拖动：一次从(x1,y1)滑到(x2,y2)的手势，等价于"adb shell input swipe"
+    public static class SwipeCommand {
+        public final int x1, y1, x2, y2, durationMs;
+        public SwipeCommand(int x1, int y1, int x2, int y2, int durationMs){
+            this.x1 = x1; this.y1 = y1; this.x2 = x2; this.y2 = y2; this.durationMs = durationMs;
+        }
+    }
+    //触控板轻触：在(x,y)处的一次点击，等价于"adb shell input tap"
+    public static class TapCommand {
+        public final int x, y;
+        public TapCommand(int x, int y){ this.x = x; this.y = y; }
+    }
+
     private static String TAG = "AdbHelper";
     private AdbConnection connection = null;
     private String host;
@@ -95,6 +108,13 @@ public class AdbHelper {
                         String msg = null;
                         if(data instanceof Integer){
                             msg = "shell:input keyevent " + String.valueOf(data);
+                        }else if(data instanceof SwipeCommand){
+                            //坐标均为服务端计算得出的int，不含用户可控字符，无需转义
+                            SwipeCommand s = (SwipeCommand) data;
+                            msg = "shell:input swipe " + s.x1 + " " + s.y1 + " " + s.x2 + " " + s.y2 + " " + s.durationMs;
+                        }else if(data instanceof TapCommand){
+                            TapCommand t = (TapCommand) data;
+                            msg = "shell:input tap " + t.x + " " + t.y;
                         }else{
                             //使用单引号包裹并转义内部单引号，避免文本中的$()、反引号等被远程shell当作命令展开执行
                             msg = "shell:input text '" + ((String)data).replace("'", "'\\''") + "'";

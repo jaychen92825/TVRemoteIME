@@ -279,6 +279,79 @@ $("#inputarea").on("input", function(){
 		});
 	}, 150);
 })
+//触控板：拖动模拟鼠标移动（服务端换算成"adb shell input swipe"手势），
+//轻触（没有明显拖动的按下+抬起）模拟点击（"adb shell input tap"）。
+//这条路径依赖ADB连接，跟电源键是同一套机制。
+(function(){
+	var pad = document.getElementById('touchpad');
+	if(!pad) return;
+	var active = false;
+	var lastX = 0, lastY = 0;
+	var totalMove = 0;
+	var lastSendTime = 0;
+	var sensitivity = 2.5; //触控板物理位移->电视屏幕像素位移的放大倍数
+	var CLICK_MOVE_THRESHOLD = 8; //小于这个累计位移(px)才算"轻触"而不是"拖动"
+	var SEND_INTERVAL_MS = 40;
+	function sendMove(dx, dy){
+		$.post("/mouseMove", {dx: Math.round(dx), dy: Math.round(dy)});
+	}
+	function sendClick(){
+		vibrateShort();
+		$.post("/mouseClick");
+	}
+	function start(x, y){
+		active = true;
+		lastX = x; lastY = y;
+		totalMove = 0;
+		pad.classList.add("pressed");
+	}
+	function move(x, y){
+		if(!active) return;
+		var dx = x - lastX, dy = y - lastY;
+		lastX = x; lastY = y;
+		totalMove += Math.abs(dx) + Math.abs(dy);
+		var now = Date.now();
+		if(now - lastSendTime >= SEND_INTERVAL_MS && (dx !== 0 || dy !== 0)){
+			sendMove(dx * sensitivity, dy * sensitivity);
+			lastSendTime = now;
+		}
+	}
+	function end(){
+		if(!active) return;
+		active = false;
+		pad.classList.remove("pressed");
+		if(totalMove < CLICK_MOVE_THRESHOLD){
+			sendClick();
+		}
+	}
+	if(isSupportTouch){
+		pad.addEventListener("touchstart", function(e){
+			var t = e.touches[0];
+			start(t.clientX, t.clientY);
+		}, {passive:true});
+		pad.addEventListener("touchmove", function(e){
+			var t = e.touches[0];
+			move(t.clientX, t.clientY);
+			e.preventDefault();
+		}, {passive:false});
+		pad.addEventListener("touchend", function(){
+			end();
+		});
+		pad.addEventListener("touchcancel", function(){
+			end();
+		});
+	}else{
+		pad.addEventListener("mousedown", function(e){
+			start(e.clientX, e.clientY);
+		});
+		document.addEventListener("mousemove", function(e){
+			move(e.clientX, e.clientY);
+		});
+		document.addEventListener("mouseup", function(){
+			end();
+		});
+	}
+})();
 $('.app-list').on('click', '.app-item', function(){
 	var idx = $(this).attr('data-index');
 	if(idx == null || idx == "") return; //占位的空白格子

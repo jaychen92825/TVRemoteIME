@@ -30,6 +30,8 @@ public class InputRequestProcesser implements RequestProcesser {
                 case "/key":
                 case "/keydown":
                 case "/keyup":
+                case "/mouseMove":
+                case "/mouseClick":
                     return true;
             }
         }
@@ -66,8 +68,33 @@ public class InputRequestProcesser implements RequestProcesser {
                     mDataReceiver.onKeyEventReceived(params.get("code"), IMEService.KEY_ACTION_DOWN);
                 }
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
+            case "/mouseMove":
+                if (mDataReceiver != null) {
+                    //单次触控板位移不可能很大，限制一下范围防止畸形/恶意参数导致虚拟光标坐标跳变
+                    int dx = clampInt(parseIntSafely(params.get("dx")), -400, 400);
+                    int dy = clampInt(parseIntSafely(params.get("dy")), -400, 400);
+                    mDataReceiver.onMouseMoveReceived(dx, dy);
+                }
+                return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
+            case "/mouseClick":
+                if (mDataReceiver != null) {
+                    mDataReceiver.onMouseClickReceived();
+                }
+                return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
             default:
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.NOT_FOUND, "Error 404, file not found.");
         }
+    }
+
+    private static int parseIntSafely(String value){
+        try {
+            return value == null ? 0 : Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private static int clampInt(int value, int min, int max){
+        return value < min ? min : (value > max ? max : value);
     }
 }

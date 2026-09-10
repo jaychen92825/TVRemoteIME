@@ -4,14 +4,17 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.graphics.Point;
 import android.inputmethodservice.InputMethodService;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.SystemClock;
 import android.util.Log;
+import android.view.Display;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.widget.Button;
@@ -54,6 +57,12 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	public static final int KEY_ACTION_PRESSED = 0;
 	public static final int KEY_ACTION_DOWN = 1;
 	public static final int KEY_ACTION_UP = 2;
+
+	//触控板模拟鼠标用：屏幕分辨率（首次用到时才查询、缓存）与当前虚拟光标位置
+	private int screenWidth = 0;
+	private int screenHeight = 0;
+	private int virtualCursorX = 0;
+	private int virtualCursorY = 0;
 
 	final Handler handler = new Handler();
 
@@ -246,6 +255,29 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 						ic.setComposingText(text, 1);
 					}
 				}
+
+				@Override
+				public void onMouseMoveReceived(int dx, int dy) {
+					//触控板模拟鼠标跟电源键一样，只能靠adb的"input swipe"注入触摸手势，
+					//普通InputConnection没有触摸事件的概念，走不通。
+					ensureScreenSize();
+					if(screenWidth <= 0 || screenHeight <= 0) return;
+					int oldX = virtualCursorX, oldY = virtualCursorY;
+					virtualCursorX = clampInt(virtualCursorX + dx, 0, screenWidth - 1);
+					virtualCursorY = clampInt(virtualCursorY + dy, 0, screenHeight - 1);
+					if(AdbHelper.initService(getApplicationContext())){
+						AdbHelper.getInstance().sendData(new AdbHelper.SwipeCommand(oldX, oldY, virtualCursorX, virtualCursorY, 40));
+					}
+				}
+
+				@Override
+				public void onMouseClickReceived() {
+					ensureScreenSize();
+					if(screenWidth <= 0 || screenHeight <= 0) return;
+					if(AdbHelper.initService(getApplicationContext())){
+						AdbHelper.getInstance().sendData(new AdbHelper.TapCommand(virtualCursorX, virtualCursorY));
+					}
+				}
 			});
 			try {
 				mServer.start();
@@ -276,6 +308,26 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		}
 		return flag;
 	}
+	private void ensureScreenSize(){
+		if(screenWidth > 0 && screenHeight > 0) return;
+		try {
+			WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+			Display display = wm.getDefaultDisplay();
+			Point size = new Point();
+			display.getSize(size);
+			screenWidth = size.x;
+			screenHeight = size.y;
+			virtualCursorX = screenWidth / 2;
+			virtualCursorY = screenHeight / 2;
+		} catch (Exception e) {
+			Log.e(TAG, "获取屏幕分辨率失败，触控板功能不可用", e);
+		}
+	}
+
+	private static int clampInt(int value, int min, int max){
+		return value < min ? min : (value > max ? max : value);
+	}
+
 	private void sendKeyCode(int keyCode){
 		if(Environment.needDebug) {
 			Environment.debug(TAG, "send-key-code:" + keyCode);
