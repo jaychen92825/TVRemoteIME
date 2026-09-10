@@ -17,18 +17,44 @@
 		  <div class="tab" data-rel="video">视频直播</div>
 		</div>
 		<div class="keys" data-tab="controls">
-			<div id="direction-btns" class="direction-btns">
-				<div class="otherbtn home-btn" id="home-btn" data-key='3' data-bp='-586px -315px'></div>
-				<div class="otherbtn vol-btn" id="vol-btn" data-key='164' data-bp='-711px -315px'></div>
-				<div class="direction left-btn" id="left-btn" data-key='21' data-bp='-1px -247px'></div>
-				<div class="direction top-btn" id="top-btn" data-key='19' data-bp='-247px -1px'></div>
-				<div class="direction right-btn" id="right-btn" data-key='22' data-bp='-493px -1px'></div>
-				<div class="direction bottom-btn" id="bottom-btn" data-key='20' data-bp='-247px -247px'></div>
-				<div class="direction center-btn" id="center-btn" data-key='23' data-bp='-740px -1px'></div>
-				<div class="otherbtn back-btn" id="back-btn" data-key='4' data-bp='-586px -251px'></div>
-				<div class="otherbtn menu-btn" id="menu-btn" data-key='82' data-bp='-711px -251px'></div>
-				<div class="otherbtn vol1-btn" id="vol1-btn" data-key='24' data-bp='-711px -379px'></div>
-				<div class="otherbtn vol2-btn" id="vol2-btn" data-key='25' data-bp='-711px -379px'></div>
+			<div class="remote-panel">
+				<div class="remote-row remote-row-power">
+					<div class="otherbtn round-btn power-btn" id="power-btn" data-key='26' title="电源">
+						<svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 3v9" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+					</div>
+				</div>
+				<div class="remote-row remote-row-secondary">
+					<div class="otherbtn round-btn" id="vol-btn" data-key='164' title="静音">
+						<svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 9v6h4l5 5V4L8 9H4z" fill="currentColor"/><path d="M17 8l4 8M21 8l-4 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+					</div>
+					<div class="otherbtn pill-btn" id="search-btn" data-key='84' title="搜索">
+						<svg viewBox="0 0 24 24" width="20" height="20"><circle cx="10" cy="10" r="6" stroke="currentColor" stroke-width="2" fill="none"/><line x1="15" y1="15" x2="20" y2="20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+					</div>
+				</div>
+				<div id="direction-btns" class="direction-btns">
+					<div class="direction left-btn" id="left-btn" data-key='21'>◀</div>
+					<div class="direction top-btn" id="top-btn" data-key='19'>▲</div>
+					<div class="direction right-btn" id="right-btn" data-key='22'>▶</div>
+					<div class="direction bottom-btn" id="bottom-btn" data-key='20'>▼</div>
+					<div class="direction center-btn" id="center-btn" data-key='23'></div>
+				</div>
+				<div class="remote-row remote-row-nav">
+					<div class="otherbtn round-btn" id="home-btn" data-key='3' title="主页">
+						<svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1v-9z" fill="currentColor"/></svg>
+					</div>
+					<div class="otherbtn round-btn" id="back-btn" data-key='4' title="返回">
+						<svg viewBox="0 0 24 24" width="20" height="20"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+					</div>
+					<div class="otherbtn round-btn" id="menu-btn" data-key='82' title="菜单">
+						<svg viewBox="0 0 24 24" width="20" height="20"><line x1="4" y1="7" x2="20" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4" y1="17" x2="20" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+					</div>
+				</div>
+				<div class="remote-row remote-row-volume">
+					<div class="vol-pill">
+						<div class="otherbtn vol-half vol-up" id="vol1-btn" data-key='24'>＋</div>
+						<div class="otherbtn vol-half vol-down" id="vol2-btn" data-key='25'>－</div>
+					</div>
+				</div>
 			</div>
 		</div>
 		<div class="main-wrapper" data-tab="controls">

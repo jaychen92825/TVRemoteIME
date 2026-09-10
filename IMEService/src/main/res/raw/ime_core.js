@@ -329,29 +329,22 @@ $("#btnCls").on("click",function(){
 })
 $(".direction, #btnDel").on(isSupportTouch ? "touchstart" : "mousedown",function(){
 		var o=$(this);
-		$("#direction-btns").css({"background-position":o.attr("data-bp")});
-		//postKeyCode(o.attr("data-key"));
+		o.addClass("pressed");
 		postKeyActionCode(o.attr("data-key"), 1);
 		console.log("onkeydown:" + o.attr("data-key"));
 })
 $(".direction, #btnDel").on(isSupportTouch ? "touchend" : "mouseup",function(){
 		var o=$(this);
-		//$("#direction-btns").css({"background-position":o.attr("data-bp")});
-		//postKeyCode(o.attr("data-key"));
 		postKeyActionCode(o.attr("data-key"), 2);
 		console.log("onkeyup:" + o.attr("data-key"));
 })
 $(".otherbtn").on(isSupportTouch ? "touchstart" : "mousedown", function() {
 	var o = $(this);
-	o.css({
-		"background-position": o.attr("data-bp")
-	});
+	o.addClass("pressed");
 	postKeyCode(o.attr("data-key"));
 })
 $(".direction,.otherbtn").on(isSupportTouch ? "touchend touchmove" : "mouseup mousemove", function() {
-	$("#direction-btns,.direction,.otherbtn").css({
-		"background-position": ""
-	});
+	$(".direction,.otherbtn").removeClass("pressed");
 })
 $("#cbListSystem").on("click", reloadAppList);
 $("#showSettings").on("click", function() {
