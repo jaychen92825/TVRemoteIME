@@ -435,14 +435,57 @@ $("div.tab").on("click", function(){
 	tabs.filter('[data-tab="' + o.attr('data-rel')+ '"]').removeClass("hide");
 	o.addClass('cur');
 })
-$(".mode-tab").on("click", function(){
-	var mode = $(this).attr("data-mode");
+//方向键/元素列表这两个子Tab除了点标签切换，也支持在内容区左右滑动切换——
+//点两个小标签来回切总感觉要"精确瞄准"，直接在当前显示的面板上一划更顺手。
+var MODE_ORDER = ["dpad", "elements"];
+function switchMode(mode){
 	$(".mode-tab").removeClass("active");
-	$(this).addClass("active");
+	$('.mode-tab[data-mode="' + mode + '"]').addClass("active");
 	$(".nav-mode").addClass("hide");
 	$('.nav-mode[data-mode="' + mode + '"]').removeClass("hide");
 	if(mode === "elements") loadScreenElements();
+}
+$(".mode-tab").on("click", function(){
+	switchMode($(this).attr("data-mode"));
 })
+;(function(){
+	var SWIPE_THRESHOLD = 40; //横向位移小于这个不算滑动，避免点击时手指的轻微抖动被误判成切换
+	function switchToAdjacentMode(direction){
+		var curMode = $(".mode-tab.active").attr("data-mode");
+		var idx = MODE_ORDER.indexOf(curMode);
+		var nextIdx = idx + direction;
+		if(nextIdx < 0 || nextIdx >= MODE_ORDER.length) return; //已经是第一个/最后一个，划过头了不循环
+		switchMode(MODE_ORDER[nextIdx]);
+	}
+	//只在touchend/mouseup时算一次总位移，中途完全不preventDefault——这样元素
+	//列表内容较多需要上下滚动时，原生滚动行为不受影响，只有明显以横向为主的
+	//滑动才会触发切换。
+	function bindSwipe(el){
+		var startX = 0, startY = 0, tracking = false;
+		function start(x, y){ startX = x; startY = y; tracking = true; }
+		function end(x, y){
+			if(!tracking) return;
+			tracking = false;
+			var dx = x - startX, dy = y - startY;
+			if(Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dy) > Math.abs(dx)) return;
+			switchToAdjacentMode(dx < 0 ? 1 : -1);
+		}
+		if(isSupportTouch){
+			el.addEventListener("touchstart", function(e){
+				if(e.touches.length !== 1) return;
+				start(e.touches[0].clientX, e.touches[0].clientY);
+			}, {passive:true});
+			el.addEventListener("touchend", function(e){
+				var t = e.changedTouches[0];
+				if(t) end(t.clientX, t.clientY);
+			});
+		}else{
+			el.addEventListener("mousedown", function(e){ start(e.clientX, e.clientY); });
+			el.addEventListener("mouseup", function(e){ end(e.clientX, e.clientY); });
+		}
+	}
+	$(".nav-mode").each(function(){ bindSwipe(this); });
+})();
 //元素列表：读取无障碍服务识别出的当前屏幕可点击元素，点名字直接让那个控件
 //执行它自己的点击逻辑（不区分是靠触摸还是遥控器焦点响应的），完全不依赖ADB，
 //标准Android TV系统也能用；没开启无障碍服务时给一个能直接跳转到电视端
@@ -687,25 +730,32 @@ function showCurrentVersion() {
 		$('#curVer').text(version);
 	});
 }
-//电源键依赖ADB才能生效，轮询一下连接状态显示给用户看，不用非要点了按钮
-//没反应才知道是没连上ADB。
-function refreshAdbStatus(){
-	$.get('/adbStatus', function(data){
-		var el = $('#adbStatus');
-		if(data && data.connected){
-			el.addClass('connected');
-			el.find('.adb-status-text').text('ADB已连接，电源键可用');
-		}else{
-			el.removeClass('connected');
-			el.find('.adb-status-text').text('ADB未连接，电源键暂不可用');
-		}
-	}, 'json');
+//轻量提示条：短暂显示一行文字然后自动消失，用来在具体操作失败时给个理由，
+//不用像之前那样常驻一个状态栏一直占地方。
+var miniToastTimer = null;
+function showMiniToast(text){
+	var el = $("#miniToast");
+	if(el.length === 0){
+		el = $('<div id="miniToast" class="mini-toast"></div>').appendTo("body");
+	}
+	el.text(text).addClass("show");
+	clearTimeout(miniToastTimer);
+	miniToastTimer = setTimeout(function(){ el.removeClass("show"); }, 2200);
 }
+//电源键是唯一一个平时就依赖ADB才能生效的按键（见IMEService里
+//shouldRouteKeyThroughAdb的说明），没必要为了这一个键常驻显示/轮询一个
+//ADB连接状态栏——只在真的按了电源键、且这时候ADB确实没连上时，才提示一下
+//"为什么电源键没反应"，其它时候什么都不显示，不占地方也不用一直请求接口。
+$("#power-btn").on(isSupportTouch ? "touchstart" : "mousedown", function(){
+	$.get("/adbStatus", function(data){
+		if(!data || !data.connected){
+			showMiniToast("ADB未连接，电源键暂不可用");
+		}
+	}, "json");
+})
 reloadAppList();
 loadFileList("");
 getDiskSpace();
 loadTVList();
 loadTorrentItems();
 showCurrentVersion();
-refreshAdbStatus();
-setInterval(refreshAdbStatus, 4000);
