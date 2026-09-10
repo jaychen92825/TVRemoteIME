@@ -32,7 +32,16 @@
 			  视频直播
 		  </div>
 		</div>
-		<div class="version-watermark"><span id="deviceNameWatermark"></span>V<span id="curVer">1.0</span></div>
+		</div>
+		<div class="main-wrapper" data-tab="controls">
+			<div class="inputarea-wrapper">
+				<textarea id="inputarea" rows="2" placeholder="点此为电视输入文字"></textarea>
+			</div>
+		</div>
+		<div class="btn-line" data-tab="controls">
+		    <div class="btn" id="btnDel" data-key='67'><svg viewBox="0 0 24 24" width="14" height="14"><path d="M8 5h12a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H8l-6-7 6-7z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/><line x1="11" y1="9" x2="17" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="17" y1="9" x2="11" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>退格</div>
+		    <div class="btn" id="btnEnter"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M19 5v7a2 2 0 0 1-2 2H7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11l-4 3 4 3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>回车</div>
+		    <div class="btn" id="btnCls" data-key='cls'><svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" fill="none"/><line x1="9" y1="9" x2="15" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="15" y1="9" x2="9" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>清空</div>
 		</div>
 		<div class="keys" data-tab="controls">
 			<div class="remote-panel">
@@ -90,16 +99,6 @@
 				</div>
 			</div>
 		</div>
-		<div class="main-wrapper" data-tab="controls">
-			<div class="inputarea-wrapper">
-				<textarea id="inputarea" rows="2" placeholder="点此为电视输入文字"></textarea>
-			</div>
-		</div>
-		<div class="btn-line" data-tab="controls">
-		    <div class="btn" id="btnDel" data-key='67'><svg viewBox="0 0 24 24" width="14" height="14"><path d="M8 5h12a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H8l-6-7 6-7z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/><line x1="11" y1="9" x2="17" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="17" y1="9" x2="11" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>退格</div>
-		    <div class="btn" id="btnEnter"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M19 5v7a2 2 0 0 1-2 2H7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11l-4 3 4 3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>回车</div>
-		    <div class="btn" id="btnCls" data-key='cls'><svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" fill="none"/><line x1="9" y1="9" x2="15" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="15" y1="9" x2="9" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>清空</div>
-		</div>
 		<div class="app-panel hide" data-tab="app">
 			<div class="app-un">
 		    <a class="showSettings" id="showSettings"><svg viewBox="0 0 24 24" width="12" height="12"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-dasharray="2.4 2.6"/></svg>系统设置</a>
@@ -117,6 +116,7 @@
 		</div>
 		<div class="upload-settings" data-tab="controls">
 		   <label style="margin-right:10px;"><input type="checkbox" checked="checked" id="cbAutoInstall">传送后自动安装APK文件或播放视频文件</label>
+		   <div class="version-watermark"><span id="deviceNameWatermark"></span>V<span id="curVer">1.0</span></div>
 	    </div>
 		<div class="play-line hide" data-tab="video">
 		   <div class="card">

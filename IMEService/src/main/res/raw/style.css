@@ -115,10 +115,6 @@ body {
 	min-height: 100vh;
 }
 
-/* 水印跟tabs同属一个flex行(.tabs-row)，各占一块：tabs用flex:1+min-width:0
-   吃掉除水印外的全部宽度，水印自己固定宽度、不参与tabs的横向滚动，无论
-   tab内容够不够宽、要不要横向滚动，水印所在的这一小块空间都不会被tab的
-   文字侵占。 */
 .tabs-row {
 	display: flex;
 	align-items: center;
@@ -127,23 +123,23 @@ body {
 	width: 100%;
 }
 
+/* 水印挪到页面最下面"传送后自动安装..."那一行的右侧，跟设置项同一排、
+   贴右下角显示，不再跟主Tab抢同一行的宽度。 */
 .version-watermark {
 	flex: 0 0 auto;
 	font-size: 11px;
 	color: #b8bcc2;
-	padding: 0 8px;
 	white-space: nowrap;
 	pointer-events: none;
 	-webkit-user-select: none;
 	user-select: none;
 }
 
-/* 设备名是用户自己起的，长度不可控——窄屏手机上"客厅"这种短名字问题不大，
-   但万一起了个长名字，不能让tabs可点的那几个字被越挤越少甚至滚没影，
-   超出这个宽度就省略号截断，保住tabs该有的显示空间。 */
+/* 设备名是用户自己起的，长度不可控，起了很长名字的极端情况用省略号截断，
+   不会把这一行撑得很宽或换行。 */
 #deviceNameWatermark {
 	display: inline-block;
-	max-width: 15vw;
+	max-width: 40vw;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -335,38 +331,36 @@ body {
 	transform: translateX(-50%) translateY(0);
 }
 
+/* 方向键/元素列表这个切换以前是实心蓝底的"药丸"分段控件，视觉上比页面
+   其它任何控件都更抢眼，跟旁边一圈电源/静音/音量按钮站在一起显得很突兀。
+   改成跟顶部主Tab一样的文字+下划线风格(纯文字、激活时变主题色+细下划线，
+   不用色块填充)，观感上更"隐形"一些，像是页面本来的一部分而不是额外
+   贴上去的一个控件。 */
 .mode-tabs {
 	display: flex;
 	justify-content: center;
-	margin: 10px 0 4px;
+	gap: 24px;
+	margin: 10px 0 6px;
+	border-bottom: 1px solid var(--color-border);
 }
 
 .mode-tab {
 	display: flex;
 	align-items: center;
 	gap: 4px;
-	padding: 6px 18px;
+	padding: 6px 2px 8px;
 	font-size: 12px;
 	color: var(--color-text-secondary);
-	background: var(--color-card-bg);
+	background: transparent;
 	cursor: pointer;
-	border: 1px solid var(--color-border);
-	transition: background 0.12s ease, color 0.12s ease;
-}
-
-.mode-tab:first-child {
-	border-radius: 16px 0 0 16px;
-	border-right: none;
-}
-
-.mode-tab:last-child {
-	border-radius: 0 16px 16px 0;
+	border: none;
+	border-bottom: 2px solid transparent;
+	transition: color 0.12s ease, border-color 0.12s ease;
 }
 
 .mode-tab.active {
-	background: var(--color-primary);
-	color: #fff;
-	border-color: var(--color-primary);
+	color: var(--color-primary);
+	border-bottom-color: var(--color-primary);
 }
 
 .touchpad-wrapper {
@@ -697,10 +691,17 @@ body {
 	gap: 3px;
 }
 
+/* 设备名水印放在页面最下面这一行、贴右下角，跟"传送后自动安装..."的
+   设置项同排显示，不占用单独的空间。 */
 .upload-settings {
 	margin: 10px 15px 0;
 	font-size: 12px;
 	color: var(--color-text-secondary);
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 4px;
 }
 
 .play-line {
@@ -742,17 +743,13 @@ body {
 	-webkit-overflow-scrolling: touch;
 }
 
-/* 窄屏(400px上下的手机)本来就刚好够放下4个Tab，水印区加上设备名前缀后
-   预留给Tab的宽度又少了一截，稍微收紧一点每个Tab的左右留白/图标间距，
-   腾出来的十几px刚好够放下"客厅"这种常见的2-4字短设备名，不用一加设备名
-   就把最后一个Tab挤到需要横向滑动才能看见。 */
 .tab {
 	box-sizing: border-box;
 	display: inline-flex;
 	flex: 0 0 auto;
 	align-items: center;
-	gap: 3px;
-	padding: 13px 6px;
+	gap: 4px;
+	padding: 13px 9px;
 	font-size: 13px;
 	color: var(--color-text-secondary);
 	background: transparent;
