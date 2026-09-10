@@ -454,6 +454,63 @@ body {
 	gap: 3px;
 }
 
+.elements-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 8px;
+}
+
+.elements-status {
+	font-size: 12px;
+	color: var(--color-text-secondary);
+}
+
+.elements-list {
+	margin-top: 8px;
+	max-height: 320px;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.element-item {
+	background: var(--color-card-bg);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-sm);
+	padding: 10px 12px;
+	font-size: 13px;
+	color: var(--color-text);
+	cursor: pointer;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-touch-callout: none;
+	transition: background 0.12s ease;
+}
+
+.element-item:active {
+	background: var(--color-primary-soft);
+}
+
+.elements-hint {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	padding: 20px 10px;
+	color: var(--color-text-secondary);
+	font-size: 12px;
+	line-height: 1.8;
+}
+
+.elements-hint .btn {
+	margin: 8px 0 0;
+}
+
 /* ===== 通用卡片：各个Tab里成组的设置/操作区都用同一张白底卡片包起来，
    而不是像以前那样靠一条border-top+零散的inline样式区分区块。 ===== */
 .card {

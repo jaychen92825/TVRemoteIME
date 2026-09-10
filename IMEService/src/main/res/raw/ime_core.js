@@ -441,6 +441,54 @@ $(".mode-tab").on("click", function(){
 	$(this).addClass("active");
 	$(".nav-mode").addClass("hide");
 	$('.nav-mode[data-mode="' + mode + '"]').removeClass("hide");
+	if(mode === "elements") loadScreenElements();
+})
+//元素列表：读取无障碍服务识别出的当前屏幕可点击元素，点名字直接让那个控件
+//执行它自己的点击逻辑（不区分是靠触摸还是遥控器焦点响应的），完全不依赖ADB，
+//标准Android TV系统也能用；没开启无障碍服务时给一个能直接跳转到电视端
+//"设置-无障碍"页面的按钮（复用/runSystem，跟"应用管理"里的系统设置入口
+//是同一套机制）。
+function loadScreenElements(){
+	$("#elementsStatus").text("加载中…");
+	$.post("/screenElements", null, function(data){
+		var list = $("#elementsList");
+		list.empty();
+		if(!data || !data.enabled){
+			$("#elementsStatus").text("无障碍服务未启用");
+			list.html('<div class="elements-hint">需要先在电视盒子上"设置-无障碍"里开启"' +
+				escapeHtml("小盒精灵") + '"服务，才能识别屏幕上的元素。<div class="btn" id="btnOpenAccessibilitySettings">去电视上开启</div></div>');
+			return;
+		}
+		var elements = data.elements || [];
+		if(elements.length === 0){
+			$("#elementsStatus").text("已启用 · 当前屏幕没有识别到可点击元素");
+			list.html('<div class="elements-hint">当前屏幕没有识别到可点击元素，切换一下电视画面后点"刷新"再试试。</div>');
+			return;
+		}
+		$("#elementsStatus").text("已启用 · 共" + elements.length + "个元素");
+		var html = [];
+		for(var i = 0; i < elements.length; i++){
+			html.push('<div class="element-item" data-id="' + elements[i].id + '" title="' + escapeHtml(elements[i].label) + '">' + escapeHtml(elements[i].label) + '</div>');
+		}
+		list.html(html.join(""));
+	}, "json").fail(function(){
+		$("#elementsStatus").text("获取失败，请重试");
+	});
+}
+$("#btnRefreshElements").on("click", function(){
+	vibrateShort();
+	loadScreenElements();
+})
+$("#elementsList").on("click", ".element-item", function(){
+	vibrateShort();
+	var id = $(this).attr("data-id");
+	$.post("/clickElement", {id: id}, function(){
+		//点完屏幕大概率已经变了，稍等一下再自动刷新一次列表
+		setTimeout(loadScreenElements, 600);
+	});
+})
+$("#elementsList").on("click", "#btnOpenAccessibilitySettings", function(){
+	$.post("/runSystem", {packageName: "android.settings.ACCESSIBILITY_SETTINGS"});
 })
 $("#btnCls").on("click",function(){
 	vibrateShort();

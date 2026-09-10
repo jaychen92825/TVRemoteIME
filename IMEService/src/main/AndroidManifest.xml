@@ -36,6 +36,20 @@
         <service android:name="com.zxt.dlna.dmr.RenderPlayerService" />
         <service android:name="org.fourthline.cling.android.AndroidUpnpServiceImpl" />
 
+        <!-- 控制端"元素列表"功能用：识别当前屏幕上的可点击元素并代为点击，
+             需要用户在系统设置-无障碍里手动开启，是独立于ADB的另一条点击路径。 -->
+        <service
+            android:name=".accessibility.ScreenAccessibilityService"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
         <activity android:name=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

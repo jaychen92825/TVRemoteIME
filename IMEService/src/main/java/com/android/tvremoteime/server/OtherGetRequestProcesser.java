@@ -8,6 +8,7 @@ import android.text.TextUtils;
 
 import com.android.tvremoteime.AppPackagesHelper;
 import com.android.tvremoteime.VideoPlayHelper;
+import com.android.tvremoteime.accessibility.ScreenAccessibilityService;
 import com.android.tvremoteime.adb.AdbHelper;
 
 import java.io.File;
@@ -33,6 +34,7 @@ public class OtherGetRequestProcesser implements RequestProcesser {
                 case "/version":
                 case "/sdcard_stat":
                 case "/adbStatus":
+                case "/accessibilityStatus":
                     return true;
             }
         }
@@ -48,6 +50,9 @@ public class OtherGetRequestProcesser implements RequestProcesser {
                 return getSDCardStatResponse();
             case "/adbStatus":
                 return getAdbStatusResponse();
+            case "/accessibilityStatus":
+                return RemoteServer.createJSONResponse(NanoHTTPD.Response.Status.OK,
+                        "{\"enabled\":" + ScreenAccessibilityService.isServiceEnabled() + "}");
             default:
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.NOT_FOUND, "Error 404, file not found.");
         }

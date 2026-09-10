@@ -4,4 +4,5 @@
     <string name="keyboard_name">&name;</string>
     <string name="step1">激活启用“&name;”输入法</string>
     <string name="step2">设置“&name;”为系统默认输入法</string>
+    <string name="accessibility_service_description">用于识别屏幕上的按钮/文字并接收控制端"元素列表"点击操作，不会收集或上传任何屏幕内容。</string>
 </resources>

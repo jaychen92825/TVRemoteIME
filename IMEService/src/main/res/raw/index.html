@@ -57,6 +57,10 @@
 						<svg viewBox="0 0 24 24" width="13" height="13"><rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="14" cy="11" r="1.6" fill="currentColor"/></svg>
 						触控板
 					</div>
+					<div class="mode-tab" data-mode="elements">
+						<svg viewBox="0 0 24 24" width="13" height="13"><rect x="3" y="4" width="3" height="3" fill="currentColor"/><rect x="3" y="10.5" width="3" height="3" fill="currentColor"/><rect x="3" y="17" width="3" height="3" fill="currentColor"/><line x1="9" y1="5.5" x2="21" y2="5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="9" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="9" y1="18.5" x2="21" y2="18.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+						元素列表
+					</div>
 				</div>
 				<div class="nav-mode" data-mode="dpad">
 					<div id="direction-btns" class="direction-btns">
@@ -79,6 +83,13 @@
 							<svg viewBox="0 0 24 24" width="14" height="14"><circle cx="6" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="18" cy="12" r="1.8" fill="currentColor"/></svg>
 						</div>
 					</div>
+				</div>
+				<div class="nav-mode hide" data-mode="elements">
+					<div class="elements-toolbar">
+						<span class="elements-status" id="elementsStatus">检测中…</span>
+						<div class="btn" id="btnRefreshElements" style="margin-right:0;"><svg viewBox="0 0 24 24" width="13" height="13"><path d="M20 11A8 8 0 1 0 18.5 16" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><path d="M20 5v6h-6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>刷新</div>
+					</div>
+					<div class="elements-list" id="elementsList"></div>
 				</div>
 				<div class="remote-row remote-row-nav">
 					<div class="otherbtn round-btn" id="home-btn" data-key='3' title="主页">
