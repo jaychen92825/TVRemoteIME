@@ -23,6 +23,16 @@
 	box-sizing: border-box
 }
 
+/* label默认是行内排布，checkbox/文字各自的默认垂直对齐方式(baseline)
+   在不同浏览器里对不上，checkbox看起来偏上或偏下、文字没有跟checkbox的
+   中线对齐。统一成inline-flex+居中对齐，覆盖全站所有"checkbox+文字"或
+   "文字+输入框+文字"这类label组合，不用每处单独调。 */
+label {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
 ::-webkit-input-placeholder {
 	color: #bbb;
 	font-size: 16px
