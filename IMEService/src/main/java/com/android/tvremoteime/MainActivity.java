@@ -198,19 +198,16 @@ public class MainActivity extends Activity implements View.OnClickListener {
         }).start();
     }
 
-    //不是应用商店/系统应用，没法做到完全静默安装——系统的安装确认框这一步绕不过去，
-    //这里能做的只是尽量减少到这一步之前的手动操作。Android 8+把"安装未知来源应用"
-    //的权限从全局开关改成了按调用方App单独授权，没开的话直接跳系统设置页让用户开一次，
-    //开完之后重新点"检查更新"会用回已经下载好的apk文件，不需要重新下载。
+    //不是应用商店/系统应用，没法做到完全静默安装——系统的安装确认框这一步绕不过去。
+    //这里不自己预判"允许安装未知来源"这个权限有没有开、开了就直接跳系统安装确认框，
+    //没开就跳设置页——之前这么做过，但部分设备/ROM上canRequestPackageInstalls()
+    //返回的状态跟设置里实际的开关状态不同步，导致哪怕用户已经在设置里开了权限，
+    //这里判断出来还是"没开"，于是每次点检查更新都被重新赶去设置页，死循环出不来。
+    //现在改成不管权限有没有开，都直接把安装Intent发出去：系统自带的安装器
+    //(PackageInstaller)本身就会在权限没开时自动弹出"允许来自此来源"的确认页，
+    //用户在那一页同意后安装器会自动接着往下走到正常的安装确认框，不需要跳回本App
+    //重新点一次——这条路径由系统安装器自己判断权限状态，不会跟本App这边判断不一致。
     private void installApk(File apkFile){
-        if(Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()){
-            Environment.toast(getApplicationContext(), "请先允许本应用安装未知来源应用，然后重新点击检查更新完成安装");
-            try {
-                startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                        Uri.parse("package:" + getPackageName())));
-            } catch (Exception ignored) {}
-            return;
-        }
         Uri apkUri = Build.VERSION.SDK_INT >= 24
                 ? FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", apkFile)
                 : Uri.fromFile(apkFile);
