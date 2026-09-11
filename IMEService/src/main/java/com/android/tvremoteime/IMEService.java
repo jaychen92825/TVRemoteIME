@@ -36,13 +36,46 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	public static String TAG = "TVRemoteIME";
 	public static String ACTION = "com.android.tvremoteime";
 
-	//控制端"显示/隐藏电视软键盘"按键用：切换Environment里持久化的开关之后，
-	//需要马上让当前正在跑的这个服务实例重新评估一次onEvaluateInputViewShown()，
-	//不然要等下一次输入框获得/失去焦点才会生效，跟点了按键却看不到即时反馈。
+	//控制端"显示/隐藏电视软键盘"按键用：切换设置之后需要马上让软键盘窗口跟着变化，
+	//不能像折叠键盘按键那样等下一次输入框重新获得焦点/按返回键才生效。
 	private static IMEService instance;
 
+	//调用方(RemoteServer的HTTP请求线程、IMEService自己的低频轮询)可能不在
+	//主线程上，这里统一post到主线程再操作窗口，跟handleKeyEventOnMainThread
+	//是同一个道理。
+	//
+	//直接调用showWindow(true)/hideWindow()，而不是updateInputViewShown()：
+	//后者内部是"mShowInputRequested && onEvaluateInputViewShown()"，其中
+	//mShowInputRequested是系统在客户端App主动请求/收起输入法时才会置位的
+	//内部标志——控制端点"键盘"按键这种跟输入框聚焦生命周期完全无关的外部
+	//触发，不会经过那条路径去置位这个标志，所以哪怕onEvaluateInputViewShown
+	//的返回值已经变了，updateInputViewShown()算出来的结果也可能还是原来
+	//那个不变的值，要等用户重新点一下输入框(触发一次真正的显示请求)或者
+	//按返回键(直接调hideWindow())才会生效。showWindow/hideWindow是更底层、
+	//直接改变窗口实际可见性的方法，不经过那个内部标志的限制，从App创建
+	//之初(minSdkVersion 14)到现在的Android版本上都一直是公开稳定的API，
+	//直接调用能做到点开关按键立即生效，跟系统自带"折叠键盘"按钮的效果一样。
 	public static void refreshKeyboardViewVisibility(){
-		if(instance != null) instance.updateInputViewShown();
+		if(instance == null) return;
+		instance.handler.post(new Runnable() {
+			@Override
+			public void run() {
+				if(instance == null) return;
+				boolean shouldShow = Environment.isKeyboardViewVisible(instance, RemoteServer.hasActiveClient());
+				try {
+					if(shouldShow){
+						instance.showWindow(true);
+					}else{
+						instance.hideWindow();
+					}
+				} catch (Exception ignored) {
+					//showWindow/hideWindow在完全没有任何输入连接绑定时(比如电视上
+					//还没有任何输入框被聚焦过)调用，部分系统版本上可能会抛异常——
+					//这种情况下本来也没有窗口可显示/隐藏，忽略掉即可，不需要让
+					//整个IME服务崩溃。
+				}
+			}
+		});
 	}
 
 	//"客户端从活跃变不活跃"(心跳停了/标签页关掉)这个方向的软键盘自动刷新，
@@ -57,7 +90,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		public void run() {
 			boolean nowActive = RemoteServer.hasActiveClient();
 			if(lastKnownClientActive && !nowActive){
-				updateInputViewShown();
+				refreshKeyboardViewVisibility();
 			}
 			lastKnownClientActive = nowActive;
 			handler.postDelayed(this, ACTIVE_CLIENT_POLL_INTERVAL_MS);
@@ -237,98 +270,122 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 				|| !Environment.isDefaultIME(this);
 	}
 
+	//onKeyEventReceived的实际处理逻辑，统一在主线程Handler上执行(见
+	//onKeyEventReceived里handler.post的说明)，不用再各自单独post。
+	private void handleKeyEventOnMainThread(String keyCode, int keyAction){
+		if("cls".equalsIgnoreCase(keyCode)){
+			InputConnection ic = getCurrentInputConnection();
+			if(ic != null) {
+				//deleteSurroundingText(Integer.MAX_VALUE, Integer.MAX_VALUE)在很多
+				//InputConnection实现里会崩溃：BaseInputConnection内部用
+				//"光标位置 + afterLength"计算删除终点，Integer.MAX_VALUE会导致int
+				//溢出变成负数，最终变成"起点>终点"传入删除方法而抛异常——只有输入框
+				//里已经有文本时才会真正触发这条路径，这正好对应"输完字再点清空才崩"
+				//的现象。改为先取出光标前后的实际文本长度，再按真实长度删除，
+				//彻底避免溢出。
+				CharSequence before = ic.getTextBeforeCursor(5000, 0);
+				CharSequence after = ic.getTextAfterCursor(5000, 0);
+				ic.deleteSurroundingText(before != null ? before.length() : 0,
+						after != null ? after.length() : 0);
+			}
+		}else if(String.valueOf(KeyEvent.KEYCODE_APP_SWITCH).equals(keyCode)
+				&& keyAction == KEY_ACTION_PRESSED
+				&& ScreenAccessibilityService.isServiceEnabled()
+				&& ScreenAccessibilityService.getInstance().performRecents()){
+			//多任务键优先走无障碍服务的GLOBAL_ACTION_RECENTS(不需要ADB，
+			//跟"元素列表"用的是同一个ScreenAccessibilityService)；这里直接
+			//比较原始字符串而不是走下面KeyEvent.keyCodeFromString(keyCode)
+			//转换，是因为keyCodeFromString对纯数字字符串的解析行为不确定，
+			//没必要为了这一个特判去依赖它。无障碍服务没开启、或触发失败时，
+			//直接落到下面的通用分支，走已有的ADB/原生注入兜底逻辑。
+		}else {
+			final int kc = KeyEvent.keyCodeFromString(keyCode);
+			if(kc != KeyEvent.KEYCODE_UNKNOWN){
+				if(mInputView != null && KeyEventUtils.isKeyboardFocusEvent(kc) && mInputView.isShown()){
+					if((keyAction == KEY_ACTION_PRESSED || keyAction == KEY_ACTION_DOWN)
+							&& !handleKeyboardFocusEvent(kc)){
+						if(!(shouldRouteKeyThroughAdb(kc) && isSendToAdbService(kc))) sendKeyCode(kc);
+					}
+				}
+				else{
+					long eventTime = SystemClock.uptimeMillis();
+					InputConnection ic = getCurrentInputConnection();
+					switch (keyAction) {
+						case KEY_ACTION_PRESSED:
+							if(!(shouldRouteKeyThroughAdb(kc) && isSendToAdbService(kc))) sendKeyCode(kc);
+							break;
+						case KEY_ACTION_DOWN:
+							if(!(shouldRouteKeyThroughAdb(kc) && isSendToAdbService(kc)) && ic != null) {
+								ic.sendKeyEvent(new KeyEvent(eventTime, eventTime,
+										KeyEvent.ACTION_DOWN, kc, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
+										KeyEvent.FLAG_SOFT_KEYBOARD | KeyEvent.FLAG_KEEP_TOUCH_MODE));
+							}
+							break;
+						case KEY_ACTION_UP:
+							if(ic != null) {
+								ic.sendKeyEvent(new KeyEvent(eventTime, eventTime,
+									KeyEvent.ACTION_UP, kc, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
+									KeyEvent.FLAG_SOFT_KEYBOARD | KeyEvent.FLAG_KEEP_TOUCH_MODE));
+							}
+							break;
+					}
+				}
+			}
+		}
+	}
+
 	private void startRemoteServer(){
 		int basePort = RemoteServer.serverPort;
 		do {
 			mServer = new RemoteServer(RemoteServer.serverPort, this);
 			mServer.setDataReceiver(new RemoteServer.DataReceiver() {
 				@Override
-				public void onKeyEventReceived(String keyCode, final int keyAction) {
-					if(keyCode != null) {
-						if("cls".equalsIgnoreCase(keyCode)){
+				public void onKeyEventReceived(final String keyCode, final int keyAction) {
+					//NanoHTTPD默认一个连接一条线程，控制端网页几乎总会有多个请求
+					//前后脚过来(比如清空的/key请求和输入框防抖到期的/textLive请求)，
+					//如果直接在各自的请求线程上操作InputConnection，多个线程同时
+					//改同一个InputConnection是没有顺序保证的——这正是"点了清空，
+					//要等下一次打字同步才看到效果、而且看起来像是清空和新文字一起
+					//生效"这个现象的根因(两个请求线程的调用互相插队/覆盖了)。统一
+					//post到这个Service自己的主线程Handler上串行执行，跟下面
+					//isKeyboardFocusEvent那个分支本来就有的handler.post是同一个
+					//道理，保证所有涉及InputConnection的操作严格按收到请求的
+					//顺序、在同一个线程上依次执行。
+					if(keyCode == null) return;
+					handler.post(new Runnable() {
+						@Override
+						public void run() {
+							handleKeyEventOnMainThread(keyCode, keyAction);
+						}
+					});
+				}
+
+				@Override
+				public void onTextReceived(final String text) {
+					if(text == null) return;
+					handler.post(new Runnable() {
+						@Override
+						public void run() {
+							if(!isSendToAdbService(text)) commitText(text);
+						}
+					});
+				}
+
+				@Override
+				public void onComposingTextReceived(final String text) {
+					if(text == null) return;
+					handler.post(new Runnable() {
+						@Override
+						public void run() {
+							//ADB遥控模式下没有"组字预览"这个概念（每次adb input text都是真敲
+							//字符），实时同步只在本App就是当前激活输入法、有InputConnection
+							//时才有意义，没有的话直接忽略，靠最终的onTextReceived提交兜底。
 							InputConnection ic = getCurrentInputConnection();
-							if(ic != null) {
-								//deleteSurroundingText(Integer.MAX_VALUE, Integer.MAX_VALUE)在很多
-								//InputConnection实现里会崩溃：BaseInputConnection内部用
-								//"光标位置 + afterLength"计算删除终点，Integer.MAX_VALUE会导致int
-								//溢出变成负数，最终变成"起点>终点"传入删除方法而抛异常——只有输入框
-								//里已经有文本时才会真正触发这条路径，这正好对应"输完字再点清空才崩"
-								//的现象。改为先取出光标前后的实际文本长度，再按真实长度删除，
-								//彻底避免溢出。
-								CharSequence before = ic.getTextBeforeCursor(5000, 0);
-								CharSequence after = ic.getTextAfterCursor(5000, 0);
-								ic.deleteSurroundingText(before != null ? before.length() : 0,
-										after != null ? after.length() : 0);
-							}
-						}else if(String.valueOf(KeyEvent.KEYCODE_APP_SWITCH).equals(keyCode)
-								&& keyAction == KEY_ACTION_PRESSED
-								&& ScreenAccessibilityService.isServiceEnabled()
-								&& ScreenAccessibilityService.getInstance().performRecents()){
-							//多任务键优先走无障碍服务的GLOBAL_ACTION_RECENTS(不需要ADB，
-							//跟"元素列表"用的是同一个ScreenAccessibilityService)；这里直接
-							//比较原始字符串而不是走下面KeyEvent.keyCodeFromString(keyCode)
-							//转换，是因为keyCodeFromString对纯数字字符串的解析行为不确定，
-							//没必要为了这一个特判去依赖它。无障碍服务没开启、或触发失败时，
-							//直接落到下面的通用分支，走已有的ADB/原生注入兜底逻辑。
-						}else {
-							final int kc = KeyEvent.keyCodeFromString(keyCode);
-							if(kc != KeyEvent.KEYCODE_UNKNOWN){
-								if(mInputView != null && KeyEventUtils.isKeyboardFocusEvent(kc) && mInputView.isShown()){
-									if(keyAction == KEY_ACTION_PRESSED || keyAction == KEY_ACTION_DOWN) {
-										handler.post(new Runnable() {
-											@Override
-											public void run() {
-												if (!handleKeyboardFocusEvent(kc)) {
-													if(!(shouldRouteKeyThroughAdb(kc) && isSendToAdbService(kc))) sendKeyCode(kc);
-												}
-											}
-										});
-									}
-								}
-								else{
-									long eventTime = SystemClock.uptimeMillis();
-									InputConnection ic = getCurrentInputConnection();
-									switch (keyAction) {
-										case KEY_ACTION_PRESSED:
-											if(!(shouldRouteKeyThroughAdb(kc) && isSendToAdbService(kc))) sendKeyCode(kc);
-											break;
-										case KEY_ACTION_DOWN:
-											if(!(shouldRouteKeyThroughAdb(kc) && isSendToAdbService(kc)) && ic != null) {
-												ic.sendKeyEvent(new KeyEvent(eventTime, eventTime,
-														KeyEvent.ACTION_DOWN, kc, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
-														KeyEvent.FLAG_SOFT_KEYBOARD | KeyEvent.FLAG_KEEP_TOUCH_MODE));
-											}
-											break;
-										case KEY_ACTION_UP:
-											if(ic != null) {
-												ic.sendKeyEvent(new KeyEvent(eventTime, eventTime,
-													KeyEvent.ACTION_UP, kc, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
-													KeyEvent.FLAG_SOFT_KEYBOARD | KeyEvent.FLAG_KEEP_TOUCH_MODE));
-											}
-											break;
-									}
-								}
+							if(ic != null){
+								ic.setComposingText(text, 1);
 							}
 						}
-					}
-				}
-
-				@Override
-				public void onTextReceived(String text) {
-					if (text != null) {
-						if(!isSendToAdbService(text))commitText(text);
-					}
-				}
-
-				@Override
-				public void onComposingTextReceived(String text) {
-					//ADB遥控模式下没有"组字预览"这个概念（每次adb input text都是真敲
-					//字符），实时同步只在本App就是当前激活输入法、有InputConnection
-					//时才有意义，没有的话直接忽略，靠最终的onTextReceived提交兜底。
-					InputConnection ic = getCurrentInputConnection();
-					if(text != null && ic != null){
-						ic.setComposingText(text, 1);
-					}
+					});
 				}
 
 				@Override

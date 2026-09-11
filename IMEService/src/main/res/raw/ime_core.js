@@ -282,6 +282,18 @@ $("#inputarea").on("input", function(){
 		});
 	}, 150);
 });
+//手机键盘的退格键在输入框已经是空的时候，浏览器自己没有字符可删、不会有
+//任何反应；这时候顺手把这次退格转发成电视端自己的退格键(效果跟点一下
+//下面专门的"退格"按键一样)，可以继续删掉电视端已经提交的文字，不用先把
+//手切换到下面那个按键上，用起来更连贯。
+$("#inputarea").on("keydown", function(e){
+	var isBackspace = e.key === "Backspace" || e.keyCode === 8;
+	if(isBackspace && $(this).val() === ""){
+		e.preventDefault();
+		vibrateShort();
+		postKeyCode("67");
+	}
+});
 //触控板/滚动条：拖动模拟鼠标移动或单方向滚动（服务端换算成"adb shell input
 //swipe"手势），轻触（没有明显拖动的按下+抬起）模拟点击（"adb shell input
 //tap"）。这条路径依赖ADB连接，跟电源键是同一套机制。
