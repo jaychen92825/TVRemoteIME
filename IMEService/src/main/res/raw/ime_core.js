@@ -256,6 +256,9 @@ function loadTVList(){
 }
 $("#btnEnter").on("click", function(){
 	vibrateShort();
+	//同"清空"按键：取消排队中的/textLive防抖请求，避免它带着提交前的旧文字
+	//在/text提交之后才发出去，把已经提交完的输入框内容又重新填一遍。
+	if(composingTimer){ clearTimeout(composingTimer); composingTimer = null; }
 	var $input = $("#inputarea");
 	var text = $input.val();
 	if(text != ""){
@@ -535,6 +538,11 @@ $("#elementsList").on("click", "#btnOpenAccessibilitySettings", function(){
 })
 $("#btnCls").on("click",function(){
 	vibrateShort();
+	//输入框里如果还有没到150ms防抖延迟的/textLive请求排队(见下面"input"事件
+	//绑定处)，得先取消掉，不然这个清空动作会被那个延迟请求"追上"：cls先把
+	//电视端清空，紧接着排队的/textLive请求带着清空前的旧文字发出去，又把
+	//电视端的输入内容重新填回去，导致清空看起来像是没生效。
+	if(composingTimer){ clearTimeout(composingTimer); composingTimer = null; }
 	postKeyCode($(this).attr("data-key"));
 	//清空电视端输入内容的同时，web端输入框如果还残留着没提交的文字（组字预览
 	//阶段），也要一并清空，否则两边会不一致：电视端已经清空了，网页上却还
