@@ -1,0 +1,395 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_dark"
+    tools:context="com.android.tvremoteime.MainActivity">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="28dp">
+
+        <!-- 自定义顶部标题，替代系统标题栏 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/app_name"
+                android:textColor="@color/text_primary"
+                android:textSize="24sp"
+                android:textStyle="bold"/>
+            <TextView
+                android:id="@+id/tvVersion"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="10dp"
+                android:layout_marginBottom="2dp"
+                android:gravity="bottom"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp"
+                android:text=""/>
+        </LinearLayout>
+
+        <!-- 左右两栏，适配宽屏TV(横屏)。这份布局专门放在layout-land目录下，
+             只在横屏时生效——竖屏用res/layout/activity_main.xml那份单列
+             布局，两栏挤在竖屏窄宽度里会导致文字被迫换很多行，卡片越撑
+             越高、整个页面变得又乱又长。 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <!-- 左栏 -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginRight="10dp"
+                android:orientation="vertical">
+
+                <!-- ① 启用输入法服务 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="@drawable/bg_card"
+                    android:padding="16dp"
+                    android:layout_marginBottom="14dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="10dp"
+                        android:text="① 启用输入法"
+                        android:textColor="@color/accent"
+                        android:textSize="17sp"
+                        android:textStyle="bold"/>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="10dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:textColor="@color/text_primary"
+                            android:textSize="15sp"
+                            android:text="启用输入法"/>
+                        <TextView
+                            android:id="@+id/tvIMEEnabledStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginRight="10dp"
+                            android:textSize="14sp"
+                            android:text=""/>
+                        <Button
+                            android:id="@+id/btnUseIME"
+                            android:layout_width="wrap_content"
+                            android:layout_height="38dp"
+                            android:background="@drawable/bg_button"
+                            android:paddingLeft="16dp"
+                            android:paddingRight="16dp"
+                            android:text="设置"
+                            android:textColor="@color/white"
+                            android:nextFocusDown="@id/btnSetIME"
+                            android:onClick="onClick"/>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="10dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:textColor="@color/text_primary"
+                            android:textSize="15sp"
+                            android:text="设为默认输入法"/>
+                        <TextView
+                            android:id="@+id/tvIMEDefaultStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginRight="10dp"
+                            android:textSize="14sp"
+                            android:text=""/>
+                        <Button
+                            android:id="@+id/btnSetIME"
+                            android:layout_width="wrap_content"
+                            android:layout_height="38dp"
+                            android:background="@drawable/bg_button"
+                            android:paddingLeft="16dp"
+                            android:paddingRight="16dp"
+                            android:text="设置"
+                            android:textColor="@color/white"
+                            android:nextFocusUp="@id/btnUseIME"
+                            android:nextFocusDown="@id/btnStartService"
+                            android:onClick="onClick"/>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp"
+                            android:text="设置失败时可手动启动服务"/>
+                        <Button
+                            android:id="@+id/btnStartService"
+                            android:layout_width="wrap_content"
+                            android:layout_height="38dp"
+                            android:background="@drawable/bg_button"
+                            android:paddingLeft="12dp"
+                            android:paddingRight="12dp"
+                            android:text="手动启动"
+                            android:textColor="@color/white"
+                            android:nextFocusUp="@id/btnSetIME"
+                            android:nextFocusDown="@id/etTestInput"
+                            android:onClick="onClick"/>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- ④ 测试远程输入 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="@drawable/bg_card"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="10dp"
+                        android:text="④ 测试远程输入"
+                        android:textColor="@color/accent"
+                        android:textSize="17sp"
+                        android:textStyle="bold"/>
+                    <EditText
+                        android:id="@+id/etTestInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="42dp"
+                        android:background="@drawable/bg_edit"
+                        android:hint="点此，用手机在控制端输入试试"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_secondary"
+                        android:nextFocusUp="@id/btnStartService"
+                        android:nextFocusDown="@id/etAccessCode"/>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 右栏 -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginLeft="10dp"
+                android:orientation="vertical">
+
+                <!-- ② 连接控制端 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="@drawable/bg_card"
+                    android:padding="16dp"
+                    android:layout_marginBottom="14dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="10dp"
+                        android:text="② 连接控制端"
+                        android:textColor="@color/accent"
+                        android:textSize="17sp"
+                        android:textStyle="bold"/>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+                        <ImageView
+                            android:id="@+id/ivQRCode"
+                            android:layout_width="130dp"
+                            android:layout_height="130dp"
+                            android:background="@color/white"
+                            android:padding="6dp"/>
+                        <TextView
+                            android:id="@+id/tvAddress"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginLeft="14dp"
+                            android:lineSpacingExtra="6dp"
+                            android:textColor="@color/text_primary"
+                            android:textIsSelectable="true"
+                            android:textSize="14sp"
+                            android:text=""/>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- ③ 访问口令 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="@drawable/bg_card"
+                    android:padding="16dp"
+                    android:layout_marginBottom="14dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="10dp"
+                        android:text="③ 修改访问口令"
+                        android:textColor="@color/accent"
+                        android:textSize="17sp"
+                        android:textStyle="bold"/>
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <EditText
+                            android:id="@+id/etAccessCode"
+                            android:layout_width="0dp"
+                            android:layout_height="42dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_edit"
+                            android:hint="输入新口令"
+                            android:inputType="text"
+                            android:textColor="@color/text_primary"
+                            android:textColorHint="@color/text_secondary"
+                            android:nextFocusUp="@id/etTestInput"
+                            android:nextFocusDown="@id/btnSetAccessCode"/>
+                        <Button
+                            android:id="@+id/btnSetAccessCode"
+                            android:layout_width="wrap_content"
+                            android:layout_height="42dp"
+                            android:layout_marginLeft="10dp"
+                            android:background="@drawable/bg_button"
+                            android:paddingLeft="16dp"
+                            android:paddingRight="16dp"
+                            android:text="修改"
+                            android:textColor="@color/white"
+                            android:nextFocusUp="@id/etAccessCode"
+                            android:nextFocusDown="@id/etDLNAName"
+                            android:onClick="onClick"/>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- ⑤ DLNA投屏名称 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="@drawable/bg_card"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="10dp"
+                        android:text="⑤ DLNA投屏名称"
+                        android:textColor="@color/accent"
+                        android:textSize="17sp"
+                        android:textStyle="bold"/>
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <EditText
+                            android:id="@+id/etDLNAName"
+                            android:layout_width="0dp"
+                            android:layout_height="42dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_edit"
+                            android:hint="如：客厅、卧室"
+                            android:textColor="@color/text_primary"
+                            android:textColorHint="@color/text_secondary"
+                            android:nextFocusUp="@id/btnSetAccessCode"
+                            android:nextFocusDown="@id/btnSetDLNA"/>
+                        <Button
+                            android:id="@+id/btnSetDLNA"
+                            android:layout_width="wrap_content"
+                            android:layout_height="42dp"
+                            android:layout_marginLeft="10dp"
+                            android:background="@drawable/bg_button"
+                            android:paddingLeft="16dp"
+                            android:paddingRight="16dp"
+                            android:text="设置"
+                            android:textColor="@color/white"
+                            android:nextFocusUp="@id/etDLNAName"
+                            android:nextFocusDown="@id/btnCheckUpdate"
+                            android:onClick="onClick"/>
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ⑥ 检查更新 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card"
+            android:padding="16dp"
+            android:layout_marginTop="14dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:text="⑥ 检查更新"
+                android:textColor="@color/accent"
+                android:textSize="17sp"
+                android:textStyle="bold"/>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <TextView
+                    android:id="@+id/tvUpdateStatus"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginRight="10dp"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:text="点击检查是否有新版本"/>
+                <Button
+                    android:id="@+id/btnCheckUpdate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:background="@drawable/bg_button"
+                    android:paddingLeft="16dp"
+                    android:paddingRight="16dp"
+                    android:text="检查更新"
+                    android:textColor="@color/white"
+                    android:nextFocusUp="@id/btnSetDLNA"
+                    android:onClick="onClick"/>
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>
