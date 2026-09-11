@@ -794,10 +794,18 @@ $("#power-btn").on(isSupportTouch ? "touchstart" : "mousedown", function(){
 		}
 	}, "json");
 })
-//电视端软键盘(带二维码，首次连接前靠它扫码)显示/隐藏：这里只负责读取/切换
-//状态并同步按键的高亮外观，具体"什么时候默认显示/隐藏"的判断逻辑在
-//Environment.isKeyboardViewVisible里(还没连过控制端就默认显示，连过至少
-//一次之后默认隐藏)，网页这边不用关心、只管显示当前的真实状态。
+//电视端软键盘(带二维码，没有活跃控制端连着时靠它扫码)显示/隐藏：这里只
+//负责读取/切换状态并同步按键的高亮外观，具体"什么时候默认显示/隐藏"的
+//判断逻辑在Environment.isKeyboardViewVisible里(当前有没有活跃客户端来定，
+//不是"历史上连没连过")，网页这边不用关心、只管显示当前的真实状态。
+//
+//这个/keyboardViewStatus请求同时还兼职当"心跳"用：电视端靠这类鉴权通过的
+//请求判断控制端是否还"活跃"(RemoteServer.hasActiveClient())，如果只在
+//打开页面时查一次，用户只是打开着页面看、不点任何按键的话，过一会儿电视端
+//会误判成"没有活跃客户端"而把软键盘弹出来挡住画面。所以只要这个控制页
+//还开着，就定期发一次(间隔比服务端判活的超时阈值短很多)，不需要用户有
+//任何操作。
+var KEEPALIVE_INTERVAL_MS = 4000;
 function refreshKeyboardViewBtn(){
 	$.get("/keyboardViewStatus", function(data){
 		$("#btnToggleKeyboard").toggleClass("active", !!(data && data.visible));
@@ -811,6 +819,7 @@ $("#btnToggleKeyboard").on("click", function(){
 	});
 })
 refreshKeyboardViewBtn();
+setInterval(refreshKeyboardViewBtn, KEEPALIVE_INTERVAL_MS);
 reloadAppList();
 loadFileList("");
 getDiskSpace();

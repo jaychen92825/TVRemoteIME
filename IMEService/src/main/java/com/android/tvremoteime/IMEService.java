@@ -45,6 +45,25 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		if(instance != null) instance.updateInputViewShown();
 	}
 
+	//"客户端从活跃变不活跃"(心跳停了/标签页关掉)这个方向的软键盘自动刷新，
+	//没有新的HTTP请求能触发，只能靠本地低频轮询自己发现：每隔一小段时间
+	//检查一次RemoteServer.hasActiveClient()有没有从true变成false，变了就
+	//主动刷新一次；间隔比RemoteServer那边判活的超时阈值短很多，保证转变
+	//能比较及时地反映到软键盘显示状态上，同时又不会频繁到有明显开销。
+	private static final long ACTIVE_CLIENT_POLL_INTERVAL_MS = 3000;
+	private boolean lastKnownClientActive = false;
+	private final Runnable activeClientPoller = new Runnable() {
+		@Override
+		public void run() {
+			boolean nowActive = RemoteServer.hasActiveClient();
+			if(lastKnownClientActive && !nowActive){
+				updateInputViewShown();
+			}
+			lastKnownClientActive = nowActive;
+			handler.postDelayed(this, ACTIVE_CLIENT_POLL_INTERVAL_MS);
+		}
+	};
+
 	private boolean capsOn = false;
 	private ImageButton btnCaps = null;
 	private View focusedView = null;
@@ -89,6 +108,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		DLNAUtils.startDLNAService(this.getApplicationContext());
 		MDnsHelper.start(this.getApplicationContext());
 		new AutoUpdateManager(this, this.handler);
+		handler.postDelayed(activeClientPoller, ACTIVE_CLIENT_POLL_INTERVAL_MS);
 		//xllib.DownloadManager.instance().init(this);
 
 	}
@@ -171,11 +191,13 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 			hideWindowByKey = false;
 			return hideWindowByKey;
 		}
-		//控制端"显示/隐藏电视软键盘"开关，默认不显示（见Environment.isKeyboardViewVisible
-		//的说明）；这个检查在mInputView是否为null之前就直接短路返回，不影响下面
-		//依赖mInputView.isShown()的方向键/回车/返回等D-pad导航逻辑——那些本来就是
-		//"没显示就不生效、直接当成普通按键处理"，跟这里是同一个效果，不需要额外处理。
-		if(!Environment.isKeyboardViewVisible(this)) return false;
+		//控制端"显示/隐藏电视软键盘"开关：默认值取决于"当前"有没有活跃的控制端
+		//客户端(RemoteServer.hasActiveClient()，靠心跳判活，不是"历史上有没有
+		//连过")，见Environment.isKeyboardViewVisible的说明。这个检查在mInputView
+		//是否为null之前就直接短路返回，不影响下面依赖mInputView.isShown()的
+		//方向键/回车/返回等D-pad导航逻辑——那些本来就是"没显示就不生效、直接
+		//当成普通按键处理"，跟这里是同一个效果，不需要额外处理。
+		if(!Environment.isKeyboardViewVisible(this, RemoteServer.hasActiveClient())) return false;
 		EditorInfo editorInfo = getCurrentInputEditorInfo();
 		return !(editorInfo == null || editorInfo.inputType == EditorInfo.TYPE_NULL);
 	}
@@ -398,6 +420,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
     
     public void onDestroy() {
 		if(instance == this) instance = null;
+		handler.removeCallbacks(activeClientPoller);
 		if (mServer != null && mServer.isStarting()){
             Log.i(TAG, "远程输入服务已停止！");
 			mServer.stop();

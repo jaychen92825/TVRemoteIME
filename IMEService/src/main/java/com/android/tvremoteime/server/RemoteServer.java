@@ -3,6 +3,7 @@ package com.android.tvremoteime.server;
 
 import android.content.Context;
 import android.net.wifi.WifiManager;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Base64;
 import android.util.Log;
@@ -231,7 +232,7 @@ public class RemoteServer extends NanoHTTPD
         }
         String token = generateSessionToken();
         validSessionTokens.add(token);
-        markClientConnectedAndRefreshKeyboardView();
+        noteClientActiveAndRefreshKeyboardView();
         Response resp = newFixedLengthResponse(Response.Status.OK, NanoHTTPD.MIME_HTML,
                 "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>location.replace('/');</script></head><body>登录成功，正在跳转…</body></html>");
         resp.addHeader("Set-Cookie", SESSION_COOKIE_NAME + "=" + token + "; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax");
@@ -269,11 +270,29 @@ public class RemoteServer extends NanoHTTPD
         return resp;
     }
 
-    //控制端第一次鉴权成功时，把电视端软键盘(带二维码，参见Environment里
-    //isKeyboardViewVisible的说明)的默认显示逻辑从"显示"切到"隐藏"，并立即
-    //让正在跑的IMEService重新评估一次要不要显示，不用等下次输入框焦点变化。
-    private void markClientConnectedAndRefreshKeyboardView(){
-        if(Environment.markClientConnected(mContext)){
+    //判断控制端"当前"是否有活跃客户端(而不是历史上有没有连过)：HTTP本身没有
+    //长连接概念，这里靠控制端网页定期发心跳请求(见ime_core.js)来模拟——
+    //每次鉴权通过的请求(心跳或任何正常操作)都刷新这个时间戳，超过心跳间隔
+    //的2倍以上没有新请求，就认为客户端已经不在线了(标签页关掉/网络断开/
+    //设备重启过等都会自然表现成这样，不需要专门处理断开事件)。
+    private static volatile long lastActiveRequestTime = 0;
+    private static final long ACTIVE_CLIENT_TIMEOUT_MS = 9000;
+
+    public static boolean hasActiveClient(){
+        return lastActiveRequestTime != 0
+                && (SystemClock.elapsedRealtime() - lastActiveRequestTime) < ACTIVE_CLIENT_TIMEOUT_MS;
+    }
+
+    //控制端每次鉴权成功的请求(心跳或任何正常操作)都调用一次，刷新"当前活跃"
+    //的时间戳；如果这次调用之前已经处于"无活跃客户端超时"状态，说明这是
+    //重新变为活跃的第一个请求，顺带让正在跑的IMEService立即重新评估一次
+    //软键盘要不要显示(见Environment.isKeyboardViewVisible的说明)，不用等
+    //下次输入框焦点变化。反过来"从活跃变不活跃"这个方向的即时刷新由
+    //IMEService里的一个低频定时检查负责，这里管不到(没有新请求触发不了这个方法)。
+    private void noteClientActiveAndRefreshKeyboardView(){
+        boolean wasActive = hasActiveClient();
+        lastActiveRequestTime = SystemClock.elapsedRealtime();
+        if(!wasActive){
             IMEService.refreshKeyboardViewVisibility();
         }
     }
@@ -289,7 +308,7 @@ public class RemoteServer extends NanoHTTPD
 
         Response authFailure = checkAuth(session);
         if(authFailure != null) return authFailure;
-        markClientConnectedAndRefreshKeyboardView();
+        noteClientActiveAndRefreshKeyboardView();
         if(!session.getUri().isEmpty()) {
             String fileName = path;
             if (session.getMethod() == Method.GET) {

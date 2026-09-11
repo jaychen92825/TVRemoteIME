@@ -28,54 +28,36 @@ public class Environment {
     private static final String PREF_ACCESS_CODE = "access_code";
     private static final String PREF_APP_LAUNCH_COUNT_PREFIX = "app_launch_count_";
     private static final String PREF_KEYBOARD_VIEW_VISIBLE = "keyboard_view_visible";
-    private static final String PREF_CLIENT_EVER_CONNECTED = "client_ever_connected";
     public static final String AUTH_REALM_USER = "tvremoteime";
 
     /**
      * 电视端软键盘视图(那一套D-pad导航的QWERTY网格，IMEService.onCreateInputView
      * 里inflate出来的R.layout.keyboard)是否显示。这个视图里的"帮助"弹窗
      * (helpDialog)带着二维码+地址，是用户扫码把手机连到控制端网页的入口——
-     * 一台设备在还没有任何控制端连接过之前，必须显示这个视图才能让用户找到
-     * 二维码，所以不能简单地"默认永远隐藏"。
+     * 没有任何控制端*当前*连着的时候，必须显示这个视图才能让用户找到二维码，
+     * 所以不能简单地"默认永远隐藏"；但也不能靠"历史上有没有连过"来判断——
+     * 那样的话只要连过一次，哪怕控制端早就关掉了，这台设备往后也再也看不到
+     * 二维码，别人想连都没入口。
      *
      * 逻辑：用户在控制端手动切换过一次的话(PREF_KEYBOARD_VIEW_VISIBLE有值)，
-     * 尊重用户的选择；没手动切换过的话，按"是否已经有控制端连接成功过"
-     * (PREF_CLIENT_EVER_CONNECTED，见markClientConnected)来定默认值——还没有
-     * 任何客户端连过，默认显示(带二维码方便扫码连接)；已经连过至少一次，
-     * 默认隐藏(不再需要二维码，正常打字也用不到这个视图)。
+     * 尊重用户的选择；没手动切换过的话，按"当前有没有控制端处于活跃状态"
+     * (hasActiveClient，由调用方传入，实际数据来自RemoteServer.hasActiveClient()，
+     * 见那边关于心跳判活的说明)来定默认值——当前没有活跃客户端，默认显示
+     * (带二维码方便扫码连接)；有活跃客户端连着，默认隐藏。
      */
-    public static boolean isKeyboardViewVisible(Context context){
+    public static boolean isKeyboardViewVisible(Context context, boolean hasActiveClient){
         SharedPreferences prefs = context.getApplicationContext()
                 .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         if(prefs.contains(PREF_KEYBOARD_VIEW_VISIBLE)){
             return prefs.getBoolean(PREF_KEYBOARD_VIEW_VISIBLE, true);
         }
-        return !prefs.getBoolean(PREF_CLIENT_EVER_CONNECTED, false);
+        return !hasActiveClient;
     }
 
     public static void setKeyboardViewVisible(Context context, boolean visible){
         SharedPreferences prefs = context.getApplicationContext()
                 .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         prefs.edit().putBoolean(PREF_KEYBOARD_VIEW_VISIBLE, visible).apply();
-    }
-
-    /**
-     * 控制端第一次鉴权成功(扫码登录或手动输入口令都算)时调用一次，标记"已经
-     * 有客户端连接成功过"，往后isKeyboardViewVisible的默认值就从"显示"变成
-     * "隐藏"。只要标记过一次就一直保留，不会因为客户端后来断开又重置回去——
-     * 用户既然已经知道怎么连了，不需要每次断开重连都再看一遍二维码。
-     */
-    //返回true表示这次调用是第一次标记(之前没连过)，调用方可以据此决定要不要
-    //触发一次IMEService.refreshKeyboardViewVisibility()立即隐藏软键盘；已经
-    //标记过的话返回false，调用方不需要每次请求都白白触发一次视图重新评估。
-    public static boolean markClientConnected(Context context){
-        SharedPreferences prefs = context.getApplicationContext()
-                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        if(!prefs.getBoolean(PREF_CLIENT_EVER_CONNECTED, false)){
-            prefs.edit().putBoolean(PREF_CLIENT_EVER_CONNECTED, true).apply();
-            return true;
-        }
-        return false;
     }
 
     /**
