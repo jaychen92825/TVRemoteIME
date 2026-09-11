@@ -205,16 +205,6 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 						if("cls".equalsIgnoreCase(keyCode)){
 							InputConnection ic = getCurrentInputConnection();
 							if(ic != null) {
-								//先finishComposingText()：清空前输入框里的文字很可能还处于"组字预览"
-								//状态(/textLive通过setComposingText同步过来的，还没真正commit)，
-								//直接deleteSurroundingText把这段文字删掉后，部分InputConnection实现
-								//不会同步清掉内部"组字区间"的位置记录，导致这个区间还指向着已经被
-								//删除的旧位置——下一次/textLive再调setComposingText时，因为区间状态
-								//是脏的，文字显示不出来，表现为"点完清空、再输入内容就不同步了"。
-								//先finishComposingText()把组字状态干净地收尾掉，再按下面注释的方式删
-								//文字，后续的setComposingText就是在一个全新的、没有残留组字状态的
-								//InputConnection上操作，不会受清空前状态的影响。
-								ic.finishComposingText();
 								//deleteSurroundingText(Integer.MAX_VALUE, Integer.MAX_VALUE)在很多
 								//InputConnection实现里会崩溃：BaseInputConnection内部用
 								//"光标位置 + afterLength"计算删除终点，Integer.MAX_VALUE会导致int
