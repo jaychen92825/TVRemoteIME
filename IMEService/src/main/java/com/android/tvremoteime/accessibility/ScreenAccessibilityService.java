@@ -187,4 +187,19 @@ public class ScreenAccessibilityService extends AccessibilityService {
             return false;
         }
     }
+
+    //多任务(APP_SWITCH/Recents)键：跟电源键属于同一类"系统级拦截键"，往
+    //InputConnection注入的合成按键根本到不了PhoneWindowManager那一层，之前
+    //只能靠ADB(adb shell input keyevent)兜底。但GLOBAL_ACTION_RECENTS是安卓
+    //标准的无障碍API，任何装了无障碍服务的App都能直接调用系统的"最近任务"
+    //界面——用户反馈装了第三方按键映射App后不需要ADB权限也能触发多任务键，
+    //用的正是这条路径。既然本App已经有ScreenAccessibilityService这个无障碍
+    //服务（"元素列表"功能在用），直接复用即可，不用再依赖ADB。
+    public boolean performRecents(){
+        try {
+            return performGlobalAction(GLOBAL_ACTION_RECENTS);
+        } catch (Exception e){
+            return false;
+        }
+    }
 }

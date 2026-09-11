@@ -770,13 +770,27 @@ function showMiniToast(text){
 	miniToastTimer = setTimeout(function(){ el.removeClass("show"); }, 2200);
 }
 //电源键是唯一一个平时就依赖ADB才能生效的按键（见IMEService里
-//shouldRouteKeyThroughAdb的说明），没必要为了这一个键常驻显示/轮询一个
-//ADB连接状态栏——只在真的按了电源键、且这时候ADB确实没连上时，才提示一下
-//"为什么电源键没反应"，其它时候什么都不显示，不占地方也不用一直请求接口。
+//shouldRouteKeyThroughAdb的说明）；ADB没连上时这个键点了也没用，与其让用户
+//点了才发现不生效，不如直接不显示。不做成常驻轮询/定时器，只在进入"输入
+//遥控"这个Tab时查一次——跟"元素列表"检查无障碍服务是否开启是同一个思路，
+//按需查一次即可，没必要一直占着一个后台请求。
+function refreshAdbDependentUI(){
+	$.get("/adbStatus", function(data){
+		$("#power-btn").toggleClass("hide", !(data && data.connected));
+	}, "json").fail(function(){
+		$("#power-btn").addClass("hide");
+	});
+}
+$("div.tab[data-rel='controls']").on("click", refreshAdbDependentUI);
+refreshAdbDependentUI();
+//保底：万一进入Tab之后ADB连接状态才变化(比如这时候用户才刚插上USB执行完
+//adb tcpip)，点击时状态可能还是旧的——真点了发现没反应时提示一下原因，
+//而不是完全没反馈。
 $("#power-btn").on(isSupportTouch ? "touchstart" : "mousedown", function(){
 	$.get("/adbStatus", function(data){
 		if(!data || !data.connected){
 			showMiniToast("ADB未连接，电源键暂不可用");
+			$("#power-btn").addClass("hide");
 		}
 	}, "json");
 })

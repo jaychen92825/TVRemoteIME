@@ -27,6 +27,7 @@ import android.widget.TextView;
 import com.android.tvremoteime.server.RemoteServer;
 import com.android.tvremoteime.server.RemoteServerFileManager;
 import com.android.tvremoteime.adb.AdbHelper;
+import com.android.tvremoteime.accessibility.ScreenAccessibilityService;
 
 import java.io.IOException;
 
@@ -222,6 +223,16 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 								ic.deleteSurroundingText(before != null ? before.length() : 0,
 										after != null ? after.length() : 0);
 							}
+						}else if(String.valueOf(KeyEvent.KEYCODE_APP_SWITCH).equals(keyCode)
+								&& keyAction == KEY_ACTION_PRESSED
+								&& ScreenAccessibilityService.isServiceEnabled()
+								&& ScreenAccessibilityService.getInstance().performRecents()){
+							//多任务键优先走无障碍服务的GLOBAL_ACTION_RECENTS(不需要ADB，
+							//跟"元素列表"用的是同一个ScreenAccessibilityService)；这里直接
+							//比较原始字符串而不是走下面KeyEvent.keyCodeFromString(keyCode)
+							//转换，是因为keyCodeFromString对纯数字字符串的解析行为不确定，
+							//没必要为了这一个特判去依赖它。无障碍服务没开启、或触发失败时，
+							//直接落到下面的通用分支，走已有的ADB/原生注入兜底逻辑。
 						}else {
 							final int kc = KeyEvent.keyCodeFromString(keyCode);
 							if(kc != KeyEvent.KEYCODE_UNKNOWN){
