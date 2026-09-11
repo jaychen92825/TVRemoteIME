@@ -36,6 +36,15 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	public static String TAG = "TVRemoteIME";
 	public static String ACTION = "com.android.tvremoteime";
 
+	//控制端"显示/隐藏电视软键盘"按键用：切换Environment里持久化的开关之后，
+	//需要马上让当前正在跑的这个服务实例重新评估一次onEvaluateInputViewShown()，
+	//不然要等下一次输入框获得/失去焦点才会生效，跟点了按键却看不到即时反馈。
+	private static IMEService instance;
+
+	public static void refreshKeyboardViewVisibility(){
+		if(instance != null) instance.updateInputViewShown();
+	}
+
 	private boolean capsOn = false;
 	private ImageButton btnCaps = null;
 	private View focusedView = null;
@@ -70,6 +79,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	@Override
 	public void onCreate() {
 		super.onCreate();
+		instance = this;
 
 		//android.os.Debug.waitForDebugger();
 		Environment.initToastHandler();
@@ -161,6 +171,11 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 			hideWindowByKey = false;
 			return hideWindowByKey;
 		}
+		//控制端"显示/隐藏电视软键盘"开关，默认不显示（见Environment.isKeyboardViewVisible
+		//的说明）；这个检查在mInputView是否为null之前就直接短路返回，不影响下面
+		//依赖mInputView.isShown()的方向键/回车/返回等D-pad导航逻辑——那些本来就是
+		//"没显示就不生效、直接当成普通按键处理"，跟这里是同一个效果，不需要额外处理。
+		if(!Environment.isKeyboardViewVisible(this)) return false;
 		EditorInfo editorInfo = getCurrentInputEditorInfo();
 		return !(editorInfo == null || editorInfo.inputType == EditorInfo.TYPE_NULL);
 	}
@@ -382,6 +397,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	}
     
     public void onDestroy() {
+		if(instance == this) instance = null;
 		if (mServer != null && mServer.isStarting()){
             Log.i(TAG, "远程输入服务已停止！");
 			mServer.stop();

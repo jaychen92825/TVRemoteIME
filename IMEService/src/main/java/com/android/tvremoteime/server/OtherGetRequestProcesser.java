@@ -36,6 +36,7 @@ public class OtherGetRequestProcesser implements RequestProcesser {
                 case "/sdcard_stat":
                 case "/adbStatus":
                 case "/accessibilityStatus":
+                case "/keyboardViewStatus":
                 case "/deviceName":
                     return true;
             }
@@ -55,6 +56,9 @@ public class OtherGetRequestProcesser implements RequestProcesser {
             case "/accessibilityStatus":
                 return RemoteServer.createJSONResponse(NanoHTTPD.Response.Status.OK,
                         "{\"enabled\":" + ScreenAccessibilityService.isServiceEnabled() + "}");
+            case "/keyboardViewStatus":
+                return RemoteServer.createJSONResponse(NanoHTTPD.Response.Status.OK,
+                        "{\"visible\":" + com.android.tvremoteime.Environment.isKeyboardViewVisible(this.context) + "}");
             case "/deviceName":
                 //复用已有的DLNA投屏名称(MainActivity"⑤DLNA投屏名称"卡片)当作
                 //设备名——本来就是用户为区分多台设备起的名字("如：客厅、卧室")，

@@ -126,6 +126,14 @@ body {
 	background-color: var(--color-primary-soft);
 }
 
+/* "键盘"按键用：标识电视端软键盘当前是显示还是隐藏状态，点一下切换，
+   不用靠文字变来变去（文字变化会导致按键宽度跳动，这排按键本来就挤）。 */
+.btn.active {
+	background-color: var(--color-primary);
+	color: #fff;
+	border-color: var(--color-primary);
+}
+
 /* 水印做成叠在tabs右上角的浮层而不是tabs里的一个flex子项——tabs内容一多
    (加了图标以后)就可能把它挤到横向滚动区域之外看不见，脱离文档流悬浮
    就不受tabs内容多少影响，永远可见又不占用任何一行的排版空间。 */

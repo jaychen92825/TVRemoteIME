@@ -3,6 +3,8 @@ package com.android.tvremoteime.server;
 import android.content.Context;
 
 import com.android.tvremoteime.AppPackagesHelper;
+import com.android.tvremoteime.Environment;
+import com.android.tvremoteime.IMEService;
 
 import java.util.Map;
 
@@ -24,6 +26,7 @@ public class OtherPostRequestProcesser implements RequestProcesser {
         if(session.getMethod() == NanoHTTPD.Method.POST){
             switch (fileName) {
                 case "/clearCache":
+                case "/setKeyboardViewVisible":
                     return true;
             }
         }
@@ -35,6 +38,11 @@ public class OtherPostRequestProcesser implements RequestProcesser {
         switch (fileName) {
             case "/clearCache":
                 RemoteServerFileManager.clearAllFiles();
+                return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
+            case "/setKeyboardViewVisible":
+                boolean visible = "true".equals(params.get("visible"));
+                Environment.setKeyboardViewVisible(this.context, visible);
+                IMEService.refreshKeyboardViewVisibility();
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
             default:
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.NOT_FOUND, "Error 404, file not found.");

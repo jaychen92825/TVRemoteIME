@@ -231,6 +231,7 @@ public class RemoteServer extends NanoHTTPD
         }
         String token = generateSessionToken();
         validSessionTokens.add(token);
+        markClientConnectedAndRefreshKeyboardView();
         Response resp = newFixedLengthResponse(Response.Status.OK, NanoHTTPD.MIME_HTML,
                 "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>location.replace('/');</script></head><body>登录成功，正在跳转…</body></html>");
         resp.addHeader("Set-Cookie", SESSION_COOKIE_NAME + "=" + token + "; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax");
@@ -268,6 +269,15 @@ public class RemoteServer extends NanoHTTPD
         return resp;
     }
 
+    //控制端第一次鉴权成功时，把电视端软键盘(带二维码，参见Environment里
+    //isKeyboardViewVisible的说明)的默认显示逻辑从"显示"切到"隐藏"，并立即
+    //让正在跑的IMEService重新评估一次要不要显示，不用等下次输入框焦点变化。
+    private void markClientConnectedAndRefreshKeyboardView(){
+        if(Environment.markClientConnected(mContext)){
+            IMEService.refreshKeyboardViewVisibility();
+        }
+    }
+
     @Override
     public Response serve(IHTTPSession session) {
         String path = stripQuery(session.getUri());
@@ -279,6 +289,7 @@ public class RemoteServer extends NanoHTTPD
 
         Response authFailure = checkAuth(session);
         if(authFailure != null) return authFailure;
+        markClientConnectedAndRefreshKeyboardView();
         if(!session.getUri().isEmpty()) {
             String fileName = path;
             if (session.getMethod() == Method.GET) {

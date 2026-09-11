@@ -794,6 +794,23 @@ $("#power-btn").on(isSupportTouch ? "touchstart" : "mousedown", function(){
 		}
 	}, "json");
 })
+//电视端软键盘(带二维码，首次连接前靠它扫码)显示/隐藏：这里只负责读取/切换
+//状态并同步按键的高亮外观，具体"什么时候默认显示/隐藏"的判断逻辑在
+//Environment.isKeyboardViewVisible里(还没连过控制端就默认显示，连过至少
+//一次之后默认隐藏)，网页这边不用关心、只管显示当前的真实状态。
+function refreshKeyboardViewBtn(){
+	$.get("/keyboardViewStatus", function(data){
+		$("#btnToggleKeyboard").toggleClass("active", !!(data && data.visible));
+	}, "json");
+}
+$("#btnToggleKeyboard").on("click", function(){
+	vibrateShort();
+	var willShow = !$(this).hasClass("active");
+	$.post("/setKeyboardViewVisible", {visible: willShow}, function(){
+		refreshKeyboardViewBtn();
+	});
+})
+refreshKeyboardViewBtn();
 reloadAppList();
 loadFileList("");
 getDiskSpace();
