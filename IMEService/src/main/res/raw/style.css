@@ -28,9 +28,21 @@
 	font-size: 16px
 }
 
+/* html/body固定成实际视口高度、自己不滚动，真正的滚动区是.container自己
+   (height:100%量出来的百分比链，不是100vh)——之前.container只有
+   min-height:100vh，vh在很多移动端WebView里跟"真实可见高度"不完全一致
+   (地址栏/系统栏出现或收起时100vh的计算基准会变)，body本身又没有限制
+   高度/溢出，导致哪怕页面内容早就没有更多可显示的东西了，也可能因为这个
+   零点几个vh的误差被判定为"整页还能再滚一点"，看起来像没滚到头。 */
+html {
+	height: 100%;
+}
+
 body {
 	margin: 0;
 	padding: 0;
+	height: 100%;
+	overflow: hidden;
 	background-color: var(--color-bg);
 	color: var(--color-text);
 	font-family: "Microsoft YaHei",Arial,sans-serif
@@ -112,7 +124,9 @@ body {
 	max-width: 480px;
 	margin: 0 auto;
 	background: var(--color-bg);
-	min-height: 100vh;
+	height: 100%;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
 }
 
 /* 左右各留15px，跟下面文字输入框/按键区域/文件传送区这些内容的边距对齐，
@@ -833,6 +847,13 @@ body {
 	flex: 1;
 }
 
+/* 文件夹名字文本这里也标了跟图标一样的go-path，点文件夹的名字（不光是
+   图标那一小块）也能进这个文件夹——之前进文件夹的"打开"按钮去掉以后，
+   只有图标能点，误以为点文件夹本身没反应。 */
+.file-name.go-path {
+	cursor: pointer;
+}
+
 .item-empty {
 	height: 0;
 	border: none;
@@ -913,22 +934,33 @@ body {
 	margin-left: 8px;
 	cursor: pointer;
 }
+/* 原来是flex+固定112px宽度，一行到底能放几个纯粹看容器宽度余数，赶上
+   3个刚好放不下时就会挤到只显示2个、右边留一截空白，还容易被误以为
+   "可以横向滑动看第3个"。改成grid三等分，不管容器多宽，永远精确3列，
+   每列自动按可用宽度伸缩，不会有多出来看着像能滑动、实际滑不动的空白。 */
 .tv-items{
-	display: flex;
-	flex-direction: row;
-	flex-wrap: wrap;
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
 	gap: 10px;
 	margin-top: 8px;
 }
 .tv-item{
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius-sm);
-	width: 112px;
 	background: var(--color-bg);
 	text-align: center;
 	padding:8px;
 	font-size:12px;
 	line-height:22px;
+	overflow-wrap: break-word;
+	/* 网格items默认min-width是auto，会按内容的min-content尺寸撑开，
+	   遇到台名/频道按钮偏长的分组时，即使外层是精确的三等分1fr轨道，
+	   实际渲染宽度也会被内容撑得比1fr更宽，导致这一行悄悄溢出容器右边
+	   (视觉上跟"3个但其实第3个被切掉一半"没区别)。显式min-width:0
+	   允许轨道真正收缩到1fr算出来的宽度，多出来的内容交给下面的
+	   overflow-wrap换行处理，而不是撑破格子。 */
+	min-width: 0;
+	overflow: hidden;
 }
 .tv-panel-title{
 	display:flex;

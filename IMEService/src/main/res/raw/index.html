@@ -120,14 +120,6 @@
 	    </div>
 		<div class="play-line hide" data-tab="video">
 		   <div class="card">
-			   <div class="card-title">播放设置</div>
-			   <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;font-size:12px;color:#555;">
-				   <label>每次快进<input type="text" id="speedInterval" maxlength="3" value="5" style="width:30px;height:22px;margin:0 4px;" />秒</label>
-				   <label><input type="checkbox" id="playUseSystem">调用系统播放器</label>
-				   <div class="btn1 app-btn1" id="stopPlay"><svg viewBox="0 0 24 24" width="12" height="12"><rect x="5" y="5" width="14" height="14" rx="1.5" fill="currentColor"/></svg>停止边下边播任务</div>
-			   </div>
-		   </div>
-		   <div class="card">
 			   <div class="card-title">网络视频</div>
 			   <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#8c8c8c;margin-bottom:8px;">
 				   <span>支持http/ftp/thunder/ed2k/rtmp/mms</span>
@@ -136,6 +128,14 @@
 			   <div style="display:flex;gap:8px;">
 				   <input type="text" id="playUrl" placeholder="网络视频地址" value="" style="flex:1;" />
 				   <div class="btn" id="btnPlay" style="margin-right:0;"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 5l12 7-12 7V5z" fill="currentColor"/></svg>远程播放</div>
+			   </div>
+		   </div>
+		   <div class="card">
+			   <div class="card-title">播放设置</div>
+			   <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;font-size:12px;color:#555;">
+				   <label>每次快进<input type="text" id="speedInterval" maxlength="3" value="5" style="width:30px;height:22px;margin:0 4px;" />秒</label>
+				   <label><input type="checkbox" id="playUseSystem">调用系统播放器</label>
+				   <div class="btn1 app-btn1" id="stopPlay"><svg viewBox="0 0 24 24" width="12" height="12"><rect x="5" y="5" width="14" height="14" rx="1.5" fill="currentColor"/></svg>停止边下边播任务</div>
 			   </div>
 		   </div>
 		   <div class="card">

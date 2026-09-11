@@ -164,14 +164,14 @@ function loadFileList(path){
 		if(data.parent != undefined){
 			html.push('<div class="file-item"><div class="file-icon-panel">');
 			html.push('<img src="/ic_dl_folder.png" class="file-icon go-path" data-path="'+escapeHtml(data.parent)+'" />');
-			html.push('</div><div class="file-name">..</div>');
+			html.push('</div><div class="file-name go-path" data-path="'+escapeHtml(data.parent)+'">..</div>');
 			html.push('</div>');
 		}
 		for(var i=0;i<data.dirs.length;i++){
 			var file=data.dirs[i];
 			html.push('<div class="file-item"><div class="file-icon-panel">');
 			html.push('<img src="/ic_dl_folder.png" class="file-icon go-path" data-path="'+escapeHtml(file.path)+'" />');
-			html.push('</div><div class="file-name">'+escapeHtml(file.name)+'</div>');
+			html.push('</div><div class="file-name go-path" data-path="'+escapeHtml(file.path)+'">'+escapeHtml(file.name)+'</div>');
 			html.push('<div class="app-btn">');
 			html.push('<input type="button" value="选择" class="fbtn2 app-btn1 select-file' + (fileDeleteChecked ? '' : ' hide') + '" data-type="1" data-name="'+escapeHtml(file.name)+'" data-path="'+escapeHtml(file.path)+'" />');
 			html.push("</div>");
