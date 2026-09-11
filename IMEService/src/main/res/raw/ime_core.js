@@ -535,7 +535,12 @@ $("#elementsList").on("click", "#btnOpenAccessibilitySettings", function(){
 })
 $("#btnCls").on("click",function(){
 	vibrateShort();
-	postKeyCode($(this).attr("data-key"))
+	postKeyCode($(this).attr("data-key"));
+	//清空电视端输入内容的同时，web端输入框如果还残留着没提交的文字（组字预览
+	//阶段），也要一并清空，否则两边会不一致：电视端已经清空了，网页上却还
+	//显示着旧文字，这时候要是再点一下回车，又会把这段"已经清空过"的旧文字
+	//重新发送一遍。
+	$("#inputarea").val("");
 })
 $(".direction, #btnDel").on(isSupportTouch ? "touchstart" : "mousedown",function(){
 		var o=$(this);
