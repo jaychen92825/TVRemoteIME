@@ -115,12 +115,16 @@ body {
 	min-height: 100vh;
 }
 
+/* 左右各留15px，跟下面文字输入框/按键区域/文件传送区这些内容的边距对齐，
+   4个Tab用flex:1平分这一整行宽度，刚好占满、不用再靠横向滚动看剩下的Tab。 */
 .tabs-row {
 	display: flex;
 	align-items: center;
 	background: var(--color-card-bg);
 	border-bottom: 1px solid var(--color-border);
 	width: 100%;
+	padding: 0 15px;
+	box-sizing: border-box;
 }
 
 /* 水印挪到页面最下面"传送后自动安装..."那一行的右侧，跟设置项同一排、
@@ -488,7 +492,12 @@ body {
 	background: var(--color-primary-soft);
 }
 
+/* .elements-hint是.elements-list(display:grid)里唯一的子项，但网格按
+   auto-fill算出了不止一列——不加grid-column撑满的话，这个提示只会占第一
+   列的宽度，看起来像是"整体偏左"而不是居中，即使自身设了text-align:center
+   也没用(居中的是那一小格，不是整行)。 */
 .elements-hint {
+	grid-column: 1 / -1;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -739,14 +748,16 @@ body {
 	min-width: 0;
 	flex-wrap: nowrap;
 	align-items: center;
-	overflow-x: auto;
-	-webkit-overflow-scrolling: touch;
 }
 
+/* flex:1让4个Tab平分.tabs的宽度，刚好占满一整行；原来是flex:0 0 auto
+   按内容自身宽度撑开，4个加起来往往比容器窄，看着不满、右边还留一截
+   背景色空白。 */
 .tab {
 	box-sizing: border-box;
 	display: inline-flex;
-	flex: 0 0 auto;
+	flex: 1;
+	justify-content: center;
 	align-items: center;
 	gap: 4px;
 	padding: 13px 9px;
