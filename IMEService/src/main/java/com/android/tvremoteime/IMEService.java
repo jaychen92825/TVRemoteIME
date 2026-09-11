@@ -44,17 +44,22 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	//主线程上，这里统一post到主线程再操作窗口，跟handleKeyEventOnMainThread
 	//是同一个道理。
 	//
-	//直接调用showWindow(true)/hideWindow()，而不是updateInputViewShown()：
-	//后者内部是"mShowInputRequested && onEvaluateInputViewShown()"，其中
+	//直接调用showWindow(true)去显示，而不是updateInputViewShown()：后者内部
+	//是"mShowInputRequested && onEvaluateInputViewShown()"，其中
 	//mShowInputRequested是系统在客户端App主动请求/收起输入法时才会置位的
 	//内部标志——控制端点"键盘"按键这种跟输入框聚焦生命周期完全无关的外部
 	//触发，不会经过那条路径去置位这个标志，所以哪怕onEvaluateInputViewShown
 	//的返回值已经变了，updateInputViewShown()算出来的结果也可能还是原来
-	//那个不变的值，要等用户重新点一下输入框(触发一次真正的显示请求)或者
-	//按返回键(直接调hideWindow())才会生效。showWindow/hideWindow是更底层、
-	//直接改变窗口实际可见性的方法，不经过那个内部标志的限制，从App创建
-	//之初(minSdkVersion 14)到现在的Android版本上都一直是公开稳定的API，
-	//直接调用能做到点开关按键立即生效，跟系统自带"折叠键盘"按钮的效果一样。
+	//那个不变的值，要等用户重新点一下输入框(触发一次真正的显示请求)才会
+	//生效。showWindow是更底层、直接改变窗口实际可见性的方法，不经过那个
+	//内部标志的限制。
+	//
+	//隐藏这一侧不直接调hideWindow()——实机验证下来单独调用不会立即生效
+	//(现象上跟直接调updateInputViewShown()一样，要等一次真正的输入生命周期
+	//事件才会真的隐藏)。改成复用返回键那条已经验证过确实能立即隐藏的路径：
+	//finishInput()内部就是"onFinishInput(); hideWindow();"，配合hideWindowByKey
+	//这个标记(见onEvaluateInputViewShown里的检查)，是这个类里唯一被验证过
+	//能立即让软键盘窗口消失的方式，这里直接复用，不再自己另找一条路。
 	public static void refreshKeyboardViewVisibility(){
 		if(instance == null) return;
 		instance.handler.post(new Runnable() {
@@ -66,7 +71,8 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 					if(shouldShow){
 						instance.showWindow(true);
 					}else{
-						instance.hideWindow();
+						instance.hideWindowByKey = true;
+						instance.finishInput();
 					}
 				} catch (Exception ignored) {
 					//showWindow/hideWindow在完全没有任何输入连接绑定时(比如电视上
