@@ -1,6 +1,6 @@
 {
-	"name": "小盒精灵",
-	"short_name": "小盒精灵",
+	"name": "TapTV",
+	"short_name": "TapTV",
 	"start_url": "/",
 	"scope": "/",
 	"display": "standalone",

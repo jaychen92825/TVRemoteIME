@@ -165,7 +165,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.appver.outputs.code }}
-          name: "TVRemoteIME v${{ steps.appver.outputs.name }} (build ${{ steps.appver.outputs.code }})"
+          name: "TapTV v${{ steps.appver.outputs.name }} (build ${{ steps.appver.outputs.code }})"
           body: |
             自动构建发布，来自commit ${{ github.sha }}。
 

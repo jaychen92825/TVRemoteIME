@@ -499,7 +499,7 @@ function loadScreenElements(){
 		if(!data || !data.enabled){
 			$("#elementsStatus").text("无障碍服务未启用");
 			list.html('<div class="elements-hint">需要先在电视盒子上"设置-无障碍"里开启"' +
-				escapeHtml("小盒精灵") + '"服务，才能识别屏幕上的元素。<div class="btn" id="btnOpenAccessibilitySettings">去电视上开启</div></div>');
+				escapeHtml("TapTV") + '"服务，才能识别屏幕上的元素。<div class="btn" id="btnOpenAccessibilitySettings">去电视上开启</div></div>');
 			return;
 		}
 		var elements = data.elements || [];
@@ -740,7 +740,7 @@ function loadDeviceName(){
 		name = (name || '').trim();
 		if(name){
 			$('#deviceNameWatermark').text(name + ' · ');
-			document.title = name + ' - TV Remote IME';
+			document.title = name + ' - TapTV';
 		}
 	});
 }
