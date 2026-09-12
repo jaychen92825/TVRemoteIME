@@ -97,6 +97,12 @@ public class FileRequestProcesser  implements RequestProcesser {
         JSONArray files = new JSONArray();
         try {
             File[] subfiles = path.listFiles();
+            if(subfiles == null){
+                //目录不可读、权限不足或被并发删除时listFiles()返回null而非空数组，
+                //直接往下sort会抛NPE、连带搞挂这条HTTP连接线程，网页端只会看到
+                //请求卡住没有任何提示；这里当成空目录处理即可。
+                subfiles = new File[0];
+            }
             Arrays.sort(subfiles, new Comparator<File>() {
                 @Override
                 public int compare(File f1, File f2) {

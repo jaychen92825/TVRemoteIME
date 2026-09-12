@@ -153,6 +153,7 @@ public class RemoteServerFileManager implements NanoHTTPD.TempFileManager {
     }
     public static void deleteDirFiles(File file){
         File[] files =  file.listFiles();
+        if(files == null) return;
         for (File f : files) {
             try {
                 if(f.isDirectory())deleteDirFiles(f);
@@ -176,34 +177,29 @@ public class RemoteServerFileManager implements NanoHTTPD.TempFileManager {
         if(sourceFile.exists()) {
             File targetFile = new File(targetPath, sourceFile.getName());
             try{
-                sourceFile.renameTo(targetFile);
-            } catch (SecurityException ignored) {
-            }
-            /**
-            if (sourceFile.isDirectory()) {
-                File newDir = new File(targetPath, sourceFile.getName());
-                if(newDir.mkdir()){
-                    File[] files =  sourceFile.listFiles();
-                    for (File f : files) {
-                        cutFile(f, newDir);
-                    }
+                if(!sourceFile.renameTo(targetFile)){
+                    //renameTo在跨文件系统移动时（如内部存储→USB盘）只会返回false，
+                    //不会抛异常；这种情况下退化为"复制到目标后删除源"，保证跨盘
+                    //剪切也能真正生效，而不是悄悄什么都没做。
+                    copyFile(sourceFile, targetPath);
                     deleteFile(sourceFile);
                 }
-            } else {
-                File targetFile = new File(targetPath, sourceFile.getName());
-                sourceFile.renameTo(targetFile);
+            } catch (SecurityException ignored) {
             }
-             **/
         }
     }
     public static void copyFile(File sourceFile, File targetPath){
         if(sourceFile.exists()) {
             if (sourceFile.isDirectory()) {
                 File newDir = new File(targetPath, sourceFile.getName());
-                if(newDir.mkdir()){
+                //目标目录可能是之前中断的拷贝/剪切留下的，已经存在时应该继续
+                //合并拷贝而不是直接放弃（mkdir在目录已存在时返回false）。
+                if(newDir.mkdir() || newDir.isDirectory()){
                     File[] files =  sourceFile.listFiles();
-                    for (File f : files) {
-                        copyFile(f, newDir);
+                    if(files != null) {
+                        for (File f : files) {
+                            copyFile(f, newDir);
+                        }
                     }
                 }
             } else {
