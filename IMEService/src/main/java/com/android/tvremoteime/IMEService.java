@@ -146,7 +146,6 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		startRemoteServer();
 		DLNAUtils.startDLNAService(this.getApplicationContext());
 		MDnsHelper.start(this.getApplicationContext());
-		new AutoUpdateManager(this, this.handler);
 		handler.postDelayed(activeClientPoller, ACTIVE_CLIENT_POLL_INTERVAL_MS);
 		//xllib.DownloadManager.instance().init(this);
 
