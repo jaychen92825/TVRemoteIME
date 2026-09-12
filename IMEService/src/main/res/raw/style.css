@@ -460,51 +460,73 @@ body {
 	color: var(--color-text-secondary);
 }
 
-/* 之前这块嵌在给方向键大圆环用的300px窄栏里，文字本来就没多少宽度可用；
-   现在挪到了两个.remote-panel中间、吃满整个容器宽度，改用网格让每行能
-   并排放下好几个元素而不是一列到底，格子更密，同时不再强制单行省略号
-   截断——文字长就自动换到第二行整段显示出来，不会再出现只显示半截字的
-   情况。 */
+/* 每个元素按它在电视屏幕上的真实坐标百分比，用position:absolute摆在这个
+   容器里，容器本身用aspect-ratio(JS里按屏幕分辨率宽高比设置)撑出跟电视
+   画面同比例的高度——效果类似一张"文字版截图"，元素间的相对位置(谁在谁的
+   上/下/左/右)能直接看出来，配合物理遥控器的方向键更好选。没有元素数据
+   (未启用/没识别到)的提示文案走正常文档流，不受absolute定位影响。 */
 .elements-list {
+	position: relative;
 	margin: 8px 15px 0;
-	max-height: 360px;
-	overflow-y: auto;
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-	gap: 6px;
+	max-height: 420px;
+	overflow: auto;
+	background: var(--color-bg);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-md);
 }
 
 .element-item {
+	position: absolute;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 20px;
+	min-height: 14px;
 	background: var(--color-card-bg);
 	border: 1px solid var(--color-border);
-	border-radius: var(--radius-sm);
-	padding: 8px 10px;
-	font-size: 13px;
-	line-height: 1.4;
+	border-left: 3px solid var(--color-border);
+	border-radius: 4px;
+	padding: 1px 3px;
+	font-size: 11px;
+	line-height: 1.25;
 	color: var(--color-text);
 	cursor: pointer;
 	overflow: hidden;
-	white-space: normal;
-	word-break: break-word;
-	display: -webkit-box;
-	-webkit-line-clamp: 2;
-	-webkit-box-orient: vertical;
+	text-align: center;
 	-webkit-user-select: none;
 	user-select: none;
 	-webkit-touch-callout: none;
 	transition: background 0.12s ease;
 }
 
-.element-item:active {
-	background: var(--color-primary-soft);
+.element-item span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	word-break: break-word;
 }
 
-/* .elements-hint是.elements-list(display:grid)里唯一的子项，但网格按
-   auto-fill算出了不止一列——不加grid-column撑满的话，这个提示只会占第一
-   列的宽度，看起来像是"整体偏左"而不是居中，即使自身设了text-align:center
-   也没用(居中的是那一小格，不是整行)。 */
+/* 输入框/开关/勾选框跟"点了直接触发动作"的普通按钮交互方式不一样，用左侧
+   色条区分一下，普通按钮/不好细分的可点击容器保持默认边框颜色不特殊处理。 */
+.element-item.type-input {
+	border-left-color: var(--color-primary);
+}
+
+.element-item.type-checkbox,
+.element-item.type-switch,
+.element-item.type-radio {
+	border-left-color: #f5a623;
+}
+
+.element-item:active {
+	background: var(--color-primary-soft);
+	z-index: 2;
+}
+
 .elements-hint {
-	grid-column: 1 / -1;
 	display: flex;
 	flex-direction: column;
 	align-items: center;

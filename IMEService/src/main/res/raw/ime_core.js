@@ -528,11 +528,28 @@ $(".mode-tab").on("click", function(){
 //标准Android TV系统也能用；没开启无障碍服务时给一个能直接跳转到电视端
 //"设置-无障碍"页面的按钮（复用/runSystem，跟"应用管理"里的系统设置入口
 //是同一套机制）。
+//
+//列表按元素在电视屏幕上的真实坐标(left/top/right/bottom，服务端已经按屏幕
+//物理分辨率换算成百分比用)摆成一张"文字版截图"，而不是纯按发现顺序排的
+//一列文字——这样"这个元素在屏幕的左上/右下"这种位置关系一眼能看出来，
+//配合物理遥控器的方向键会更好选（比如看到目标在当前高亮项右边，就知道该按
+//遥控器的右键，而不是在一列不分位置的文字里瞎猜）。
+//
+//输入框/开关/勾选框这几类跟"点了直接触发动作"的普通按钮交互方式不一样
+//(点输入框大概率会弹出电视端软键盘，点开关/勾选框是切换状态)，用左侧
+//色条+文字前缀标出来，普通按钮和不好细分的可点击容器不特殊处理。
+var ELEMENT_TYPE_TAGS = {
+	input: "[输入] ",
+	checkbox: "[勾选] ",
+	switch: "[开关] ",
+	radio: "[单选] "
+};
 function loadScreenElements(){
 	$("#elementsStatus").text("加载中…");
 	$.post("/screenElements", null, function(data){
 		var list = $("#elementsList");
 		list.empty();
+		list.css("aspect-ratio", "");
 		if(!data || !data.enabled){
 			$("#elementsStatus").text("无障碍服务未启用");
 			list.html('<div class="elements-hint">需要先在电视盒子上"设置-无障碍"里开启"' +
@@ -545,10 +562,27 @@ function loadScreenElements(){
 			list.html('<div class="elements-hint">当前屏幕没有识别到可点击元素，切换一下电视画面后点"刷新"再试试。</div>');
 			return;
 		}
-		$("#elementsStatus").text("已启用 · 共" + elements.length + "个元素");
+		$("#elementsStatus").text("已启用 · 共" + elements.length + "个元素 · 位置对应电视画面实际布局");
+		var screenWidth = data.screenWidth || 1920;
+		var screenHeight = data.screenHeight || 1080;
+		//手机屏幕比电视窄很多，按电视真实宽高比(比如16:9)换算出来的地图在手机上
+		//会很矮，紧挨着的几个小元素很容易挤在一起分不清。这里把竖直方向按固定
+		//倍数拉伸——左右位置(谁在谁左边/右边)保持完全精确，上下的相对先后顺序
+		//也不会变，只是纵向间距变宽松，不追求跟电视画面严格等比例。
+		var VERTICAL_STRETCH = 1.8;
+		list.css("aspect-ratio", screenWidth + " / " + (screenHeight * VERTICAL_STRETCH));
 		var html = [];
 		for(var i = 0; i < elements.length; i++){
-			html.push('<div class="element-item" data-id="' + elements[i].id + '" title="' + escapeHtml(elements[i].label) + '">' + escapeHtml(elements[i].label) + '</div>');
+			var el = elements[i];
+			var tag = ELEMENT_TYPE_TAGS[el.type] || "";
+			var displayLabel = tag + el.label;
+			var leftPct = (el.left / screenWidth * 100).toFixed(2);
+			var topPct = (el.top / screenHeight * 100).toFixed(2);
+			var widthPct = Math.max((el.right - el.left) / screenWidth * 100, 0).toFixed(2);
+			var heightPct = Math.max((el.bottom - el.top) / screenHeight * 100, 0).toFixed(2);
+			html.push('<div class="element-item type-' + (el.type || 'item') + '" data-id="' + el.id +
+				'" title="' + escapeHtml(displayLabel) + '" style="left:' + leftPct + '%;top:' + topPct +
+				'%;width:' + widthPct + '%;height:' + heightPct + '%;"><span>' + escapeHtml(displayLabel) + '</span></div>');
 		}
 		list.html(html.join(""));
 	}, "json").fail(function(){

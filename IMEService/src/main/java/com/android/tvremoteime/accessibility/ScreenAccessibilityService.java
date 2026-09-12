@@ -35,10 +35,12 @@ public class ScreenAccessibilityService extends AccessibilityService {
     public static class ElementInfo {
         public final int id;
         public final String label;
+        public final String type;
         public final int left, top, right, bottom;
-        public ElementInfo(int id, String label, Rect bounds){
+        public ElementInfo(int id, String label, String type, Rect bounds){
             this.id = id;
             this.label = label;
+            this.type = type;
             this.left = bounds.left;
             this.top = bounds.top;
             this.right = bounds.right;
@@ -89,6 +91,18 @@ public class ScreenAccessibilityService extends AccessibilityService {
     }
 
     /**
+     * 屏幕物理分辨率，配合ElementInfo里的绝对像素坐标，让控制端能把元素列表
+     * 按真实的屏幕位置摆成一张"文字版截图"，而不是纯按发现顺序排的一列文字——
+     * 位置摆对了，方向键在物理遥控器上要往哪按（上/下/左/右）才能挪到某个元素
+     * 才有参考意义。用DisplayMetrics（不是WindowManager.getRealSize，那个要
+     * API17+，这里minSdk还是14）取，跟getBoundsInScreen()是同一套绝对像素坐标系。
+     */
+    public int[] getScreenSize(){
+        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        return new int[]{metrics.widthPixels, metrics.heightPixels};
+    }
+
+    /**
      * 抓取当前屏幕上可以点的元素，按遍历顺序编号，供控制端展示成列表。
      */
     public synchronized List<ElementInfo> queryClickableElements(){
@@ -114,7 +128,7 @@ public class ScreenAccessibilityService extends AccessibilityService {
                 node.getBoundsInScreen(bounds);
                 if(!bounds.isEmpty() && !isDuplicateOfAncestor(label, bounds, nearestAncestor)){
                     cachedNodes.add(AccessibilityNodeInfo.obtain(node));
-                    ElementInfo info = new ElementInfo(cachedNodes.size() - 1, label, bounds);
+                    ElementInfo info = new ElementInfo(cachedNodes.size() - 1, label, classifyElement(node), bounds);
                     result.add(info);
                     ancestorForChildren = info;
                 }
@@ -128,6 +142,35 @@ public class ScreenAccessibilityService extends AccessibilityService {
                 child.recycle();
             }
         }
+    }
+
+    //控制端展示元素列表时，"输入框"和"开关/勾选框"这类跟普通按钮交互方式不一样
+    //的元素值得单独标出来（点输入框大概率会弹出电视端软键盘，点开关/勾选框是
+    //切换状态而不是"跳转/触发动作"）；普通按钮和不好细分的可点击容器（比如
+    //整行都能点的列表项）统一归成"button"/"item"，不强行细分意义不大。
+    //isEditable()是API18才加进AccessibilityNodeInfo的，minSdk还是14，这里做
+    //版本判断，老系统上退化成只看className/isPassword()。
+    private String classifyElement(AccessibilityNodeInfo node){
+        String className = node.getClassName() == null ? "" : node.getClassName().toString();
+        boolean editable = false;
+        if(android.os.Build.VERSION.SDK_INT >= 18){
+            try {
+                editable = node.isEditable();
+            } catch (Exception ignored) {
+            }
+        }
+        if(editable || className.contains("EditText") || node.isPassword()){
+            return "input";
+        }
+        if(node.isCheckable()){
+            if(className.contains("Switch")) return "switch";
+            if(className.contains("RadioButton")) return "radio";
+            return "checkbox";
+        }
+        if(className.contains("Button")){
+            return "button";
+        }
+        return "item";
     }
 
     //整行可点击的容器自己没有文字时，标签是从内部子控件"借"来的（见extractLabel）；

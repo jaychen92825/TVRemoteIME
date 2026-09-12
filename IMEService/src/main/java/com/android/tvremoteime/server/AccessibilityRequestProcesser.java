@@ -57,11 +57,15 @@ public class AccessibilityRequestProcesser implements RequestProcesser {
             result.put("enabled", service != null);
             JSONArray array = new JSONArray();
             if(service != null){
+                int[] screenSize = service.getScreenSize();
+                result.put("screenWidth", screenSize[0]);
+                result.put("screenHeight", screenSize[1]);
                 List<ScreenAccessibilityService.ElementInfo> elements = service.queryClickableElements();
                 for(ScreenAccessibilityService.ElementInfo el : elements){
                     JSONObject obj = new JSONObject();
                     obj.put("id", el.id);
                     obj.put("label", el.label);
+                    obj.put("type", el.type);
                     obj.put("left", el.left);
                     obj.put("top", el.top);
                     obj.put("right", el.right);
