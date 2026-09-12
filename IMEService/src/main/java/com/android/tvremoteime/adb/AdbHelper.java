@@ -133,13 +133,24 @@ public class AdbHelper {
                                     Environment.debug(TAG, "已成功发送adb命令：" + msg);
                                     //Environment.toastInHandler(adbHelper.context, "TVRemoteIME成功向adb服务发送命令。"  + msg);
                                 }
+                                //之前这里一直没调用close()：AdbConnection内部用一个
+                                //HashMap<Integer, AdbStream>记录所有"打开中"的流，只有
+                                //收到对端的CLSE包确认关闭才会从这个表里删掉——不主动关
+                                //的话，每按一次键/每一次触控板操作都会在这个表里永久多
+                                //占一条记录，随着按键次数积累是个无界增长的资源泄漏，
+                                //长时间使用后可能导致ADB连接状态异常、后续命令发不出去。
+                                //command是一次性的shell命令（不需要保持流打开等后续
+                                //交互），发完立刻关闭即可。
+                                try {
+                                    stream.close();
+                                } catch (Exception ignored) {
+                                }
                             }else {
                                 if(Environment.needDebug){
                                     Environment.debug(TAG, "未发送adb命令：" + msg);
                                     //Environment.toastInHandler(adbHelper.context, "TVRemoteIME向adb服务发送命令时失败。");
                                 }
                             }
-                            //stream.close();
                         } catch (Exception e) {
                             if(Environment.needDebug){
                                 Environment.debug(TAG, "发送adb命令时出错：" + msg, e);
