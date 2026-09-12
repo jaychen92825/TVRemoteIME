@@ -783,9 +783,17 @@ function showMiniToast(text){
 }
 //电源键是唯一一个平时就依赖ADB才能生效的按键（见IMEService里
 //shouldRouteKeyThroughAdb的说明）；ADB没连上时这个键点了也没用，与其让用户
-//点了才发现不生效，不如直接不显示。不做成常驻轮询/定时器，只在进入"输入
-//遥控"这个Tab时查一次——跟"元素列表"检查无障碍服务是否开启是同一个思路，
-//按需查一次即可，没必要一直占着一个后台请求。
+//点了才发现不生效，不如直接不显示。
+//
+//这里必须定期轮询，不能只查一次：/adbStatus在电视端(AdbHelper)那边的实现
+//是"如果还没连上，顺手发起一次异步连接尝试，但立刻就把这次请求的响应
+//返回了"——第一次查的时候，连接请求才刚发出去，TCP握手/ADB鉴权握手根本
+//还没来得及完成，必然还是返回"未连接"，哪怕电视盒子早就已经正确开启并
+//信任了ADB调试。只查一次(比如只在进入Tab那一刻查)的话，这个按钮基本上
+//永远不会自己冒出来，必须用户凑巧再手动切一次Tab、让第二次查询赶上连接
+//已经建立之后才会显示，用起来完全不可预期。定期轮询能保证连接一旦真的
+//建立成功，最迟一个轮询周期内就会反映到按钮上。
+var KEEPALIVE_INTERVAL_MS = 4000;
 function refreshAdbDependentUI(){
 	$.get("/adbStatus", function(data){
 		$("#power-btn").toggleClass("hide", !(data && data.connected));
@@ -793,8 +801,8 @@ function refreshAdbDependentUI(){
 		$("#power-btn").addClass("hide");
 	});
 }
-$("div.tab[data-rel='controls']").on("click", refreshAdbDependentUI);
 refreshAdbDependentUI();
+setInterval(refreshAdbDependentUI, KEEPALIVE_INTERVAL_MS);
 //保底：万一进入Tab之后ADB连接状态才变化(比如这时候用户才刚插上USB执行完
 //adb tcpip)，点击时状态可能还是旧的——真点了发现没反应时提示一下原因，
 //而不是完全没反馈。
@@ -815,9 +823,8 @@ $("#power-btn").on(isSupportTouch ? "touchstart" : "mousedown", function(){
 //请求判断控制端是否还"活跃"(RemoteServer.hasActiveClient())，如果只在
 //打开页面时查一次，用户只是打开着页面看、不点任何按键的话，过一会儿电视端
 //会误判成"没有活跃客户端"而把软键盘弹出来挡住画面。所以只要这个控制页
-//还开着，就定期发一次(间隔比服务端判活的超时阈值短很多)，不需要用户有
-//任何操作。
-var KEEPALIVE_INTERVAL_MS = 4000;
+//还开着，就定期发一次(间隔比服务端判活的超时阈值短很多，复用上面
+//KEEPALIVE_INTERVAL_MS这个间隔)，不需要用户有任何操作。
 function refreshKeyboardViewBtn(){
 	$.get("/keyboardViewStatus", function(data){
 		$("#btnToggleKeyboard").toggleClass("active", !!(data && data.visible));
