@@ -535,10 +535,18 @@ $(".mode-tab").on("click", function(){
 //配合物理遥控器的方向键会更好选（比如看到目标在当前高亮项右边，就知道该按
 //遥控器的右键，而不是在一列不分位置的文字里瞎猜）。
 //
-//输入框/开关/勾选框这几类跟"点了直接触发动作"的普通按钮交互方式不一样
-//(点输入框大概率会弹出电视端软键盘，点开关/勾选框是切换状态)，用左侧
-//色条+文字前缀标出来，普通按钮和不好细分的可点击容器不特殊处理。
-var ELEMENT_TYPE_TAGS = {
+//输入框/开关/勾选框/单选这几类跟"点了直接触发动作"的普通按钮交互方式不
+//一样(点输入框大概率会弹出电视端软键盘，点开关/勾选框/单选是切换状态)，
+//用对应控件本身长相的小图标(而不是纯文字标签)标出来，跟这几种控件在
+//系统设置里的实际样子一致，比文字前缀更直观；普通按钮和不好细分的可
+//点击容器不加图标。title属性里保留文字版类型说明，方便长按/悬停查看。
+var ELEMENT_TYPE_ICONS = {
+	input: '<svg viewBox="0 0 24 24" width="11" height="11" class="element-type-icon"><rect x="2" y="7" width="20" height="10" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><line x1="7" y1="9.5" x2="7" y2="14.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+	checkbox: '<svg viewBox="0 0 24 24" width="11" height="11" class="element-type-icon"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M7 12l3 3 7-7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+	switch: '<svg viewBox="0 0 24 14" width="14" height="9" class="element-type-icon"><rect x="1" y="1" width="22" height="12" rx="6" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="17" cy="7" r="4" fill="currentColor"/></svg>',
+	radio: '<svg viewBox="0 0 24 24" width="11" height="11" class="element-type-icon"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>'
+};
+var ELEMENT_TYPE_TITLE_TAGS = {
 	input: "[输入] ",
 	checkbox: "[勾选] ",
 	switch: "[开关] ",
@@ -574,15 +582,15 @@ function loadScreenElements(){
 		var html = [];
 		for(var i = 0; i < elements.length; i++){
 			var el = elements[i];
-			var tag = ELEMENT_TYPE_TAGS[el.type] || "";
-			var displayLabel = tag + el.label;
+			var icon = ELEMENT_TYPE_ICONS[el.type] || "";
+			var titleText = (ELEMENT_TYPE_TITLE_TAGS[el.type] || "") + el.label;
 			var leftPct = (el.left / screenWidth * 100).toFixed(2);
 			var topPct = (el.top / screenHeight * 100).toFixed(2);
 			var widthPct = Math.max((el.right - el.left) / screenWidth * 100, 0).toFixed(2);
 			var heightPct = Math.max((el.bottom - el.top) / screenHeight * 100, 0).toFixed(2);
 			html.push('<div class="element-item type-' + (el.type || 'item') + '" data-id="' + el.id +
-				'" title="' + escapeHtml(displayLabel) + '" style="left:' + leftPct + '%;top:' + topPct +
-				'%;width:' + widthPct + '%;height:' + heightPct + '%;"><span>' + escapeHtml(displayLabel) + '</span></div>');
+				'" title="' + escapeHtml(titleText) + '" style="left:' + leftPct + '%;top:' + topPct +
+				'%;width:' + widthPct + '%;height:' + heightPct + '%;">' + icon + '<span>' + escapeHtml(el.label) + '</span></div>');
 		}
 		list.html(html.join(""));
 	}, "json").fail(function(){

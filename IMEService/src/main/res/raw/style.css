@@ -509,16 +509,32 @@ body {
 	word-break: break-word;
 }
 
-/* 输入框/开关/勾选框跟"点了直接触发动作"的普通按钮交互方式不一样，用左侧
-   色条区分一下，普通按钮/不好细分的可点击容器保持默认边框颜色不特殊处理。 */
+/* 输入框/开关/勾选框/单选跟"点了直接触发动作"的普通按钮交互方式不一样，
+   用对应控件长相的小图标(颜色跟左侧色条同一套配色)标出来，普通按钮/不好
+   细分的可点击容器保持默认边框颜色、不加图标。 */
+.element-type-icon {
+	flex: 0 0 auto;
+	margin-right: 2px;
+}
+
 .element-item.type-input {
 	border-left-color: var(--color-primary);
+}
+
+.element-item.type-input .element-type-icon {
+	color: var(--color-primary);
 }
 
 .element-item.type-checkbox,
 .element-item.type-switch,
 .element-item.type-radio {
 	border-left-color: #f5a623;
+}
+
+.element-item.type-checkbox .element-type-icon,
+.element-item.type-switch .element-type-icon,
+.element-item.type-radio .element-type-icon {
+	color: #f5a623;
 }
 
 .element-item:active {
