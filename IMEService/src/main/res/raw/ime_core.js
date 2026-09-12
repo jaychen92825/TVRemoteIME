@@ -591,19 +591,23 @@ $("#showSettings").on("click", function() {
 		console.log(data)
 	})
 })
+var PLAY_URL_PROTOCOLS = ['http://', 'https://', 'thunder://', 'ed2k://', 'ftp://', 'rtmp://', 'rtmps://', 'mms://'];
+function isSupportedPlayUrl(url){
+	url = url || '';
+	for (var i = 0; i < PLAY_URL_PROTOCOLS.length; i++) {
+		if (url.indexOf(PLAY_URL_PROTOCOLS[i]) == 0) return true;
+	}
+	return false;
+}
+function submitPlayUrl(url){
+	$.post("/play", {playUrl: url, "useSystem":$('#playUseSystem')[0].checked}, function(data) {
+		console.log(data)
+	})
+}
 $("#btnPlay").on("click", function() {
 	var url = $('#playUrl').val();
-	if (url.length > 0 && (url.indexOf('http://') == 0 
-		|| url.indexOf('https://') == 0 
-		|| url.indexOf('thunder://') == 0 
-		|| url.indexOf('ed2k://') == 0 
-		|| url.indexOf('ftp://') == 0 
-		|| url.indexOf('rtmp://') == 0 
-		|| url.indexOf('rtmps://') == 0
-		|| url.indexOf('mms://') == 0)){
-			$.post("/play", {playUrl: url, "useSystem":$('#playUseSystem')[0].checked}, function(data) {
-				console.log(data)
-			})
+	if (url.length > 0 && isSupportedPlayUrl(url)){
+		submitPlayUrl(url);
 	}else{
 		alert('请输入正确的网络视频地址，只支持http/ftp/thunder/ed2k/rtmp/mms。');
 	}
@@ -818,5 +822,31 @@ loadFileList("");
 getDiskSpace();
 loadTVList();
 loadTorrentItems();
+
+//PWA分享目标(manifest.json里的share_target)：手机其它App"分享"一个视频链接过来时，
+//系统会带着title/text/url这几个查询参数打开这个页面——不同App放链接的字段不统一
+//(纯分享链接一般用url，转发一段带评论的文字时链接常常混在text里)，所以url/text/
+//title都尝试提取一遍。提取成功后自动切到"视频直播"Tab、填入地址并直接触发播放，
+//不需要用户再手动复制粘贴；处理完立刻清掉地址栏参数，避免刷新页面时重复触发。
+function extractPlayUrlFromShare(){
+	var params = new URLSearchParams(location.search);
+	var candidates = [params.get('url'), params.get('text'), params.get('title')];
+	for (var i = 0; i < candidates.length; i++) {
+		var value = candidates[i];
+		if (!value) continue;
+		value = value.trim();
+		if (isSupportedPlayUrl(value)) return value;
+		var match = value.match(/(https?:\/\/\S+)/i);
+		if (match) return match[1];
+	}
+	return null;
+}
+var sharedPlayUrl = extractPlayUrlFromShare();
+if (sharedPlayUrl) {
+	history.replaceState(null, '', location.pathname);
+	$('div.tab[data-rel="video"]').trigger('click');
+	$('#playUrl').val(sharedPlayUrl);
+	submitPlayUrl(sharedPlayUrl);
+}
 showCurrentVersion();
 loadDeviceName();
