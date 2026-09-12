@@ -10,7 +10,6 @@ import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Toast;
 
-import java.security.SecureRandom;
 import java.util.List;
 
 /**
@@ -61,8 +60,11 @@ public class Environment {
     }
 
     /**
-     * 控制端HTTP接口的访问口令。首次调用时会自动生成一个随机6位数字口令并持久化，
-     * 用于给RemoteServer做HTTP Basic鉴权，避免局域网内任何人/网页无鉴权即可控制盒子。
+     * 控制端HTTP接口的访问口令。首次调用时会用固定的默认口令并持久化，用于给
+     * RemoteServer做HTTP Basic鉴权，避免局域网内任何人/网页无鉴权即可控制盒子；
+     * 用户可以在App主界面"修改访问口令"卡片里随时改成自己的口令(见MainActivity/
+     * setAccessCode)。默认口令是固定值而不是随机生成，方便用户第一次连接时
+     * 不用先打开App主界面查看随机口令是多少，直接就能输入默认值登录。
      */
     public static String getAccessCode(Context context){
         SharedPreferences prefs = context.getApplicationContext()
@@ -82,9 +84,7 @@ public class Environment {
     }
 
     private static String generateAccessCode(){
-        SecureRandom random = new SecureRandom();
-        int code = 100000 + random.nextInt(900000);
-        return String.valueOf(code);
+        return "123456";
     }
 
     /**
