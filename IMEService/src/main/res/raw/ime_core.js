@@ -769,51 +769,12 @@ function loadDeviceName(){
 		}
 	});
 }
-//轻量提示条：短暂显示一行文字然后自动消失，用来在具体操作失败时给个理由，
-//不用像之前那样常驻一个状态栏一直占地方。
-var miniToastTimer = null;
-function showMiniToast(text){
-	var el = $("#miniToast");
-	if(el.length === 0){
-		el = $('<div id="miniToast" class="mini-toast"></div>').appendTo("body");
-	}
-	el.text(text).addClass("show");
-	clearTimeout(miniToastTimer);
-	miniToastTimer = setTimeout(function(){ el.removeClass("show"); }, 2200);
-}
-//电源键是唯一一个平时就依赖ADB才能生效的按键（见IMEService里
-//shouldRouteKeyThroughAdb的说明）；ADB没连上时这个键点了也没用，与其让用户
-//点了才发现不生效，不如直接不显示。
-//
-//这里必须定期轮询，不能只查一次：/adbStatus在电视端(AdbHelper)那边的实现
-//是"如果还没连上，顺手发起一次异步连接尝试，但立刻就把这次请求的响应
-//返回了"——第一次查的时候，连接请求才刚发出去，TCP握手/ADB鉴权握手根本
-//还没来得及完成，必然还是返回"未连接"，哪怕电视盒子早就已经正确开启并
-//信任了ADB调试。只查一次(比如只在进入Tab那一刻查)的话，这个按钮基本上
-//永远不会自己冒出来，必须用户凑巧再手动切一次Tab、让第二次查询赶上连接
-//已经建立之后才会显示，用起来完全不可预期。定期轮询能保证连接一旦真的
-//建立成功，最迟一个轮询周期内就会反映到按钮上。
+//"睡眠"键(#sleep-btn)不需要这里单独写点击逻辑——它跟其它遥控键一样带
+//class="otherbtn"，上面通用的".otherbtn"点击处理器(postKeyCode(o.attr(
+//"data-key")))已经会把data-key="sleep"发出去，落到IMEService里"sleep"
+//这个特判分支，走无障碍服务的GLOBAL_ACTION_LOCK_SCREEN。不依赖ADB，
+//所以不需要像之前的电源键那样常驻轮询连接状态、按状态显示/隐藏按钮。
 var KEEPALIVE_INTERVAL_MS = 4000;
-function refreshAdbDependentUI(){
-	$.get("/adbStatus", function(data){
-		$("#power-btn").toggleClass("hide", !(data && data.connected));
-	}, "json").fail(function(){
-		$("#power-btn").addClass("hide");
-	});
-}
-refreshAdbDependentUI();
-setInterval(refreshAdbDependentUI, KEEPALIVE_INTERVAL_MS);
-//保底：万一进入Tab之后ADB连接状态才变化(比如这时候用户才刚插上USB执行完
-//adb tcpip)，点击时状态可能还是旧的——真点了发现没反应时提示一下原因，
-//而不是完全没反馈。
-$("#power-btn").on(isSupportTouch ? "touchstart" : "mousedown", function(){
-	$.get("/adbStatus", function(data){
-		if(!data || !data.connected){
-			showMiniToast("ADB未连接，电源键暂不可用");
-			$("#power-btn").addClass("hide");
-		}
-	}, "json");
-})
 //电视端软键盘(带二维码，没有活跃控制端连着时靠它扫码)显示/隐藏：这里只
 //负责读取/切换状态并同步按键的高亮外观，具体"什么时候默认显示/隐藏"的
 //判断逻辑在Environment.isKeyboardViewVisible里(当前有没有活跃客户端来定，

@@ -342,31 +342,6 @@ body {
 	line-height: 1;
 }
 
-/* 只有电源键依赖ADB才能生效，不再常驻显示/轮询一个连接状态条——只在真的
-   按下电源键、且这时候ADB确实没连上时，才弹出这条短暂提示说明原因，2.2秒后
-   自动消失，不用一直占地方。 */
-.mini-toast {
-	position: fixed;
-	left: 50%;
-	bottom: 90px;
-	transform: translateX(-50%) translateY(10px);
-	background: rgba(44,44,46,0.92);
-	color: #fff;
-	padding: 8px 16px;
-	border-radius: var(--radius-md);
-	font-size: 12px;
-	white-space: nowrap;
-	opacity: 0;
-	pointer-events: none;
-	transition: opacity 0.2s ease, transform 0.2s ease;
-	z-index: 999;
-}
-
-.mini-toast.show {
-	opacity: 1;
-	transform: translateX(-50%) translateY(0);
-}
-
 /* 方向键/元素列表这个切换以前是实心蓝底的"药丸"分段控件，视觉上比页面
    其它任何控件都更抢眼，跟旁边一圈电源/静音/音量按钮站在一起显得很突兀。
    改成跟顶部主Tab一样的文字+下划线风格(纯文字、激活时变主题色+细下划线，

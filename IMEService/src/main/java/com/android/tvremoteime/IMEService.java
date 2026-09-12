@@ -257,12 +257,13 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		return false;
 	}
 
-	//电源键、多任务(APP_SWITCH/Recents)键都没有原生InputConnection替代方案
-	//（PhoneWindowManager只在系统级输入分发时才特殊处理它们，IME往聚焦控件
+	//多任务(APP_SWITCH/Recents)键没有原生InputConnection替代方案
+	//（PhoneWindowManager只在系统级输入分发时才特殊处理它，IME往聚焦控件
 	//注入的合成按键走不到那一层——多任务键点了没反应就是这个原因，跟HOME键
 	//需要专门用ACTION_MAIN+CATEGORY_HOME这个Intent兜底是同一类问题，只是
 	//多任务键没有对应的公开Intent能直接兜底，只能靠ADB这种走系统级输入
-	//管线的方式），任何时候都应该优先尝试ADB；触控板的滑动/点击同理，走的是
+	//管线的方式)，任何时候都应该优先尝试ADB(优先走无障碍、无障碍不行才落
+	//到这里，见下面performRecents那段说明)；触控板的滑动/点击同理，走的是
 	//SwipeCommand/TapCommand，不经过这个方法。但方向键/音量/主页/返回/菜单
 	//这些键本来就有正常能用的原生注入路径——只有在本App不是默认输入法
 	//（原生路径本来就用不了，MainActivity的"手动启动"按钮会显式走这条兜底
@@ -271,9 +272,13 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	//创建出来的，实际根本没连上）就会把所有按键都吞进ADB队列，连不上ADB时
 	//这些本来能正常工作的按键就全部失效了——这正是新增"ADB连接状态指示"
 	//功能后按键突然全部失灵的根因。
+	//（电源键之前也在这个列表里，用于实现开关屏——但那需要ADB才能同时支持
+	//"睡眠"和"唤醒"两个方向，为此专门维护一整套ADB连接状态判断/展示逻辑，
+	//只为了一个用得不算高频的功能不太划算。现在改成只保留"睡眠"这一半、
+	//用无障碍的GLOBAL_ACTION_LOCK_SCREEN实现(见下面performSleep那段特判)，
+	//完全不需要ADB，"唤醒"这个方向不再提供。）
 	private boolean shouldRouteKeyThroughAdb(int keyCode){
-		return keyCode == KeyEvent.KEYCODE_POWER || keyCode == KeyEvent.KEYCODE_APP_SWITCH
-				|| !Environment.isDefaultIME(this);
+		return keyCode == KeyEvent.KEYCODE_APP_SWITCH || !Environment.isDefaultIME(this);
 	}
 
 	//onKeyEventReceived的实际处理逻辑，统一在主线程Handler上执行(见
@@ -293,6 +298,13 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 				CharSequence after = ic.getTextAfterCursor(5000, 0);
 				ic.deleteSurroundingText(before != null ? before.length() : 0,
 						after != null ? after.length() : 0);
+			}
+		}else if("sleep".equalsIgnoreCase(keyCode)){
+			//睡眠键：只走无障碍服务的GLOBAL_ACTION_LOCK_SCREEN这一条路径，
+			//不需要ADB、不需要判断连接状态，无障碍服务没开启或触发失败就
+			//什么都不做——不为了兜底再引入一整套ADB相关的逻辑。
+			if(ScreenAccessibilityService.isServiceEnabled()){
+				ScreenAccessibilityService.getInstance().performLockScreen();
 			}
 		}else if(String.valueOf(KeyEvent.KEYCODE_APP_SWITCH).equals(keyCode)
 				&& keyAction == KEY_ACTION_PRESSED
@@ -405,8 +417,8 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 
 				@Override
 				public void onMouseMoveReceived(int dx, int dy) {
-					//触控板模拟鼠标跟电源键一样，只能靠adb的"input swipe"注入触摸手势，
-					//普通InputConnection没有触摸事件的概念，走不通。
+					//触控板模拟鼠标只能靠adb的"input swipe"注入触摸手势，普通
+					//InputConnection没有触摸事件的概念，走不通。
 					ensureScreenSize();
 					if(screenWidth <= 0 || screenHeight <= 0) return;
 					int oldX = virtualCursorX, oldY = virtualCursorY;

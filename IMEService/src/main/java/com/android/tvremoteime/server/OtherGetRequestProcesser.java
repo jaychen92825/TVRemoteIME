@@ -72,9 +72,9 @@ public class OtherGetRequestProcesser implements RequestProcesser {
         }
     }
 
-    //电源键/触控板都依赖ADB，之前只能靠"点了没反应"来猜是不是没连上ADB；
-    //这里主动探测一次连接状态（还没连上的话顺带在后台尝试连一次），让控制页
-    //能提前显示"ADB未连接"，而不是等用户点了按钮才发现不生效。
+    //触控板依赖ADB，之前只能靠"点了没反应"来猜是不是没连上ADB；这里主动
+    //探测一次连接状态（还没连上的话顺带在后台尝试连一次），让控制页能提前
+    //知道能不能用，而不是等用户点了才发现不生效。
     private NanoHTTPD.Response getAdbStatusResponse(){
         AdbHelper.createInstance();
         if(AdbHelper.initService(this.context)){

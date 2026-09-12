@@ -17,7 +17,7 @@ import java.util.List;
  * 控制端"元素列表"功能：读取当前屏幕上可点击的元素（文字/图标标签+位置），
  * 让用户直接从列表里点名字来操作电视，而不是像触控板那样盲划坐标。
  *
- * 跟电源键/触控板依赖的ADB shell input完全是两条独立路径：这里用的是安卓标准
+ * 跟触控板依赖的ADB shell input完全是两条独立路径：这里用的是安卓标准
  * 的无障碍API——AccessibilityNodeInfo.performAction(ACTION_CLICK)直接让目标
  * 控件执行它自己的点击逻辑，不区分这个控件平时是靠触摸响应还是靠遥控器焦点+
  * 确定键响应，所以在标准Android TV（D-pad焦点导航）系统上也能生效，不像触控板
@@ -198,6 +198,24 @@ public class ScreenAccessibilityService extends AccessibilityService {
     public boolean performRecents(){
         try {
             return performGlobalAction(GLOBAL_ACTION_RECENTS);
+        } catch (Exception e){
+            return false;
+        }
+    }
+
+    //GLOBAL_ACTION_LOCK_SCREEN是Android 9(API 28)才加进AccessibilityService的
+    //常量(值固定为8)，本项目compileSdkVersion还停留在26，编译期直接引用这个
+    //常量名会报"找不到符号"。performGlobalAction本身接受的就是一个普通int，
+    //不是枚举，这里直接用数值8代替，效果完全一样，绕开编译期的SDK版本限制。
+    //运行时如果系统版本低于9，performGlobalAction对不认识的action值会返回
+    //false(不会抛异常)，等于这个睡眠键在过老的系统上不生效，不做任何兜底——
+    //睡眠功能只依赖无障碍这一条路径，不想为了极少数唤醒场景/老系统再搭一套
+    //ADB相关的判断/回退逻辑。
+    private static final int GLOBAL_ACTION_LOCK_SCREEN = 8;
+
+    public boolean performLockScreen(){
+        try {
+            return performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN);
         } catch (Exception e){
             return false;
         }

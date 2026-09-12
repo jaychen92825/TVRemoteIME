@@ -35,7 +35,7 @@ public class AdbHelper {
         public TapCommand(int x, int y){ this.x = x; this.y = y; }
     }
     //控制端"ADB连接状态"指示灯用：在没有真正的按键/触控命令要发之前，主动
-    //探测一下能不能连上adb，这样用户还没点电源键/触控板之前就能看到能不能用，
+    //探测一下能不能连上adb，这样用户还没用触控板之前就能看到能不能用，
     //而不是非要先点一次、失败了才知道。"shell:echo"在设备上没有任何副作用。
     private static final Object PROBE = new Object();
 
@@ -232,7 +232,7 @@ public class AdbHelper {
         return instance != null && instance.isConnected();
     }
     //控制端轮询"ADB连接状态"时调用：还没连上就顺手探测一次，让状态灯能在
-    //用户真正点电源键/触控板之前就自己变绿，而不是必须先点一次才知道行不行。
+    //用户真正用触控板之前就自己变绿，而不是必须先点一次才知道行不行。
     //probing标记避免轮询间隔比连接超时还短时反复堆积探测请求。
     public static void probeConnection(){
         if(instance != null && !instance.isConnected() && !instance.probing){
