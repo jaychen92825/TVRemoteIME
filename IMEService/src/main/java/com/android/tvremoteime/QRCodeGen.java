@@ -16,8 +16,16 @@ import com.google.zxing.qrcode.QRCodeWriter;
 public class QRCodeGen {
     public static Bitmap generateBitmap(String content, int width, int height) {
         QRCodeWriter qrCodeWriter = new QRCodeWriter();
-        Map<EncodeHintType, String> hints = new HashMap<>();
+        //不同hint要求的值类型不一样(CHARACTER_SET要String，MARGIN要Integer——
+        //QRCodeWriter内部是直接强转成Integer读取的，塞个String进去会在
+        //运行时抛ClassCastException)，这里用Object类型的Map能同时装下两种。
+        Map<EncodeHintType, Object> hints = new HashMap<>();
         hints.put(EncodeHintType.CHARACTER_SET, "utf-8");
+        //zxing默认留4个模块宽的静区(quiet zone)，在给定的width/height里会有一圈
+        //很厚的白边、没有真正用满显示区域。QR码规范建议的静区是为了兼容各种
+        //扫码设备/光线条件下的最大可靠性，但这里是手机摄像头近距离扫自家电视
+        //屏幕这种可控场景，缩到1个模块宽依然能可靠扫描，同时把显示区域基本用满。
+        hints.put(EncodeHintType.MARGIN, 1);
         try {
             BitMatrix encode = qrCodeWriter.encode(content, BarcodeFormat.QR_CODE, width, height, hints);
             int[] pixels = new int[width * height];

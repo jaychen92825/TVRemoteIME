@@ -316,6 +316,15 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 				else{
 					long eventTime = SystemClock.uptimeMillis();
 					InputConnection ic = getCurrentInputConnection();
+					//FLAG_KEEP_TOUCH_MODE的文档原文是"set if we don't want the key
+					//event to cause us to leave touch mode"——之前一直带着这个
+					//标记，导致注入的方向键永远无法让系统退出"触摸模式"，而安卓
+					//原生的D-pad焦点导航(比如系统设置这类PreferenceScreen界面)
+					//通常只有在"非触摸模式"下才会真正移动焦点。这正是"方向键
+					//上下有时候选不中设置界面的栏目，但用红外遥控选中一次之后
+					//(触发了一次不带这个标记的真实按键、让系统退出触摸模式)
+					//再用方向键就正常了"的根因。去掉这个标记，让注入的方向键
+					//行为跟真实遥控器按键一致，第一次按也能正常触发焦点移动。
 					switch (keyAction) {
 						case KEY_ACTION_PRESSED:
 							if(!(shouldRouteKeyThroughAdb(kc) && isSendToAdbService(kc))) sendKeyCode(kc);
@@ -324,14 +333,14 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 							if(!(shouldRouteKeyThroughAdb(kc) && isSendToAdbService(kc)) && ic != null) {
 								ic.sendKeyEvent(new KeyEvent(eventTime, eventTime,
 										KeyEvent.ACTION_DOWN, kc, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
-										KeyEvent.FLAG_SOFT_KEYBOARD | KeyEvent.FLAG_KEEP_TOUCH_MODE));
+										KeyEvent.FLAG_SOFT_KEYBOARD));
 							}
 							break;
 						case KEY_ACTION_UP:
 							if(ic != null) {
 								ic.sendKeyEvent(new KeyEvent(eventTime, eventTime,
 									KeyEvent.ACTION_UP, kc, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
-									KeyEvent.FLAG_SOFT_KEYBOARD | KeyEvent.FLAG_KEEP_TOUCH_MODE));
+									KeyEvent.FLAG_SOFT_KEYBOARD));
 							}
 							break;
 					}
