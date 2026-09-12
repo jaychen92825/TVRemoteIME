@@ -106,8 +106,15 @@ function clickApp(id,type){
 	var app=$("#app-"+id);
 	if(2!=type||confirm("是否确认要卸载应用["+app.text()+"]？")){
 		$.post(1==type?"/run":"/uninstall",{packageName:app.attr("data-packageName")},function(data){
-			if("ok"==data&&2==type){
-				setTimeout(reloadAppList,15e3);
+			if("ok"==data){
+				if(2==type){
+					setTimeout(reloadAppList,15e3);
+				}else{
+					//打开电视上的App后，下一步基本都是要在这个App界面里操作
+					//（方向键选内容、返回等），直接跳回"输入遥控"页，不用
+					//用户自己再点一次Tab切换。
+					$('div.tab[data-rel="controls"]').trigger('click');
+				}
 			}
 		});
 	}
