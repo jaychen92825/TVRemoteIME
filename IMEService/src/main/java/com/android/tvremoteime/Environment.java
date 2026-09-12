@@ -10,7 +10,10 @@ import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Toast;
 
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Created by kingt on 2018/3/6.
@@ -26,6 +29,7 @@ public class Environment {
     private static final String PREFS_NAME = "tvremoteime_settings";
     private static final String PREF_ACCESS_CODE = "access_code";
     private static final String PREF_APP_LAUNCH_COUNT_PREFIX = "app_launch_count_";
+    private static final String PREF_STARRED_APPS = "starred_apps";
     private static final String PREF_KEYBOARD_VIEW_VISIBLE = "keyboard_view_visible";
     public static final String AUTH_REALM_USER = "tvremoteime";
 
@@ -103,6 +107,33 @@ public class Environment {
         SharedPreferences prefs = context.getApplicationContext()
                 .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         return prefs.getInt(PREF_APP_LAUNCH_COUNT_PREFIX + packageName, 0);
+    }
+
+    /**
+     * 星标应用：跟启动次数排序是两回事——启动次数反映的是"用得多"，
+     * 星标反映的是"用户自己主动想让它常驻置顶"，比如刚装的不常用但很在意的
+     * App。星标的应用在应用列表里排在同一分组（非系统/系统）的最前面，
+     * 优先级高于启动次数。
+     */
+    public static boolean isAppStarred(Context context, String packageName){
+        SharedPreferences prefs = context.getApplicationContext()
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        return prefs.getStringSet(PREF_STARRED_APPS, Collections.<String>emptySet()).contains(packageName);
+    }
+
+    public static void setAppStarred(Context context, String packageName, boolean starred){
+        SharedPreferences prefs = context.getApplicationContext()
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        //SharedPreferences文档要求：拿到的StringSet不能直接修改，必须先拷贝一份
+        //新的集合再写回，否则可能改到内部缓存的同一个实例上，导致后续读写不一致。
+        Set<String> starredApps = new HashSet<String>(
+                prefs.getStringSet(PREF_STARRED_APPS, Collections.<String>emptySet()));
+        if(starred){
+            starredApps.add(packageName);
+        }else{
+            starredApps.remove(packageName);
+        }
+        prefs.edit().putStringSet(PREF_STARRED_APPS, starredApps).apply();
     }
 
     public static void debug(String tag, String msg){

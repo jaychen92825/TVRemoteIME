@@ -3,6 +3,7 @@ package com.android.tvremoteime.server;
 import android.content.Context;
 
 import com.android.tvremoteime.AppPackagesHelper;
+import com.android.tvremoteime.Environment;
 import java.util.Map;
 
 import fi.iki.elonen.NanoHTTPD;
@@ -26,6 +27,7 @@ public class AppRequestProcesser implements RequestProcesser {
                 case "/uninstall":
                 case "/run":
                 case "/runSystem":
+                case "/star":
                     return true;
             }
         }
@@ -51,6 +53,11 @@ public class AppRequestProcesser implements RequestProcesser {
                 case "/runSystem":
                     if (params.get("packageName") != null) {
                         AppPackagesHelper.runSystemPackage(params.get("packageName"), this.context);
+                    }
+                    return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
+                case "/star":
+                    if (params.get("packageName") != null) {
+                        Environment.setAppStarred(this.context, params.get("packageName"), "true".equals(params.get("starred")));
                     }
                     return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
                 default:

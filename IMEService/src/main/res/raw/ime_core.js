@@ -146,6 +146,7 @@ function reloadAppList(){
 		for(var i=0;i<data.length;i++){
 			var app=data[i];
 			html.push('<div class="app-item" data-index="'+i+'" data-sysapp="'+(app.isSysApp?1:0)+'" title="'+escapeHtml(app.lable)+'">');
+			html.push('<div class="app-star'+(app.starred?' active':'')+'" data-packagename="'+escapeHtml(app.packageName)+'" data-starred="'+(app.starred?1:0)+'">★</div>');
 			html.push('<img src="/icon/'+encodeURIComponent(app.packageName)+'" class="app-icon" />');
 			html.push('<div class="app-name'+(app.isSysApp?" blue":"")+'" id="app-'+i+'" data-packageName="'+escapeHtml(app.packageName)+'">'+escapeHtml(app.lable)+"</div>");
 			html.push("</div>");
@@ -407,6 +408,20 @@ $('.app-list').on('click', '.app-item', function(){
 	var isSysApp = $(this).attr('data-sysapp') === '1';
 	var uninstallMode = $("#cbUninstall")[0].checked;
 	clickApp(idx, (!isSysApp && uninstallMode) ? 2 : 1);
+})
+//星标图标叠在app-item上面，点星标不能连带触发外层app-item的启动/卸载逻辑——
+//stopPropagation不够，因为jQuery对同一个容器上委托的多个选择器是在同一次
+//事件分发里依次判断触发的，必须用stopImmediatePropagation才能真正拦下
+//后面排队的.app-item处理器。
+$('.app-list').on('click', '.app-star', function(e){
+	e.stopPropagation();
+	e.stopImmediatePropagation();
+	vibrateShort();
+	var packageName = $(this).attr('data-packagename');
+	var willStar = $(this).attr('data-starred') !== '1';
+	$.post('/star', {packageName: packageName, starred: willStar}, function(){
+		reloadAppList();
+	});
 })
 $('#btnShowTVEdit,#btnTVEdit,#btnTVCancel').on('click',function(){
 	switch(this.id){

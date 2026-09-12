@@ -35,6 +35,7 @@ public class AppPackagesHelper {
         private String packageName;
         private String apkPath;
         private boolean isSysApp;
+        private boolean starred;
 
         public String getLable() {
             return lable;
@@ -59,6 +60,14 @@ public class AppPackagesHelper {
         public void setSysApp(boolean sysApp) {
             isSysApp = sysApp;
         }
+
+        public boolean isStarred() {
+            return starred;
+        }
+
+        public void setStarred(boolean starred) {
+            this.starred = starred;
+        }
         public JSONObject toJSONObject()
         {
             JSONObject obj = new JSONObject();
@@ -67,6 +76,7 @@ public class AppPackagesHelper {
                 obj.put("packageName", getPackageName());
                 obj.put("apkPath", getApkPath());
                 obj.put("isSysApp",  isSysApp());
+                obj.put("starred", isStarred());
             }catch (JSONException e) {
                 e.printStackTrace();
             }
@@ -116,11 +126,14 @@ public class AppPackagesHelper {
                 appInfo.setPackageName(app.packageName);
                 appInfo.setApkPath(app.sourceDir);
                 appInfo.setSysApp(isSysApp);
+                appInfo.setStarred(Environment.isAppStarred(context, app.packageName));
                 appInfos.add(appInfo);
             }
         }
-        //常用应用置顶：非系统/系统这个大分组不变，组内按控制端启动次数从高到低排，
-        //次数一样再按名称排——这样点得越多的应用格子越靠前，不用每次都往下翻找。
+        //常用应用置顶：非系统/系统这个大分组不变，组内先按用户手动星标置顶
+        //（星标是用户主动选的"我在意"，跟"用得多不多"是两回事），再按控制端
+        //启动次数从高到低排，最后按名称排——这样点得越多、或者手动标星的应用
+        //格子越靠前，不用每次都往下翻找。
         Collections.sort(appInfos, new Comparator<AppInfo>() {
             @Override
             public int compare(AppInfo o1, AppInfo o2) {
@@ -128,6 +141,9 @@ public class AppPackagesHelper {
                 int i2 = (o2.isSysApp ? 2 : 1);
                 if(i1 != i2){
                     return (i1 < i2) ? -1 : 1;
+                }
+                if(o1.isStarred() != o2.isStarred()){
+                    return o1.isStarred() ? -1 : 1;
                 }
                 int c1 = Environment.getAppLaunchCount(context, o1.getPackageName());
                 int c2 = Environment.getAppLaunchCount(context, o2.getPackageName());

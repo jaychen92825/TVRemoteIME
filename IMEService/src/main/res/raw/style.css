@@ -549,6 +549,7 @@ body {
 }
 
 .app-item {
+	position: relative;
 	max-width: 90px;
 	width: 100%;
 	justify-self: center;
@@ -561,6 +562,24 @@ body {
 	border-radius: var(--radius-md);
 	cursor: pointer;
 	transition: background 0.12s ease;
+}
+
+.app-star {
+	position: absolute;
+	top: 2px;
+	right: 8px;
+	width: 22px;
+	height: 22px;
+	line-height: 22px;
+	text-align: center;
+	font-size: 16px;
+	color: var(--color-border);
+	cursor: pointer;
+	z-index: 1;
+}
+
+.app-star.active {
+	color: #f5a623;
 }
 
 .app-item:not(.item-empty):active {
