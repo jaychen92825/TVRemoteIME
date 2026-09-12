@@ -54,8 +54,15 @@ public class OtherGetRequestProcesser implements RequestProcesser {
             case "/adbStatus":
                 return getAdbStatusResponse();
             case "/accessibilityStatus":
+                //lockScreenSupported：GLOBAL_ACTION_LOCK_SCREEN(睡眠键用的无障碍
+                //全局操作)是Android 9(API 28)才加入系统的，低于这个版本的系统
+                //上performGlobalAction只会返回false、什么都不会发生。这是设备
+                //系统版本决定的固定能力，跟"无障碍服务有没有开启"是两回事——
+                //后者随时可能变，前者只要设备不换就不会变，所以控制页只在打开
+                //时查一次，不需要跟ADB/软键盘状态那样定期轮询。
                 return RemoteServer.createJSONResponse(NanoHTTPD.Response.Status.OK,
-                        "{\"enabled\":" + ScreenAccessibilityService.isServiceEnabled() + "}");
+                        "{\"enabled\":" + ScreenAccessibilityService.isServiceEnabled()
+                                + ", \"lockScreenSupported\":" + (Build.VERSION.SDK_INT >= 28) + "}");
             case "/keyboardViewStatus":
                 return RemoteServer.createJSONResponse(NanoHTTPD.Response.Status.OK,
                         "{\"visible\":" + com.android.tvremoteime.Environment.isKeyboardViewVisible(

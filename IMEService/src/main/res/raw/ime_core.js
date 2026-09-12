@@ -774,6 +774,19 @@ function loadDeviceName(){
 //"data-key")))已经会把data-key="sleep"发出去，落到IMEService里"sleep"
 //这个特判分支，走无障碍服务的GLOBAL_ACTION_LOCK_SCREEN。不依赖ADB，
 //所以不需要像之前的电源键那样常驻轮询连接状态、按状态显示/隐藏按钮。
+//
+//但GLOBAL_ACTION_LOCK_SCREEN这个无障碍API本身是Android 9才加入系统的，
+//电视盒子系统版本低于这个的话，点了这个键无障碍服务会直接返回false、
+//什么都不会发生——与其让按键摆在那儿点了没反应，不如干脆不显示。这是
+//设备系统版本决定的固定能力，只要页面不刷新就不会变，跟ADB/软键盘状态
+//那种会随时变化的情况不一样，所以只在打开页面时查一次，不用定期轮询。
+$.get("/accessibilityStatus", function(data){
+	if(!data || !data.lockScreenSupported){
+		$("#sleep-btn").addClass("hide");
+	}
+}, "json").fail(function(){
+	$("#sleep-btn").addClass("hide");
+});
 var KEEPALIVE_INTERVAL_MS = 4000;
 //电视端软键盘(带二维码，没有活跃控制端连着时靠它扫码)显示/隐藏：这里只
 //负责读取/切换状态并同步按键的高亮外观，具体"什么时候默认显示/隐藏"的
