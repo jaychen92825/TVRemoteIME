@@ -36,6 +36,16 @@ public class MainActivity extends Activity implements View.OnClickListener {
     private Button btnSetIME;
     private EditText testInputText;
     private volatile boolean checkingUpdate = false;
+    //下面三个字段配合refreshStatus()识别"状态真的发生了变化"，而不是在
+    //onClick里跳系统设置/选择器之后立刻同步检查——那些跳转都是异步的，
+    //点击的瞬间用户还什么都没做，同步检查到的必然还是旧状态。
+    private boolean statusInitialized = false;
+    private boolean lastEnabled = false;
+    private boolean lastIsDefault = false;
+    //"设为默认"按钮在输入法还没启用时，会先跳去启用、标记这个字段，等
+    //用户设置完返回、真的变成已启用但还不是默认时，自动帮着弹一次选择
+    //默认输入法的对话框，不用用户自己再点一次"设为默认"。
+    private boolean pendingAutoShowPicker = false;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -77,24 +87,19 @@ public class MainActivity extends Activity implements View.OnClickListener {
         switch (v.getId()){
             case R.id.btnUseIME:
                 openInputMethodSettings();
-                if(Environment.isEnableIME(this)){
-                    Environment.toast(getApplicationContext(), "太棒了，您已经激活启用了" + getString(R.string.keyboard_name) +"输入法！");
-                }
                 break;
             case R.id.btnSetIME:
                 if(!Environment.isEnableIME(this)) {
                     Environment.toast(getApplicationContext(), "抱歉，请您先激活启用" + getString(R.string.keyboard_name) +"输入法！");
+                    //跳系统设置页是异步的，用户这会儿还没操作，不可能立刻就变成
+                    //已启用——真正该弹选择默认输入法对话框的时机是用户设置完
+                    //返回本页之后，标记一下交给onResume/refreshStatus里处理，
+                    //不用再逼用户回来后自己重新点一次"设为默认"。
+                    pendingAutoShowPicker = true;
                     openInputMethodSettings();
-                    if(!Environment.isEnableIME(this)) return;
+                    return;
                 }
-                try {
-                    ((InputMethodManager) getApplicationContext().getSystemService(Context.INPUT_METHOD_SERVICE)).showInputMethodPicker();
-                }catch (Exception ignored) {
-                    Environment.toast(getApplicationContext(), "抱歉，无法设置为系统默认输入法，请手动启动服务！");
-                }
-                if(Environment.isDefaultIME(this)){
-                    Environment.toast(getApplicationContext(), "太棒了，" + getString(R.string.keyboard_name) +"已是系统默认输入法！");
-                }
+                showInputMethodPickerSafely();
                 break;
             case R.id.btnStartService:
                 startService(new Intent(IMEService.ACTION));
@@ -129,9 +134,37 @@ public class MainActivity extends Activity implements View.OnClickListener {
             Environment.toast(getApplicationContext(), "抱歉，无法激活启用输入法，请手动启动服务！");
         }
     }
+    private void showInputMethodPickerSafely(){
+        try {
+            ((InputMethodManager) getApplicationContext().getSystemService(Context.INPUT_METHOD_SERVICE)).showInputMethodPicker();
+        }catch (Exception ignored) {
+            Environment.toast(getApplicationContext(), "抱歉，无法设置为系统默认输入法，请手动启动服务！");
+        }
+    }
     private void refreshStatus(){
         boolean enabled = Environment.isEnableIME(this);
         boolean isDefault = Environment.isDefaultIME(this);
+
+        //"太棒了"这两条提示只在状态真的从false变成true时弹一次——不是每次
+        //刷新只要为true就弹，否则光是切到后台再切回来、什么都没做，也会
+        //重新提示一遍。statusInitialized之前(App刚打开的第一次刷新)不弹，
+        //避免把"之前就已经启用/已是默认"的历史状态当成刚刚达成的成就。
+        if(statusInitialized){
+            if(enabled && !lastEnabled){
+                Environment.toast(getApplicationContext(), "太棒了，您已经激活启用了" + getString(R.string.keyboard_name) +"输入法！");
+            }
+            if(isDefault && !lastIsDefault){
+                Environment.toast(getApplicationContext(), "太棒了，" + getString(R.string.keyboard_name) +"已是系统默认输入法！");
+            }
+        }
+        if(pendingAutoShowPicker && enabled && !isDefault){
+            pendingAutoShowPicker = false;
+            showInputMethodPickerSafely();
+        }
+        statusInitialized = true;
+        lastEnabled = enabled;
+        lastIsDefault = isDefault;
+
         imeEnabledStatusView.setText(enabled ? "已启用" : "未启用");
         imeEnabledStatusView.setTextColor(getResources().getColor(enabled ? R.color.status_ok : R.color.text_secondary));
         imeDefaultStatusView.setText(isDefault ? "已是默认" : "未设默认");
