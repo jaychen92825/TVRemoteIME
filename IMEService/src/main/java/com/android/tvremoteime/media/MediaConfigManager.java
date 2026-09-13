@@ -65,6 +65,7 @@ public class MediaConfigManager {
         if (config == null) return result;
         JSONArray sites = config.optJSONArray("sites");
         if (sites == null) return result;
+        String defaultSpider = config.optString("spider");
         for (int i = 0; i < sites.length(); i++) {
             JSONObject item = sites.optJSONObject(i);
             if (item == null) continue;
@@ -73,10 +74,18 @@ public class MediaConfigManager {
             source.name = item.optString("name", source.key);
             source.type = item.optInt("type", 0);
             source.api = item.optString("api");
+            source.spider = item.optString("jar", defaultSpider);
+            source.ext = readExt(item);
             source.searchable = item.optInt("searchable", 1) != 0;
             result.add(source);
         }
         return result;
+    }
+
+    private static String readExt(JSONObject item) {
+        Object ext = item.opt("ext");
+        if (ext == null || JSONObject.NULL.equals(ext)) return "";
+        return ext.toString();
     }
 
     private SharedPreferences prefs() {
