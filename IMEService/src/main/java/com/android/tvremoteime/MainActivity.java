@@ -11,6 +11,7 @@ import android.support.v4.content.FileProvider;
 import android.view.View;
 import android.view.Window;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -31,6 +32,9 @@ public class MainActivity extends Activity implements View.OnClickListener {
     private EditText dlnaNameText;
     private EditText accessCodeText;
     private TextView updateStatusView;
+    private View manualStartRow;
+    private Button btnSetIME;
+    private EditText testInputText;
     private volatile boolean checkingUpdate = false;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,6 +49,9 @@ public class MainActivity extends Activity implements View.OnClickListener {
         dlnaNameText = this.findViewById(R.id.etDLNAName);
         accessCodeText = this.findViewById(R.id.etAccessCode);
         updateStatusView = this.findViewById(R.id.tvUpdateStatus);
+        manualStartRow = this.findViewById(R.id.manualStartRow);
+        btnSetIME = this.findViewById(R.id.btnSetIME);
+        testInputText = this.findViewById(R.id.etTestInput);
 
         this.setTitle(this.getResources().getString( R.string.app_name) + "  V" + AppPackagesHelper.getCurrentPackageVersion(this));
         ((TextView)findViewById(R.id.tvVersion)).setText("V" + AppPackagesHelper.getCurrentPackageVersion(this));
@@ -129,6 +136,16 @@ public class MainActivity extends Activity implements View.OnClickListener {
         imeEnabledStatusView.setTextColor(getResources().getColor(enabled ? R.color.status_ok : R.color.text_secondary));
         imeDefaultStatusView.setText(isDefault ? "已是默认" : "未设默认");
         imeDefaultStatusView.setTextColor(getResources().getColor(isDefault ? R.color.status_ok : R.color.text_secondary));
+
+        //已经是默认输入法时"手动启动"这个兜底按钮就真用不上了（它自己的说明
+        //文字也写着是"设置失败时"才用得到），一直显示只是让页面看起来还有一步
+        //没做完。隐藏的同时要把原本指向它的D-pad焦点链路(nextFocusUp/Down)
+        //也一起改到隐藏后的前后控件上——遥控器场景下没有触屏/鼠标，指向一个
+        //GONE掉的View会导致这个方向直接焦点搜索失败，而不是自动跳过它。
+        boolean showManualStart = !isDefault;
+        manualStartRow.setVisibility(showManualStart ? View.VISIBLE : View.GONE);
+        btnSetIME.setNextFocusDownId(showManualStart ? R.id.btnStartService : R.id.etTestInput);
+        testInputText.setNextFocusUpId(showManualStart ? R.id.btnStartService : R.id.btnSetIME);
 
         String address = RemoteServer.getServerAddress(this);
         String accessCode = Environment.getAccessCode(this);
