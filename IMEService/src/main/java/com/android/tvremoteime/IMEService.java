@@ -571,7 +571,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 						if(helpDialog != null && helpDialog.isShown()){
 							helpDialog.setVisibility(View.GONE);
 						}else {
-							this.finishInput();
+							collapseKeyboardView();
 						}
 						return true;
 					}
@@ -633,6 +633,24 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		//this.onFinishInputView(true);
 		//this.onFinishCandidatesView(true);
 	}
+	//遥控器返回键、键盘上的收起按钮(不管是遥控器OK键点还是触屏点)三个
+	//入口都要"收起键盘"，之前各自零散地写hideWindowByKey+finishInput()，
+	//还漏过其中一两处——但即使三处都补全也发现还是会被弹回来：真正的
+	//原因是onEvaluateInputViewShown()依赖的Environment.isKeyboardViewVisible()
+	//在没有显式持久化偏好、且当前没有活跃控制端客户端时，默认就是"应该
+	//显示"。hideWindowByKey只能让"这一次"评估返回false，是个一次性的
+	//豁免，不会改变这个默认值本身——只要后面任何原因(不一定是用户操作，
+	//系统内部也可能重新计算一次可见性)重新问一次"现在该不该显示"，
+	//答案又变回默认的"该显示"，键盘就又弹回来了，表现就是"怎么按都收
+	//不起来"。这里改成先把这个选择持久化成"不显示"(跟控制端网页上
+	//"显示/隐藏电视软键盘"开关是同一个存储项，语义完全一致：用户主动
+	//表达了"现在不需要软键盘")，再走flag+finishInput()这条已知能让
+	//当次调用立即隐藏的路径——两者缺一都只能收起一瞬间又弹回来。
+	private void collapseKeyboardView(){
+		Environment.setKeyboardViewVisible(this, false);
+		hideWindowByKey = true;
+		finishInput();
+	}
 	//键盘上40多个按键全部共用同一份@drawable/key(或key_on/key_off)背景
 	//资源(通过btn_input_style的android:background，或者这里手动
 	//setBackgroundResource指定)。Android对完全相同的drawable资源请求
@@ -670,8 +688,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 				setKeyBackground(v, capsOn ? R.drawable.key_pressed_on : R.drawable.key_pressed_off);
 				break;
 			case R.id.btnClose:
-				this.hideWindowByKey = true;
-				this.finishInput();
+				collapseKeyboardView();
 				return;
 			default:
 				setKeyBackground(v, R.drawable.key_pressed);
@@ -700,23 +717,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	private void clickButton(View v, boolean resetCapsButtonState){
 		if(v instanceof Button){
 			if(v.getId() == R.id.btnClose){
-				//直接touch点击这个按钮走的是这条路径(而不是遥控器OK键走的
-				//clickButtonByKey，那边是在onKeyDown按键事件分发栈里直接
-				//同步调用，已经验证过没问题)。这里补上hideWindowByKey之后
-				//还是收不起来——怀疑是触摸事件分发(View.performClick那一整套
-				//调用栈)本身在点击处理完之后还有后续逻辑，会把刚设置好的
-				//隐藏状态覆盖回去，这跟按键事件分发是两条不同的系统调用栈，
-				//没法直接照搬。改成用handler.post()把真正的隐藏动作丢到
-				//当前这次触摸事件完全处理完、调用栈弹出之后再执行，跟
-				//refreshKeyboardViewVisibility()里"控制端发指令强制隐藏"
-				//用的是同一个思路。
-				this.hideWindowByKey = true;
-				handler.post(new Runnable() {
-					@Override
-					public void run() {
-						finishInput();
-					}
-				});
+				collapseKeyboardView();
 			}else {
 				commitText(((Button) v).getText().toString());
 			}
