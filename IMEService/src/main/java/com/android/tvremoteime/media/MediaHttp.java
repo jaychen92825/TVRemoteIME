@@ -6,8 +6,12 @@ import com.android.tvremoteime.IMEService;
 
 import org.apache.http.util.CharArrayBuffer;
 
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.IDN;
 import java.net.HttpURLConnection;
@@ -46,6 +50,46 @@ public class MediaHttp {
                 return buffer.toString();
             } finally {
                 reader.close();
+            }
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    public static File downloadRequired(String uri, File file) throws Exception {
+        HttpURLConnection conn = null;
+        try {
+            URL url = normalizeUrl(uri);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(12000);
+            conn.setReadTimeout(30000);
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Accept", "application/java-archive, application/octet-stream, */*");
+            conn.setRequestProperty("Accept-Encoding", "identity");
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 TVRemoteIME Media Browser");
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 300) throw new IOException("HTTP " + code);
+            File parent = file.getParentFile();
+            if (parent != null && !parent.exists()) parent.mkdirs();
+            InputStream input = new BufferedInputStream(conn.getInputStream());
+            FileOutputStream output = new FileOutputStream(file);
+            try {
+                byte[] buffer = new byte[16384];
+                int read;
+                long total = 0;
+                while ((read = input.read(buffer)) != -1) {
+                    output.write(buffer, 0, read);
+                    total += read;
+                }
+                output.flush();
+                if (total == 0) throw new IOException("返回内容为空");
+                return file;
+            } finally {
+                try {
+                    output.close();
+                } finally {
+                    input.close();
+                }
             }
         } finally {
             if (conn != null) conn.disconnect();

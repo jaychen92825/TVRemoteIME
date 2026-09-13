@@ -3,7 +3,6 @@ package com.android.tvremoteime.media;
 import android.net.Uri;
 import android.text.TextUtils;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -69,30 +68,8 @@ public class Type0SourceAdapter {
         String body = MediaHttp.get(url);
         if (TextUtils.isEmpty(body)) return new ArrayList<MediaItem>();
         String trimmed = body.trim();
-        if (trimmed.startsWith("{") || trimmed.startsWith("[")) return parseJson(trimmed);
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) return MediaVodParser.parseJson(trimmed, source);
         return parseXml(trimmed);
-    }
-
-    private List<MediaItem> parseJson(String body) throws Exception {
-        ArrayList<MediaItem> result = new ArrayList<MediaItem>();
-        JSONObject root = body.startsWith("[") ? new JSONObject().put("list", new JSONArray(body)) : new JSONObject(body);
-        JSONArray list = root.optJSONArray("list");
-        if (list == null) list = root.optJSONArray("data");
-        if (list == null) return result;
-        for (int i = 0; i < list.length(); i++) {
-            JSONObject obj = list.optJSONObject(i);
-            if (obj == null) continue;
-            MediaDetail item = new MediaDetail();
-            fillCommon(item, obj.optString("vod_id", obj.optString("id")),
-                    obj.optString("vod_name", obj.optString("name")),
-                    obj.optString("vod_pic", obj.optString("pic")),
-                    obj.optString("vod_remarks", obj.optString("remarks")),
-                    obj.optString("vod_year"), obj.optString("type_name"),
-                    obj.optString("vod_content", obj.optString("content")));
-            parseEpisodes(item, obj.optString("vod_play_url"));
-            result.add(item);
-        }
-        return result;
     }
 
     private List<MediaItem> parseXml(String body) throws Exception {
@@ -104,45 +81,26 @@ public class Type0SourceAdapter {
             if (!(node instanceof Element)) continue;
             Element video = (Element) node;
             MediaDetail item = new MediaDetail();
-            fillCommon(item, text(video, "id"), text(video, "name"), text(video, "pic"),
+            MediaVodParser.fillCommon(source, item, text(video, "id"), text(video, "name"), text(video, "pic"),
                     text(video, "note"), text(video, "year"), text(video, "type"), text(video, "des"));
-            parseEpisodes(item, playText(video));
+            parseXmlEpisodes(item, video);
             result.add(item);
         }
         return result;
     }
 
-    private void fillCommon(MediaItem item, String id, String name, String pic, String remark, String year, String type, String desc) {
-        item.sourceKey = source.key;
-        item.sourceName = source.name;
-        item.id = id;
-        item.name = name;
-        item.pic = pic;
-        item.remark = remark;
-        item.year = year;
-        item.type = type;
-        item.desc = desc == null ? "" : desc.replaceAll("<[^>]+>", "").trim();
-    }
-
-    private void parseEpisodes(MediaDetail item, String playList) {
-        if (TextUtils.isEmpty(playList)) return;
-        String firstLine = playList.split("#\\$#", 2)[0];
-        String[] episodes = firstLine.split("#");
-        for (int i = 0; i < episodes.length; i++) {
-            String raw = episodes[i];
-            if (TextUtils.isEmpty(raw)) continue;
-            MediaEpisode episode = new MediaEpisode();
-            int p = raw.indexOf('$');
-            episode.name = p > 0 ? raw.substring(0, p) : "第" + (i + 1) + "集";
-            episode.playId = p > 0 ? raw.substring(p + 1) : raw;
-            item.episodes.add(episode);
-        }
-    }
-
-    private String playText(Element video) {
+    private void parseXmlEpisodes(MediaDetail item, Element video) {
         NodeList dds = video.getElementsByTagName("dd");
-        if (dds.getLength() > 0) return dds.item(0).getTextContent();
-        return text(video, "dl");
+        if (dds.getLength() == 0) {
+            MediaVodParser.parseEpisodeGroup(item, "", text(video, "dl"));
+            return;
+        }
+        for (int i = 0; i < dds.getLength(); i++) {
+            Node node = dds.item(i);
+            if (!(node instanceof Element)) continue;
+            Element dd = (Element) node;
+            MediaVodParser.parseEpisodeGroup(item, dd.getAttribute("flag"), dd.getTextContent());
+        }
     }
 
     private String text(Element parent, String tag) {

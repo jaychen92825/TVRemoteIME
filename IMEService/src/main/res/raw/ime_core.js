@@ -275,7 +275,7 @@ function renderMediaSources(data){
 	mediaSources = data.sources || [];
 	$('#mediaConfigUrl').val(data.url || '');
 	if(!data.url){
-		mediaMessage('输入配置 URL 后连接。第一阶段支持 type-0 API source。');
+		mediaMessage('输入配置 URL 后连接。支持 type-0 API 和 type-3 csp jar 源。');
 	}else{
 		mediaMessage('已加载 '+(data.totalSources || 0)+' 个源，支持 '+(data.supportedSources || 0)+' 个，暂未支持 '+(data.unsupportedSources || 0)+' 个。');
 	}
@@ -296,7 +296,7 @@ function loadMediaHome(){
 function renderMediaGrid(items){
 	var html = [];
 	if(!items.length){
-		html.push('<div class="media-empty">没有可展示内容。可以先搜索片名，或换一个支持 type-0 API 的配置源。</div>');
+		html.push('<div class="media-empty">没有可展示内容。可以先搜索片名，或换一个支持的配置源。</div>');
 	}else{
 		for(var i=0;i<items.length;i++){
 			var item = items[i];
@@ -318,6 +318,7 @@ function searchMedia(){
 	$('#mediaDetail').addClass('hide').empty();
 	$('#mediaGrid').html('<div class="media-empty">正在搜索…</div>');
 	$.get('/media/search', {q:q}, function(data){
+		if(data.message) mediaMessage(data.message);
 		renderMediaGrid(data.items || []);
 	}, 'json');
 }
@@ -339,16 +340,16 @@ function loadMediaDetail(sourceKey, id){
 		html.push('<div class="media-episodes">');
 		for(var i=0;i<(item.episodes || []).length;i++){
 			var ep = item.episodes[i];
-			html.push('<div class="media-episode" data-source="'+escapeHtml(item.sourceKey)+'" data-playid="'+escapeHtml(ep.playId)+'">'+escapeHtml(ep.name)+'</div>');
+			html.push('<div class="media-episode" data-source="'+escapeHtml(item.sourceKey)+'" data-playid="'+escapeHtml(ep.playId)+'" data-flag="'+escapeHtml(ep.flag || '')+'">'+escapeHtml((ep.flag ? ep.flag+' · ' : '')+ep.name)+'</div>');
 		}
 		if(!(item.episodes || []).length) html.push('<div class="media-empty">这个 source 没有返回可播放剧集。</div>');
 		html.push('</div></div></div>');
 		$('#mediaDetail').html(html.join(''));
 	}, 'json');
 }
-function playMediaEpisode(sourceKey, playId){
+function playMediaEpisode(sourceKey, flag, playId){
 	mediaMessage('正在解析并发送到电视播放…');
-	$.post('/media/play', {sourceKey:sourceKey, playId:playId, useSystem:$('#playUseSystem')[0] && $('#playUseSystem')[0].checked}, function(data){
+	$.post('/media/play', {sourceKey:sourceKey, flag:flag, playId:playId, useSystem:$('#playUseSystem')[0] && $('#playUseSystem')[0].checked}, function(data){
 		if(data && data.success === false){
 			mediaMessage(data.message || '播放失败');
 		}else{
@@ -376,7 +377,7 @@ $('#mediaGrid').on('click', '.media-card', function(){
 	loadMediaDetail($(this).attr('data-source'), $(this).attr('data-id'));
 });
 $('#mediaDetail').on('click', '.media-episode', function(){
-	playMediaEpisode($(this).attr('data-source'), $(this).attr('data-playid'));
+	playMediaEpisode($(this).attr('data-source'), $(this).attr('data-flag'), $(this).attr('data-playid'));
 });
 $("#btnEnter").on("click", function(){
 	vibrateShort();
