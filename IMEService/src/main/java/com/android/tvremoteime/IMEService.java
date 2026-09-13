@@ -805,22 +805,23 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	private void showHelpDialog(){
 		if(mServer == null) return;
 
-        //地址(mDNS域名/IP)本身在一次IME进程存活期间不会变，只需要算一次、
-        //缓存在addressView文字里，用它的文字是否为空当作"算过没有"的标记，
-        //跟MainActivity的"打开手机遥控界面"卡片是同一个格式：不区分"固定
-        //地址"/IP的技术差异，统一用"或者"连接两个可尝试的地址，都去掉
-        //http://前缀和结尾斜杠，展示成用户实际会敲的样子。
-        if(addressView.getText().length() == 0) {
-            addressView.setText(Environment.forDisplay(MDnsHelper.getAddress())
-                    + "\n或者\n" + Environment.forDisplay(mServer.getServerAddress()));
-        }
+        //之前这里假设"地址(mDNS域名/IP)本身在一次IME进程存活期间不会变"，
+        //只算一次、缓存在addressView文字里。但mDNS域名的探测/改名是异步的
+        //(见MDnsHelper)，键盘帮助弹窗完全可能在探测还没跑完时就被打开一次，
+        //缓存下来的就是还没生效的旧值；另外DLNA名称后缀现在改完会调用
+        //MDnsHelper.restart()，域名也可能在同一个IME进程存活期间就换了——
+        //两种情况缓存下来的文字都不会跟着更新。改成跟下面的口令一样每次
+        //弹窗都重新读，不再只算一次。跟MainActivity的"打开手机遥控界面"
+        //卡片是同一个展示格式：不区分"固定地址"/IP的技术差异，统一用
+        //"或者"连接两个可尝试的地址，都去掉http://前缀和结尾斜杠，展示成
+        //用户实际会敲的样子。
+        addressView.setText(Environment.forDisplay(MDnsHelper.getAddress())
+                + "\n或者\n" + Environment.forDisplay(mServer.getServerAddress()));
 
-        //口令不一样——用户完全可能在键盘弹窗还开着的同一个IME进程存活期间，
-        //切到MainActivity把口令从空改成非空(或者反过来)。如果跟上面地址
-        //一样只算一次、缓存下来，改完口令后再打开这个弹窗，密码栏该出现
-        //却不出现(或者该消失却还留着)，二维码里编码的登录口令也会是改
-        //之前的旧值，扫码登录会失败。所以口令相关的这部分每次弹窗都要
-        //重新读取，不跟地址共用那个"只算一次"的判断。
+        //口令同样每次弹窗都重新读取：用户完全可能在键盘弹窗还开着的同一个
+        //IME进程存活期间，切到MainActivity把口令从空改成非空(或者反过来)，
+        //缓存下来的话密码栏该出现却不出现(或者该消失却还留着)，二维码里
+        //编码的登录口令也会是改之前的旧值，扫码登录会失败。
         String address = mServer.getServerAddress();
         String accessCode = Environment.getAccessCode(this);
         //密码留空表示用户主动选择了"不需要密码登录"，这时不展示任何
