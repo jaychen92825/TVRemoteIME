@@ -86,7 +86,7 @@ public class MediaConfigManager {
     }
 
     private ConfigLoadResult parseConfigOrHtml(String url, String body) throws Exception {
-        JSONObject direct = parseConfig(body);
+        JSONObject direct = parseConfig(url, body);
         if (direct != null) return new ConfigLoadResult(url, direct);
 
         String trimmed = body.trim().toLowerCase();
@@ -94,19 +94,28 @@ public class MediaConfigManager {
             throw new Exception("配置内容不是有效的 TVBox JSON");
         }
 
-        for (String candidate : extractConfigUrls(url, body)) {
+        List<String> candidates = extractConfigUrls(url, body);
+        for (String candidate : candidates) {
             String candidateBody = MediaHttp.get(candidate);
             if (TextUtils.isEmpty(candidateBody)) continue;
-            JSONObject config = parseConfig(candidateBody);
+            JSONObject config = parseConfig(candidate, candidateBody);
             if (config != null) return new ConfigLoadResult(candidate, config);
         }
 
+        if (!candidates.isEmpty()) {
+            throw new Exception("已识别这是导航页，但自动加载候选接口失败；请直接复制页面里的空壳接口地址，例如：" + candidates.get(0));
+        }
         throw new Exception("这个地址返回的是网页，不是配置 JSON；请复制页面里“空壳接口”的真实配置地址后再连接。");
     }
 
-    private JSONObject parseConfig(String body) {
+    private JSONObject parseConfig(String url, String body) {
         if (TextUtils.isEmpty(body)) return null;
-        String trimmed = body.trim();
+        String trimmed;
+        try {
+            trimmed = MediaConfigDecoder.decode(url, body).trim();
+        } catch (Exception e) {
+            return null;
+        }
         if (!trimmed.startsWith("{")) return null;
         try {
             JSONObject config = new JSONObject(trimmed);
