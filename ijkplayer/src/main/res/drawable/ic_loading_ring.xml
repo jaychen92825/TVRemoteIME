@@ -2,14 +2,21 @@
 <!-- 加载动画用的基础图形：一个留了缺口的圆环(270°弧线)，配合外层
      loading_spinner.xml的animated-rotate连续旋转，看起来就是常见的
      那种"转圈"进度指示，而不是系统默认那个不成套的圆点样式。 -->
+<!-- CI在这个module构建时报错：build-time PNG generation(给API<21设备
+     生成静态PNG兜底)不支持fillColor/strokeColor直接引用颜色资源，只
+     支持vector根节点的android:tint这一个例外(会当成ColorFilter应用，
+     不需要烘焙进路径本身)。所以这里颜色配置挪到根节点的tint上，路径
+     自身的strokeColor换回占位用的纯色字面量，跟本session其它矢量图标
+     (ic_refresh.xml等)是同一个套路。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp"
     android:height="48dp"
     android:viewportWidth="48"
-    android:viewportHeight="48">
+    android:viewportHeight="48"
+    android:tint="@color/accent">
     <path
         android:pathData="M24,4 A20,20 0 1 1 4,24"
-        android:strokeColor="@color/accent"
+        android:strokeColor="#FF000000"
         android:strokeWidth="4"
         android:strokeLineCap="round"
         android:fillColor="#00000000" />
