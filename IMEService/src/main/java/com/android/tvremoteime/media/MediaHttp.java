@@ -7,6 +7,7 @@ import com.android.tvremoteime.IMEService;
 import org.apache.http.util.CharArrayBuffer;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.IDN;
 import java.net.HttpURLConnection;
@@ -15,6 +16,15 @@ import java.net.URL;
 
 public class MediaHttp {
     public static String get(String uri) {
+        try {
+            return getRequired(uri);
+        } catch (Exception e) {
+            Log.e(IMEService.TAG, "media http get failed: " + uri, e);
+            return null;
+        }
+    }
+
+    public static String getRequired(String uri) throws Exception {
         HttpURLConnection conn = null;
         try {
             URL url = normalizeUrl(uri);
@@ -26,7 +36,7 @@ public class MediaHttp {
             conn.setRequestProperty("Accept-Encoding", "identity");
             conn.setRequestProperty("User-Agent", "Mozilla/5.0 TVRemoteIME Media Browser");
             int code = conn.getResponseCode();
-            if (code < 200 || code >= 300) return null;
+            if (code < 200 || code >= 300) throw new IOException("HTTP " + code);
             BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
             try {
                 CharArrayBuffer buffer = new CharArrayBuffer(Math.max(4096, conn.getContentLength()));
@@ -37,9 +47,6 @@ public class MediaHttp {
             } finally {
                 reader.close();
             }
-        } catch (Exception e) {
-            Log.e(IMEService.TAG, "media http get failed: " + uri, e);
-            return null;
         } finally {
             if (conn != null) conn.disconnect();
         }

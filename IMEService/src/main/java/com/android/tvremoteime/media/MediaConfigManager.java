@@ -27,9 +27,7 @@ public class MediaConfigManager {
 
     public JSONObject loadFromUrl(String url) throws Exception {
         if (TextUtils.isEmpty(url)) throw new Exception("配置地址不能为空");
-        String body = MediaHttp.get(url);
-        if (TextUtils.isEmpty(body)) throw new Exception("配置下载失败");
-        ConfigLoadResult result = parseConfigOrHtml(url, body);
+        ConfigLoadResult result = loadConfigUrl(url, 0);
         SharedPreferences.Editor editor = prefs().edit();
         editor.putString(KEY_URL, result.url);
         editor.putString(KEY_CONFIG, result.config.toString());
@@ -85,9 +83,22 @@ public class MediaConfigManager {
         return context.getSharedPreferences(PREF, Context.MODE_PRIVATE);
     }
 
-    private ConfigLoadResult parseConfigOrHtml(String url, String body) throws Exception {
-        JSONObject direct = parseConfig(url, body);
-        if (direct != null) return new ConfigLoadResult(url, direct);
+    private ConfigLoadResult loadConfigUrl(String url, int depth) throws Exception {
+        if (depth > 3) throw new Exception("配置跳转层级过多");
+        String body;
+        try {
+            body = MediaHttp.getRequired(url);
+        } catch (Exception e) {
+            throw new Exception("配置下载失败：" + e.getMessage());
+        }
+        if (TextUtils.isEmpty(body)) throw new Exception("配置下载失败：返回内容为空");
+        return parseConfigOrHtml(url, body, depth);
+    }
+
+    private ConfigLoadResult parseConfigOrHtml(String url, String body, int depth) throws Exception {
+        JSONObject direct = parseJsonConfig(url, body);
+        ConfigLoadResult resolved = resolveConfigObject(url, direct, depth);
+        if (resolved != null) return resolved;
 
         String trimmed = body.trim().toLowerCase();
         if (!trimmed.startsWith("<!doctype") && !trimmed.startsWith("<html")) {
@@ -95,20 +106,41 @@ public class MediaConfigManager {
         }
 
         List<String> candidates = extractConfigUrls(url, body);
+        String lastError = "";
         for (String candidate : candidates) {
-            String candidateBody = MediaHttp.get(candidate);
-            if (TextUtils.isEmpty(candidateBody)) continue;
-            JSONObject config = parseConfig(candidate, candidateBody);
-            if (config != null) return new ConfigLoadResult(candidate, config);
+            try {
+                return loadConfigUrl(candidate, depth + 1);
+            } catch (Exception e) {
+                lastError = e.getMessage();
+            }
         }
 
         if (!candidates.isEmpty()) {
-            throw new Exception("已识别这是导航页，但自动加载候选接口失败；请直接复制页面里的空壳接口地址，例如：" + candidates.get(0));
+            throw new Exception("已识别这是导航页，但自动加载候选接口失败；请直接复制页面里的空壳接口地址，例如：" + candidates.get(0) + (TextUtils.isEmpty(lastError) ? "" : "。最后错误：" + lastError));
         }
         throw new Exception("这个地址返回的是网页，不是配置 JSON；请复制页面里“空壳接口”的真实配置地址后再连接。");
     }
 
-    private JSONObject parseConfig(String url, String body) {
+    private ConfigLoadResult resolveConfigObject(String url, JSONObject object, int depth) throws Exception {
+        if (object == null) return null;
+        if (object.optJSONArray("sites") != null) return new ConfigLoadResult(url, object);
+        JSONArray depots = object.optJSONArray("urls");
+        if (depots == null) return null;
+        for (int i = 0; i < depots.length(); i++) {
+            Object item = depots.opt(i);
+            String nextUrl = "";
+            if (item instanceof JSONObject) nextUrl = ((JSONObject) item).optString("url");
+            else if (item instanceof String) nextUrl = (String) item;
+            if (TextUtils.isEmpty(nextUrl)) continue;
+            try {
+                return loadConfigUrl(resolveUrl(url, nextUrl), depth + 1);
+            } catch (Exception ignored) {
+            }
+        }
+        throw new Exception("多仓配置里没有可加载的点播配置");
+    }
+
+    private JSONObject parseJsonConfig(String url, String body) {
         if (TextUtils.isEmpty(body)) return null;
         String trimmed;
         try {
@@ -118,8 +150,7 @@ public class MediaConfigManager {
         }
         if (!trimmed.startsWith("{")) return null;
         try {
-            JSONObject config = new JSONObject(trimmed);
-            return config.optJSONArray("sites") == null ? null : config;
+            return new JSONObject(trimmed);
         } catch (JSONException e) {
             return null;
         }
