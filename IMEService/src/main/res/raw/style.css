@@ -408,6 +408,17 @@ body {
 	background: var(--color-primary-soft);
 }
 
+/* center-btn自己也带.direction这个class(复用了方向键共同的定位/文字
+   居中样式)，会连带继承上面给方向键新加的.direction::before那个
+   220×220整圆大小、没有clip-path裁剪成扇形的高亮层——而center-btn
+   自己又有z-index:2把它连同这个超大::before一起顶到最上层，按下时
+   就变成一整块蓝色糊住了整个转盘，而不是只有中间那个小圆亮。
+   center-btn已经有自己直接生效的background高亮(上面这条规则，形状
+   就是它自身的圆形)，不需要再叠一层，这里关掉继承来的::before。 */
+.center-btn::before {
+	display: none;
+}
+
 /* 音量加/减以前是跟主页/返回/菜单同一竖排面板下面单独占一行的"药丸"形
    双按钮，改成跟电源/静音同一行的两个独立圆按钮后，省下来的这一整行
    垂直空间可以留给方向键圆盘和元素列表用，屏幕看起来没那么挤。 */
