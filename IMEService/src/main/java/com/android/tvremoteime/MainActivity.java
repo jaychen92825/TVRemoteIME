@@ -32,8 +32,6 @@ public class MainActivity extends Activity implements View.OnClickListener {
     private TextView imeDefaultStatusView;
     private EditText dlnaNameText;
     private EditText accessCodeText;
-    private View manualStartRow;
-    private Button btnSetIME;
     private volatile boolean checkingUpdate = false;
     //下面三个字段配合refreshStatus()识别"状态真的发生了变化"，而不是在
     //onClick里跳系统设置/选择器之后立刻同步检查——那些跳转都是异步的，
@@ -57,8 +55,6 @@ public class MainActivity extends Activity implements View.OnClickListener {
         imeDefaultStatusView = this.findViewById(R.id.tvIMEDefaultStatus);
         dlnaNameText = this.findViewById(R.id.etDLNAName);
         accessCodeText = this.findViewById(R.id.etAccessCode);
-        manualStartRow = this.findViewById(R.id.manualStartRow);
-        btnSetIME = this.findViewById(R.id.btnSetIME);
 
         this.setTitle(this.getResources().getString( R.string.app_name) + "  V" + AppPackagesHelper.getCurrentPackageVersion(this));
         ((TextView)findViewById(R.id.tvVersion)).setText("V" + AppPackagesHelper.getCurrentPackageVersion(this));
@@ -118,7 +114,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
                 if(!Environment.isDefaultIME(this)) {
                     if (AdbHelper.getInstance() == null) AdbHelper.createInstance();
                 }
-                Environment.toast(getApplicationContext(), "服务已手动启动，稍后可尝试访问控制端页面");
+                Environment.toast(getApplicationContext(), "服务已重启，稍后可尝试打开手机遥控界面");
                 break;
             case R.id.btnCheckUpdate:
                 checkForUpdate(true);
@@ -130,14 +126,14 @@ public class MainActivity extends Activity implements View.OnClickListener {
         try {
             this.startActivityForResult(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS), 0);
         }catch (Exception ignored){
-            Environment.toast(getApplicationContext(), "抱歉，无法激活启用输入法，请手动启动服务！");
+            Environment.toast(getApplicationContext(), "抱歉，无法激活启用输入法，请点击\"重启服务\"！");
         }
     }
     private void showInputMethodPickerSafely(){
         try {
             ((InputMethodManager) getApplicationContext().getSystemService(Context.INPUT_METHOD_SERVICE)).showInputMethodPicker();
         }catch (Exception ignored) {
-            Environment.toast(getApplicationContext(), "抱歉，无法设置为系统默认输入法，请手动启动服务！");
+            Environment.toast(getApplicationContext(), "抱歉，无法设置为系统默认输入法，请点击\"重启服务\"！");
         }
     }
     private void saveDLNAName(){
@@ -182,23 +178,24 @@ public class MainActivity extends Activity implements View.OnClickListener {
         imeDefaultStatusView.setText(isDefault ? "已是默认" : "未设默认");
         imeDefaultStatusView.setTextColor(getResources().getColor(isDefault ? R.color.status_ok : R.color.text_secondary));
 
-        //已经是默认输入法时"手动启动"这个兜底按钮就真用不上了，一直显示
-        //只是让页面看起来还有一步没做完。隐藏的同时要把原本指向它的D-pad
-        //焦点链路(nextFocusUp/Down)也一起改到隐藏后的前后控件上——遥控器
-        //场景下没有触屏/鼠标，指向一个GONE掉的View会导致这个方向直接焦点
-        //搜索失败，而不是自动跳过它。
-        boolean showManualStart = !isDefault;
-        manualStartRow.setVisibility(showManualStart ? View.VISIBLE : View.GONE);
-        btnSetIME.setNextFocusDownId(showManualStart ? R.id.btnStartService : R.id.etAccessCode);
-        accessCodeText.setNextFocusUpId(showManualStart ? R.id.btnStartService : R.id.btnSetIME);
-
         String address = RemoteServer.getServerAddress(this);
         String accessCode = Environment.getAccessCode(this);
-        //访问口令不再在这里重复展示一遍纯文字——下面就是可以直接编辑的
-        //访问口令输入框，两个地方各显示一遍同一个值没有必要。
-        addressView.setText(address + "\n固定地址：" + MDnsHelper.getAddress());
+        //之前分别标"固定地址"/IP地址，是在解释两者的技术差异(mDNS域名 vs
+        //局域网IP)，但用户不需要知道这个区别，只需要知道"输这个，不行就
+        //换下一个"。域名版好记，排在前面优先试；IP版当备选。地址本身也
+        //去掉了http://前缀和结尾的"/"——手机浏览器基本都不需要手动输
+        //协议头，展示成用户实际会敲的样子，而不是给一个技术上完整、但
+        //照抄会多打字符的URL。
+        addressView.setText(forDisplay(MDnsHelper.getAddress()) + "\n或者\n" + forDisplay(address));
         String loginUrl = address + "login?code=" + encodeParam(accessCode);
         qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(loginUrl, 130, 130));
+    }
+
+    private static String forDisplay(String url){
+        String result = url;
+        if(result.startsWith("http://")) result = result.substring("http://".length());
+        if(result.endsWith("/")) result = result.substring(0, result.length() - 1);
+        return result;
     }
 
     //访问口令现在支持自定义，可能包含&/=/空格等字符，拼进URL查询参数前必须编码
