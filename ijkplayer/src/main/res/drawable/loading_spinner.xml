@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- ProgressBar设成indeterminate并把这个设成indeterminateDrawable，
      只要ProgressBar在可见的view层级里就会一直自动转，不需要Java那边
-     手动控制启动/停止动画。 -->
-<animated-rotate xmlns:android="http://schemas.android.com/apk/res/android"
+     手动控制启动/停止动画——ProgressBar内部对设成indeterminateDrawable
+     的<rotate>图形有专门的自动持续旋转支持，不需要额外的Java代码。
+     之前用<animated-rotate>+framesCount/frameDuration实现同样的连续
+     旋转，但这两个属性在这个项目用的AAPT2工具链里被判定为"private"，
+     直接导致链接资源失败(见CI报错)，换成更基础、兼容性更好的<rotate>。 -->
+<rotate xmlns:android="http://schemas.android.com/apk/res/android"
     android:drawable="@drawable/ic_loading_ring"
     android:pivotX="50%"
     android:pivotY="50%"
-    android:framesCount="12"
-    android:frameDuration="60" />
+    android:fromDegrees="0"
+    android:toDegrees="360" />
