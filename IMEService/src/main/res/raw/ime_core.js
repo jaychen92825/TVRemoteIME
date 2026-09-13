@@ -471,15 +471,27 @@ $("div.tab").on("click", function(){
 	tabs.addClass("hide");
 	tabs.filter('[data-tab="' + o.attr('data-rel')+ '"]').removeClass("hide");
 	o.addClass('cur');
+	updateContainerWidth();
 })
 //方向键/元素列表这两个子Tab除了点标签切换，也支持在内容区左右滑动切换——
 //点两个小标签来回切总感觉要"精确瞄准"，直接在当前显示的面板上一划更顺手。
 var MODE_ORDER = ["dpad", "elements"];
+//"元素列表"子Tab用的是按屏幕坐标百分比换算的空间地图，容器越宽单个
+//元素能分到的像素越多，是全站唯一一个"越宽越有用"的视图——其它Tab
+//(按钮宫格/文件列表/dpad摇杆)都是照手机单手操作设计的，屏幕再宽也用不上，
+//没必要跟着一起解除.container的480px宽度上限。只在"输入遥控"Tab当前
+//可见、且子Tab正好是"元素列表"时才加宽，两个条件缺一都要还原。
+function updateContainerWidth(){
+	var onControlsTab = $('.tab.cur').attr('data-rel') === 'controls';
+	var onElementsMode = $('.mode-tab.active').attr('data-mode') === 'elements';
+	$('.container').toggleClass('wide-mode', onControlsTab && onElementsMode);
+}
 function switchMode(mode){
 	$(".mode-tab").removeClass("active");
 	$('.mode-tab[data-mode="' + mode + '"]').addClass("active");
 	$(".nav-mode").addClass("hide");
 	$('.nav-mode[data-mode="' + mode + '"]').removeClass("hide");
+	updateContainerWidth();
 	if(mode === "elements") loadScreenElements();
 }
 $(".mode-tab").on("click", function(){
@@ -914,3 +926,4 @@ if (sharedPlayUrl) {
 }
 showCurrentVersion();
 loadDeviceName();
+updateContainerWidth();

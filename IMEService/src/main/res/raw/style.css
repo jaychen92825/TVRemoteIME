@@ -147,6 +147,17 @@ body {
 	-webkit-overflow-scrolling: touch;
 }
 
+/* 元素列表的"文字地图"是全站唯一一个越宽越有用的视图——按钮/宫格类的
+   界面本来就是照手机单手操作设计的，屏幕再宽也不需要占满；但地图是按
+   电视屏幕坐标百分比换算的，容器越宽，每个元素实际能分到的像素就越多，
+   窄按钮该多大跟屏幕宽度无关，这个反而跟屏幕宽度直接挂钩。所以只在"输入
+   遥控"Tab下的"元素列表"子Tab显示时才解除480px的宽度上限(JS里的
+   updateContainerWidth根据当前Tab/子Tab状态切换这个class)，其它Tab不受
+   影响，还是照原来针对手机单手操作设计的宽度。 */
+.container.wide-mode {
+	max-width: none;
+}
+
 /* 左右各留15px，跟下面文字输入框/按键区域/文件传送区这些内容的边距对齐，
    4个Tab用flex:1平分这一整行宽度，刚好占满、不用再靠横向滚动看剩下的Tab。 */
 .tabs-row {
@@ -464,11 +475,18 @@ body {
    容器里，容器本身用aspect-ratio(JS里按屏幕分辨率宽高比设置)撑出跟电视
    画面同比例的高度——效果类似一张"文字版截图"，元素间的相对位置(谁在谁的
    上/下/左/右)能直接看出来，配合物理遥控器的方向键更好选。没有元素数据
-   (未启用/没识别到)的提示文案走正常文档流，不受absolute定位影响。 */
+   (未启用/没识别到)的提示文案走正常文档流，不受absolute定位影响。
+   max-height之前给的是固定420px——但浏览器算aspect-ratio盒子的尺寸时，
+   如果按"撑满容器宽度"算出来的高度会超过max-height，会反过来把宽度也
+   缩小到刚好不超高为止，宽度就不再跟着.container一起变宽了。.wide-mode
+   下.container能撑到接近整个显示器宽度，420px的高度上限换算回宽度只有
+   400来px，等于宽度扩展完全被这个高度上限吃掉、白做了。这里换成一个
+   正常分辨率下几乎不会触发的很宽松的值，真正的"内容太长"交给页面本身已有
+   的纵向滚动(.container的overflow-y:auto)处理，不再让它反过来限制宽度。 */
 .elements-list {
 	position: relative;
 	margin: 8px 15px 0;
-	max-height: 420px;
+	max-height: 3000px;
 	overflow: auto;
 	background: var(--color-bg);
 	border: 1px solid var(--color-border);
