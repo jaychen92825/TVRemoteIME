@@ -195,30 +195,24 @@
                     android:textSize="14sp"
                     android:text=""/>
             </LinearLayout>
-        </LinearLayout>
 
-        <!-- ③ 访问口令 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@drawable/bg_card"
-            android:padding="16dp"
-            android:layout_marginBottom="14dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="10dp"
-                android:text="③ 修改访问口令"
-                android:textColor="@color/accent"
-                android:textSize="17sp"
-                android:textStyle="bold"/>
+            <!-- 访问口令原来是独立的一个卡片，本身就是这张卡片里QR码/地址的
+                 一部分信息，单独起一节反而要把同一个口令看两遍（这里一遍纯
+                 文字展示，那边一遍在输入框里等修改）——合并成一行，展示和
+                 修改共用同一个输入框。 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginRight="10dp"
+                    android:text="访问口令"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"/>
                 <EditText
                     android:id="@+id/etAccessCode"
                     android:layout_width="0dp"
@@ -247,7 +241,7 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ④ 测试远程输入 -->
+        <!-- ③ 测试远程输入 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -260,7 +254,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="10dp"
-                android:text="④ 测试远程输入"
+                android:text="③ 测试远程输入"
                 android:textColor="@color/accent"
                 android:textSize="17sp"
                 android:textStyle="bold"/>
@@ -272,11 +266,10 @@
                 android:hint="点此，用手机在控制端输入试试"
                 android:textColor="@color/text_primary"
                 android:textColorHint="@color/text_secondary"
-                android:nextFocusUp="@id/btnStartService"
                 android:nextFocusDown="@id/etAccessCode"/>
         </LinearLayout>
 
-        <!-- ⑤ DLNA投屏名称 -->
+        <!-- ④ DLNA投屏名称 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -289,7 +282,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="10dp"
-                android:text="⑤ DLNA投屏名称"
+                android:text="④ DLNA投屏名称"
                 android:textColor="@color/accent"
                 android:textSize="17sp"
                 android:textStyle="bold"/>
@@ -325,7 +318,7 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ⑥ 检查更新 -->
+        <!-- ⑤ 检查更新 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -337,7 +330,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="10dp"
-                android:text="⑥ 检查更新"
+                android:text="⑤ 检查更新"
                 android:textColor="@color/accent"
                 android:textSize="17sp"
                 android:textStyle="bold"/>

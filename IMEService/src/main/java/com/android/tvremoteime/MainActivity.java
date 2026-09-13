@@ -182,9 +182,9 @@ public class MainActivity extends Activity implements View.OnClickListener {
 
         String address = RemoteServer.getServerAddress(this);
         String accessCode = Environment.getAccessCode(this);
-        addressView.setText(address
-                + "\n固定地址：" + MDnsHelper.getAddress()
-                + "\n访问口令：" + accessCode);
+        //访问口令不再在这里重复展示一遍纯文字——下面就是可以直接编辑的
+        //访问口令输入框，两个地方各显示一遍同一个值没有必要。
+        addressView.setText(address + "\n固定地址：" + MDnsHelper.getAddress());
         String loginUrl = address + "login?code=" + encodeParam(accessCode);
         qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(loginUrl, 130, 130));
     }
