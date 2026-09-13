@@ -147,13 +147,13 @@ body {
 	-webkit-overflow-scrolling: touch;
 }
 
-/* 元素列表的"文字地图"是全站唯一一个越宽越有用的视图——按钮/宫格类的
-   界面本来就是照手机单手操作设计的，屏幕再宽也不需要占满；但地图是按
-   电视屏幕坐标百分比换算的，容器越宽，每个元素实际能分到的像素就越多，
-   窄按钮该多大跟屏幕宽度无关，这个反而跟屏幕宽度直接挂钩。所以只在"输入
-   遥控"Tab下的"元素列表"子Tab显示时才解除480px的宽度上限(JS里的
-   updateContainerWidth根据当前Tab/子Tab状态切换这个class)，其它Tab不受
-   影响，还是照原来针对手机单手操作设计的宽度。 */
+/* 元素列表是全站唯一一个越宽越有用的视图——按钮/宫格类的界面本来就是照
+   手机单手操作设计的，屏幕再宽也不需要占满；但元素列表按"行"紧凑排布
+   (见.elements-row)，容器越宽，一行能并排塞下的元素就越多，行数、也就是
+   整个列表的高度反而跟着变矮。所以只在"输入遥控"Tab下的"元素列表"子Tab
+   显示时才解除480px的宽度上限(JS里的updateContainerWidth根据当前Tab/
+   子Tab状态切换这个class)，其它Tab不受影响，还是照原来针对手机单手操作
+   设计的宽度。 */
 .container.wide-mode {
 	max-width: none;
 }
@@ -471,47 +471,41 @@ body {
 	color: var(--color-text-secondary);
 }
 
-/* 每个元素按它在电视屏幕上的真实坐标百分比，用position:absolute摆在这个
-   容器里，容器本身用aspect-ratio(JS里按屏幕分辨率宽高比设置)撑出跟电视
-   画面同比例的高度——效果类似一张"文字版截图"，元素间的相对位置(谁在谁的
-   上/下/左/右)能直接看出来，配合物理遥控器的方向键更好选。没有元素数据
-   (未启用/没识别到)的提示文案走正常文档流，不受absolute定位影响。
-   max-height之前给的是固定420px——但浏览器算aspect-ratio盒子的尺寸时，
-   如果按"撑满容器宽度"算出来的高度会超过max-height，会反过来把宽度也
-   缩小到刚好不超高为止，宽度就不再跟着.container一起变宽了。.wide-mode
-   下.container能撑到接近整个显示器宽度，420px的高度上限换算回宽度只有
-   400来px，等于宽度扩展完全被这个高度上限吃掉、白做了。这里换成一个
-   正常分辨率下几乎不会触发的很宽松的值，真正的"内容太长"交给页面本身已有
-   的纵向滚动(.container的overflow-y:auto)处理，不再让它反过来限制宽度。 */
+/* 之前试过按元素在电视屏幕上的真实坐标百分比摆成一张等比例"文字版截图"，
+   实际用起来发现真实UI里元素之间的间距本来就比手机屏幕能塞下的密度稀疏
+   得多，等比例复原这些间距会把整个列表拉得很长、每个格子周围也显得空空
+   荡荡（像是文字自带了一圈很大的padding，其实是格子本身被拉大了）。改成
+   按"行"分组的紧凑排布：先按元素纵坐标是否有重叠分到同一行(JS里的
+   groupElementsIntoRows)，行内再按横坐标从左到右排序——同一行/第几行、
+   行内从左到右第几个，这些相对位置关系还在，配合遥控器方向键依然有参考
+   意义，但每个格子按文字内容天然大小紧凑排列，不再机械复刻真实像素间距，
+   整个列表尽量矮。 */
 .elements-list {
-	position: relative;
 	margin: 8px 15px 0;
-	max-height: 3000px;
-	overflow: auto;
-	background: var(--color-bg);
-	border: 1px solid var(--color-border);
-	border-radius: var(--radius-md);
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.elements-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
 }
 
 .element-item {
-	position: absolute;
-	box-sizing: border-box;
-	display: flex;
+	display: inline-flex;
 	align-items: center;
-	justify-content: center;
-	min-width: 20px;
-	min-height: 14px;
+	max-width: 100%;
 	background: var(--color-card-bg);
 	border: 1px solid var(--color-border);
 	border-left: 3px solid var(--color-border);
-	border-radius: 4px;
-	padding: 1px 3px;
-	font-size: 11px;
-	line-height: 1.25;
+	border-radius: var(--radius-sm);
+	padding: 5px 8px;
+	font-size: 13px;
+	line-height: 1.3;
 	color: var(--color-text);
 	cursor: pointer;
-	overflow: hidden;
-	text-align: center;
 	-webkit-user-select: none;
 	user-select: none;
 	-webkit-touch-callout: none;
@@ -521,10 +515,7 @@ body {
 .element-item span {
 	overflow: hidden;
 	text-overflow: ellipsis;
-	display: -webkit-box;
-	-webkit-line-clamp: 2;
-	-webkit-box-orient: vertical;
-	word-break: break-word;
+	white-space: nowrap;
 }
 
 /* 输入框/开关/勾选框/单选跟"点了直接触发动作"的普通按钮交互方式不一样，
@@ -532,7 +523,7 @@ body {
    细分的可点击容器保持默认边框颜色、不加图标。 */
 .element-type-icon {
 	flex: 0 0 auto;
-	margin-right: 2px;
+	margin-right: 3px;
 }
 
 .element-item.type-input {
@@ -557,7 +548,6 @@ body {
 
 .element-item:active {
 	background: var(--color-primary-soft);
-	z-index: 2;
 }
 
 .elements-hint {

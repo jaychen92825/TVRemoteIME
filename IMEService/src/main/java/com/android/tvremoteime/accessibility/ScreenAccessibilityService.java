@@ -91,18 +91,6 @@ public class ScreenAccessibilityService extends AccessibilityService {
     }
 
     /**
-     * 屏幕物理分辨率，配合ElementInfo里的绝对像素坐标，让控制端能把元素列表
-     * 按真实的屏幕位置摆成一张"文字版截图"，而不是纯按发现顺序排的一列文字——
-     * 位置摆对了，方向键在物理遥控器上要往哪按（上/下/左/右）才能挪到某个元素
-     * 才有参考意义。用DisplayMetrics（不是WindowManager.getRealSize，那个要
-     * API17+，这里minSdk还是14）取，跟getBoundsInScreen()是同一套绝对像素坐标系。
-     */
-    public int[] getScreenSize(){
-        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
-        return new int[]{metrics.widthPixels, metrics.heightPixels};
-    }
-
-    /**
      * 抓取当前屏幕上可以点的元素，按遍历顺序编号，供控制端展示成列表。
      */
     public synchronized List<ElementInfo> queryClickableElements(){

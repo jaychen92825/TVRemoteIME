@@ -541,11 +541,13 @@ $(".mode-tab").on("click", function(){
 //"设置-无障碍"页面的按钮（复用/runSystem，跟"应用管理"里的系统设置入口
 //是同一套机制）。
 //
-//列表按元素在电视屏幕上的真实坐标(left/top/right/bottom，服务端已经按屏幕
-//物理分辨率换算成百分比用)摆成一张"文字版截图"，而不是纯按发现顺序排的
-//一列文字——这样"这个元素在屏幕的左上/右下"这种位置关系一眼能看出来，
-//配合物理遥控器的方向键会更好选（比如看到目标在当前高亮项右边，就知道该按
-//遥控器的右键，而不是在一列不分位置的文字里瞎猜）。
+//列表按元素在电视屏幕上的真实坐标(left/top/right/bottom)分组成"行"：纵坐标
+//有重叠的算同一行，行内再按横坐标从左到右排——同一行/第几行、行内从左到右
+//第几个，这些相对位置关系还在，配合物理遥控器的方向键依然有参考意义。
+//(之前试过完全按真实像素坐标等比例摆成一张"文字版截图"，但真实UI里元素间
+//的间距往往比手机屏幕能塞下的密度稀疏得多，等比例复原会把列表拉得很长、
+//每个格子周围显得空空荡荡；改成只保留行列的相对顺序、每个格子按文字内容
+//天然大小紧凑排列，不追求像素级还原，整个列表能尽量矮。)
 //
 //输入框/开关/勾选框/单选这几类跟"点了直接触发动作"的普通按钮交互方式不
 //一样(点输入框大概率会弹出电视端软键盘，点开关/勾选框/单选是切换状态)，
@@ -564,12 +566,36 @@ var ELEMENT_TYPE_TITLE_TAGS = {
 	switch: "[开关] ",
 	radio: "[单选] "
 };
+//按纵坐标是否有重叠把元素分到同一行：排序后逐个扫描，只要当前元素的顶部
+//还落在"已经在这一行的元素们目前最靠下的底边"之上，就算同一行；否则另起
+//一行。行内按横坐标从左到右排。
+function groupElementsIntoRows(elements){
+	var sorted = elements.slice().sort(function(a, b){ return a.top - b.top; });
+	var rows = [];
+	var currentRow = [];
+	var currentRowBottom = -Infinity;
+	for(var i = 0; i < sorted.length; i++){
+		var el = sorted[i];
+		if(currentRow.length === 0 || el.top < currentRowBottom){
+			currentRow.push(el);
+			currentRowBottom = Math.max(currentRowBottom, el.bottom);
+		}else{
+			rows.push(currentRow);
+			currentRow = [el];
+			currentRowBottom = el.bottom;
+		}
+	}
+	if(currentRow.length) rows.push(currentRow);
+	for(var r = 0; r < rows.length; r++){
+		rows[r].sort(function(a, b){ return a.left - b.left; });
+	}
+	return rows;
+}
 function loadScreenElements(){
 	$("#elementsStatus").text("加载中…");
 	$.post("/screenElements", null, function(data){
 		var list = $("#elementsList");
 		list.empty();
-		list.css("aspect-ratio", "");
 		if(!data || !data.enabled){
 			$("#elementsStatus").text("无障碍服务未启用");
 			list.html('<div class="elements-hint">需要先在电视盒子上"设置-无障碍"里开启"' +
@@ -582,27 +608,19 @@ function loadScreenElements(){
 			list.html('<div class="elements-hint">当前屏幕没有识别到可点击元素，切换一下电视画面后点"刷新"再试试。</div>');
 			return;
 		}
-		$("#elementsStatus").text("已启用 · 共" + elements.length + "个元素 · 位置对应电视画面实际布局");
-		var screenWidth = data.screenWidth || 1920;
-		var screenHeight = data.screenHeight || 1080;
-		//手机屏幕比电视窄很多，按电视真实宽高比(比如16:9)换算出来的地图在手机上
-		//会很矮，紧挨着的几个小元素很容易挤在一起分不清。这里把竖直方向按固定
-		//倍数拉伸——左右位置(谁在谁左边/右边)保持完全精确，上下的相对先后顺序
-		//也不会变，只是纵向间距变宽松，不追求跟电视画面严格等比例。
-		var VERTICAL_STRETCH = 1.8;
-		list.css("aspect-ratio", screenWidth + " / " + (screenHeight * VERTICAL_STRETCH));
+		$("#elementsStatus").text("已启用 · 共" + elements.length + "个元素 · 按屏幕行列顺序排列");
+		var rows = groupElementsIntoRows(elements);
 		var html = [];
-		for(var i = 0; i < elements.length; i++){
-			var el = elements[i];
-			var icon = ELEMENT_TYPE_ICONS[el.type] || "";
-			var titleText = (ELEMENT_TYPE_TITLE_TAGS[el.type] || "") + el.label;
-			var leftPct = (el.left / screenWidth * 100).toFixed(2);
-			var topPct = (el.top / screenHeight * 100).toFixed(2);
-			var widthPct = Math.max((el.right - el.left) / screenWidth * 100, 0).toFixed(2);
-			var heightPct = Math.max((el.bottom - el.top) / screenHeight * 100, 0).toFixed(2);
-			html.push('<div class="element-item type-' + (el.type || 'item') + '" data-id="' + el.id +
-				'" title="' + escapeHtml(titleText) + '" style="left:' + leftPct + '%;top:' + topPct +
-				'%;width:' + widthPct + '%;height:' + heightPct + '%;">' + icon + '<span>' + escapeHtml(el.label) + '</span></div>');
+		for(var r = 0; r < rows.length; r++){
+			html.push('<div class="elements-row">');
+			for(var c = 0; c < rows[r].length; c++){
+				var el = rows[r][c];
+				var icon = ELEMENT_TYPE_ICONS[el.type] || "";
+				var titleText = (ELEMENT_TYPE_TITLE_TAGS[el.type] || "") + el.label;
+				html.push('<div class="element-item type-' + (el.type || 'item') + '" data-id="' + el.id +
+					'" title="' + escapeHtml(titleText) + '">' + icon + '<span>' + escapeHtml(el.label) + '</span></div>');
+			}
+			html.push('</div>');
 		}
 		list.html(html.join(""));
 	}, "json").fail(function(){
