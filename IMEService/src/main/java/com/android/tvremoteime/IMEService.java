@@ -686,7 +686,14 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 				}else{
 					setKeyBackground(v, R.drawable.key);
 				}
-				v.requestFocus();
+				//这个200ms之后的revert是异步的：如果用户按完这个键之后，
+				//在这200ms内已经用方向键挪到了别的键上(focusedView已经
+				//指向别的View)，这里绝不能再无条件v.requestFocus()把焦点
+				//抢回这个已经按过、早就该恢复成普通背景的旧键——那样做的
+				//直接后果就是"高亮明明该跟着挪到新按键上，却又跳回上一个
+				//按过的键，看起来像是高亮消不掉"。只有这个键仍然是当前
+				//真正要聚焦的键时，才需要重新申请一次焦点。
+				if(v == focusedView) v.requestFocus();
 			}
 		}, 200);
 	}
