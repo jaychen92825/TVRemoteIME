@@ -286,6 +286,11 @@ body {
 	background: var(--color-card-bg);
 	border: 1px solid var(--color-border);
 	border-radius: 50%;
+	/* 下面每个方向键的按下高亮用::before画成扇形，画的时候会先顶到
+	   220px整个正方形的四个角(圆外切正方形的角，在圆外)，靠这个
+	   overflow:hidden配合上面的border-radius把扇形裁成贴合圆盘边缘的
+	   真正扇形，不会露出方形的尖角。 */
+	overflow: hidden;
 	box-shadow: 0 2px 10px rgba(0,0,0,0.07);
 }
 
@@ -296,12 +301,37 @@ body {
 	justify-content: center;
 	color: #a8a8ae;
 	font-size: 16px;
-	transition: background 0.12s ease, color 0.12s ease;
+	transition: color 0.12s ease;
 }
 
 .direction.pressed {
-	background: var(--color-primary-soft);
 	color: var(--color-primary);
+}
+
+/* 之前按下的蓝色高亮直接扣在.direction这个命中矩形上——为了方便点击，
+   命中矩形本来就故意做得比箭头图标大一圈(比如左键是70×220的整条竖
+   条)，直接拿它当高亮背景，效果就是按一下弹出一大块方块，比箭头本身
+   大好几倍，生硬又粗糙。这里改用::before单独画高亮，形状永远是从
+   圆心出发、贴合两条对角线的90°扇形(跟↑→↓←四个方向直觉对应)，
+   跟命中矩形是两回事：命中范围完全不变(还是原来那个方便点的大矩形)，
+   只是"按下去该亮成什么形状"换成了跟箭头方向匹配的扇形，不再显得
+   比按键本身大。
+   ::before统一用220×220(跟.direction-btns整个圆盘一样大)+clip-path
+   画出扇形，四个方向各自靠left/top/right/bottom其中两个属性对齐到
+   圆盘的(0,0)原点(取值跟各自命中矩形所用的锚点属性保持一致)，这样
+   50% 50%这个clip-path坐标点在四个方向里都精确对应圆盘正中心。 */
+.direction::before {
+	content: "";
+	position: absolute;
+	width: 220px;
+	height: 220px;
+	background: transparent;
+	transition: background 0.12s ease;
+	pointer-events: none;
+}
+
+.direction.pressed::before {
+	background: var(--color-primary-soft);
 }
 
 .left-btn {
@@ -309,7 +339,12 @@ body {
 	height: 100%;
 	left: 0;
 	top: 0;
-	border-radius: 110px 0 0 110px;
+}
+
+.left-btn::before {
+	left: 0;
+	top: 0;
+	clip-path: polygon(50% 50%, 0% 100%, 0% 0%);
 }
 
 .right-btn {
@@ -317,7 +352,12 @@ body {
 	height: 100%;
 	right: 0;
 	top: 0;
-	border-radius: 0 110px 110px 0;
+}
+
+.right-btn::before {
+	right: 0;
+	top: 0;
+	clip-path: polygon(50% 50%, 100% 0%, 100% 100%);
 }
 
 .top-btn {
@@ -325,7 +365,12 @@ body {
 	height: 70px;
 	top: 0;
 	left: 0;
-	border-radius: 110px 110px 0 0;
+}
+
+.top-btn::before {
+	left: 0;
+	top: 0;
+	clip-path: polygon(50% 50%, 0% 0%, 100% 0%);
 }
 
 .bottom-btn {
@@ -333,7 +378,12 @@ body {
 	height: 70px;
 	bottom: 0;
 	left: 0;
-	border-radius: 0 0 110px 110px;
+}
+
+.bottom-btn::before {
+	left: 0;
+	bottom: 0;
+	clip-path: polygon(50% 50%, 100% 100%, 0% 100%);
 }
 
 .center-btn {
