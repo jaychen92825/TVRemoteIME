@@ -9,6 +9,7 @@ import com.android.tvremoteime.media.MediaDetail;
 import com.android.tvremoteime.media.MediaItem;
 import com.android.tvremoteime.media.MediaSource;
 import com.android.tvremoteime.media.Type0SourceAdapter;
+import com.android.tvremoteime.media.Type3SourceAdapter;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -67,15 +68,21 @@ public class MediaRequestProcesser implements RequestProcesser {
 
     private NanoHTTPD.Response searchResponse(String keyword) throws Exception {
         JSONArray items = new JSONArray();
+        String lastError = "";
         if (!TextUtils.isEmpty(keyword)) {
             for (MediaSource source : configManager.getSources()) {
                 if (!source.isSupported() || !source.searchable) continue;
-                addItems(items, new Type0SourceAdapter(source).search(keyword));
+                try {
+                    addItems(items, search(source, keyword));
+                } catch (Exception e) {
+                    lastError = e.getMessage();
+                }
                 if (items.length() >= 60) break;
             }
         }
         JSONObject obj = new JSONObject();
         obj.put("items", items);
+        if (items.length() == 0 && !TextUtils.isEmpty(lastError)) obj.put("message", lastError);
         return ok(obj);
     }
 
@@ -83,8 +90,7 @@ public class MediaRequestProcesser implements RequestProcesser {
         JSONObject obj = new JSONObject();
         JSONArray items = new JSONArray();
         if (source != null && source.isSupported() && (!requireSearchable || source.searchable)) {
-            Type0SourceAdapter adapter = new Type0SourceAdapter(source);
-            addItems(items, TextUtils.isEmpty(keyword) ? adapter.home() : adapter.search(keyword));
+            addItems(items, TextUtils.isEmpty(keyword) ? home(source) : search(source, keyword));
         }
         obj.put("items", items);
         return ok(obj);
@@ -92,7 +98,7 @@ public class MediaRequestProcesser implements RequestProcesser {
 
     private NanoHTTPD.Response detailResponse(String sourceKey, String id) throws Exception {
         MediaSource source = requireSource(sourceKey);
-        MediaDetail detail = new Type0SourceAdapter(source).detail(id);
+        MediaDetail detail = detail(source, id);
         if (detail == null) throw new Exception("未找到详情");
         JSONObject obj = new JSONObject();
         obj.put("item", detail.toJson());
@@ -101,13 +107,33 @@ public class MediaRequestProcesser implements RequestProcesser {
 
     private NanoHTTPD.Response playResponse(Map<String, String> params) throws Exception {
         MediaSource source = requireSource(params.get("sourceKey"));
-        String url = new Type0SourceAdapter(source).resolve(params.get("playId"));
+        String url = resolve(source, params.get("flag"), params.get("playId"));
         if (TextUtils.isEmpty(url)) throw new Exception("无法解析播放地址");
         VideoPlayHelper.playUrl(context, url, 0, "true".equalsIgnoreCase(params.get("useSystem")));
         JSONObject obj = new JSONObject();
         obj.put("success", true);
         obj.put("playUrl", url);
         return ok(obj);
+    }
+
+    private List<MediaItem> home(MediaSource source) throws Exception {
+        if (source.isType3Csp()) return new Type3SourceAdapter(context, source).home();
+        return new Type0SourceAdapter(source).home();
+    }
+
+    private List<MediaItem> search(MediaSource source, String keyword) throws Exception {
+        if (source.isType3Csp()) return new Type3SourceAdapter(context, source).search(keyword);
+        return new Type0SourceAdapter(source).search(keyword);
+    }
+
+    private MediaDetail detail(MediaSource source, String id) throws Exception {
+        if (source.isType3Csp()) return new Type3SourceAdapter(context, source).detail(id);
+        return new Type0SourceAdapter(source).detail(id);
+    }
+
+    private String resolve(MediaSource source, String flag, String playId) throws Exception {
+        if (source.isType3Csp()) return new Type3SourceAdapter(context, source).resolve(flag, playId);
+        return new Type0SourceAdapter(source).resolve(playId);
     }
 
     private MediaSource firstSupported() {
