@@ -7,7 +7,12 @@
     <dimen name="key_height_zhuyin">42dip</dimen>
     <dimen name="candidate_font_height">28sp</dimen>
     <dimen name="candidates_view_height">42sp</dimen>
-    <dimen name="qrWH">300dp</dimen>
+    <!-- 之前帮助弹窗是QR在上、地址文字在下的竖排布局，300dp的QR只需要
+         撑满一个独立的320dp宽容器，不影响别处。这次改成QR和地址文字左右
+         并排(跟MainActivity"打开手机遥控界面"卡片一个思路)后忘了把这个
+         尺寸一起改小，300dp的QR在并排布局里几乎占满整行，地址文字被挤
+         成一条缝。缩到150dp，跟旁边文字大致五五分。 -->
+    <dimen name="qrWH">150dp</dimen>
     <dimen name="kb_key_height">38dp</dimen>
     <dimen name="kb_key_margin_top">6dp</dimen>
 </resources>
