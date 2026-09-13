@@ -8,14 +8,16 @@ import org.apache.http.util.CharArrayBuffer;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.net.IDN;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 
 public class MediaHttp {
     public static String get(String uri) {
         HttpURLConnection conn = null;
         try {
-            URL url = new URL(uri);
+            URL url = normalizeUrl(uri);
             conn = (HttpURLConnection) url.openConnection();
             conn.setConnectTimeout(12000);
             conn.setReadTimeout(18000);
@@ -41,5 +43,15 @@ public class MediaHttp {
         } finally {
             if (conn != null) conn.disconnect();
         }
+    }
+
+    private static URL normalizeUrl(String uri) throws Exception {
+        URL url = new URL(uri);
+        String host = url.getHost();
+        if (host == null) return url;
+        String asciiHost = IDN.toASCII(host);
+        if (host.equals(asciiHost)) return url;
+        URI normalized = new URI(url.getProtocol(), null, asciiHost, url.getPort(), url.getPath(), url.getQuery(), url.getRef());
+        return normalized.toURL();
     }
 }
