@@ -13,12 +13,24 @@ import javax.jmdns.JmDNS;
 import javax.jmdns.ServiceInfo;
 
 /**
- * 在局域网内注册一个固定的mDNS主机名（remote.local），这样盒子的局域网IP
- * 因DHCP重新分配而改变时，控制端书签（http://remote.local:端口/）依旧可用，
- * 不需要每次都重新扫描二维码。如果同一局域网内已有别的设备也叫这个名字，
- * JmDNS会按mDNS协议自动探测冲突并加数字后缀（如remote-2.local）——这一步
- * 是JmDNS自己异步完成的，getAddress()返回的地址会反映探测结束后实际生效
- * 的那个名字，不是永远显示未经冲突处理的"remote.local"字面量。
+ * 在局域网内注册一个固定的mDNS主机名，这样盒子的局域网IP因DHCP重新分配而
+ * 改变时，控制端书签依旧可用，不需要每次都重新扫描二维码。
+ *
+ * 只用固定的"remote"这一个名字的话，同一局域网内多台设备会全部抢注同一个
+ * 名字：mDNS协议本身能探测到这种冲突、给后到的设备自动加数字后缀(比如
+ * remote-2.local)，但具体谁被改成"-2"、谁还是原名，取决于设备开机/注册的
+ * 先后顺序——用户没法提前知道、只能每次都重新查一遍当前地址，做不到"直接
+ * 盲打地址"。
+ *
+ * 这里改成优先复用用户已经在设置里为这台设备起的DLNA名称后缀(多台设备时
+ * 用户本来就会给每台起一个不同的、好记的名字，比如"卧室"/"客厅"，这本身
+ * 就是为了在DLNA设备列表里区分它们)：取这个后缀里的ASCII字母数字部分拼进
+ * 主机名(比如后缀是"bedroom"，主机名就是remote-bedroom)，全过滤掉的话
+ * (比如后缀是纯中文、或者压根没设置)退回固定的"remote"。这样只要用户给
+ * 不同设备起了不同(且至少含一些ASCII字符)的名字，地址就是稳定、可预测、
+ * 能直接记住盲打出来的，不再依赖谁先抢注成功；两台设备万一还是撞了同一个
+ * 后缀，也不会真的连不上——mDNS自己的探测/改名兜底依然在，只是变成小概率
+ * 才会触发的最后一道保险，不再是每次都要看运气的默认情况。
  */
 public class MDnsHelper {
     private static final String TAG = "MDnsHelper";
@@ -60,7 +72,8 @@ public class MDnsHelper {
                         Log.i(TAG, "未获取到有效局域网IP，跳过mDNS注册。");
                         return;
                     }
-                    JmDNS instance = JmDNS.create(InetAddress.getByName(ip), HOSTNAME);
+                    String hostLabel = buildHostLabel(appContext);
+                    JmDNS instance = JmDNS.create(InetAddress.getByName(ip), hostLabel);
                     instance.waitForAnnounced(ANNOUNCE_WAIT_TIMEOUT_MS);
                     resolvedHostName = stripTrailingDot(instance.getHostName());
                     ServiceInfo serviceInfo = ServiceInfo.create("_http._tcp.local.",
@@ -73,6 +86,47 @@ public class MDnsHelper {
                 }
             }
         }).start();
+    }
+
+    //DLNA名称后缀在设置里改掉之后，需要重新走一遍start()才能让mDNS主机名
+    //跟着换成新的——跟DLNAUtils.setDLNANameSuffix()改完名字要重启DLNA
+    //服务是同一个道理，不会自动生效。
+    public static void restart(Context context){
+        stop();
+        start(context);
+    }
+
+    //把DLNA名称后缀里能安全当主机名用的部分拼到"remote-"后面：只保留ASCII
+    //字母数字，其它字符(中文、空格、标点等)统一折成一个连字符，头尾的连
+    //字符再去掉。mDNS本身允许UTF-8主机名，但手机浏览器地址栏对含非ASCII
+    //字符的域名会做IDNA/Punycode转换，不同浏览器、不同系统版本对.local
+    //这种mDNS域名是否还原得回UTF-8并不一致，直接把中文塞进去反而可能变成
+    //另一种"不同设备表现不一样、猜不到"，所以只取ASCII部分，过滤完是空的
+    //(比如后缀全是中文，或者压根没设置)就还是用固定的"remote"。
+    private static String buildHostLabel(Context context){
+        String suffix = sanitizeHostLabelPart(DLNAUtils.getDLNANameSuffix(context));
+        return suffix.isEmpty() ? HOSTNAME : (HOSTNAME + "-" + suffix);
+    }
+
+    private static String sanitizeHostLabelPart(String raw){
+        if(raw == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for(int i = 0; i < raw.length(); i++){
+            char c = raw.charAt(i);
+            if((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')){
+                sb.append(c);
+            } else if(c >= 'A' && c <= 'Z'){
+                sb.append(Character.toLowerCase(c));
+            } else if(sb.length() > 0 && sb.charAt(sb.length() - 1) != '-'){
+                sb.append('-');
+            }
+        }
+        while(sb.length() > 0 && sb.charAt(sb.length() - 1) == '-') sb.setLength(sb.length() - 1);
+        while(sb.length() > 0 && sb.charAt(0) == '-') sb.deleteCharAt(0);
+        //mDNS单个标签最长63字节，"remote-"前缀已经占了7个，这里留足余量，
+        //不需要真的顶到上限。
+        if(sb.length() > 40) sb.setLength(40);
+        return sb.toString();
     }
 
     public static synchronized void stop(){

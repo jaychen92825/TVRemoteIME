@@ -137,7 +137,11 @@ public class MainActivity extends Activity implements View.OnClickListener {
         }
     }
     private void saveDLNAName(){
+        //mDNS主机名跟这个名称后缀是绑定的(见MDnsHelper.buildHostLabel)，
+        //改完名字不重启mDNS的话，地址要等下次"重启服务"才会跟着变，用户
+        //这里刚存完新名字、回头去看地址却还是旧的，会以为没保存成功。
         DLNAUtils.setDLNANameSuffix(this.getApplicationContext(), dlnaNameText.getText().toString());
+        MDnsHelper.restart(this.getApplicationContext());
     }
     private void saveAccessCode(){
         String newCode = accessCodeText.getText().toString().trim();
