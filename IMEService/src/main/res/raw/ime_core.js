@@ -126,7 +126,6 @@ function postFileAction(action){
 		        action == "cut" ? "是否确认要将所有选择的目录或者文件剪切到当前目录下？" :
 		                          "是否确认要删除所有选择的目录或者文件？不可恢复！";
 	if(confirm(title)){
-		if(action == "delete" && !confirm("请再次确认是否要删除所有选择的目录或者文件？不可恢复！"))return;
 		$.post("/file/" + action,{targetPath : curPath, paths:selectedPaths.join('|')},function(data){
 			if("ok"==data){
 				selectedPaths = [];
@@ -626,7 +625,7 @@ function loadScreenElements(){
 			list.html('<div class="elements-hint">当前屏幕没有识别到可点击元素，切换一下电视画面后点"刷新"再试试。</div>');
 			return;
 		}
-		$("#elementsStatus").text("已启用 · 共" + elements.length + "个元素 · 按屏幕行列顺序排列");
+		$("#elementsStatus").text("已启用 · 共" + elements.length + "个元素");
 		var rows = groupElementsIntoRows(elements);
 		var html = [];
 		for(var r = 0; r < rows.length; r++){
