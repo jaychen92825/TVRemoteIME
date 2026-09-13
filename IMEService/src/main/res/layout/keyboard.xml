@@ -301,17 +301,33 @@
                 android:layout_height="@dimen/qrWH"
                 android:background="@color/white"
                 android:padding="6dp"/>
-            <TextView
-                android:id="@+id/tvAddress"
+            <!-- 之前只有地址本身，没有"这是干嘛用的"这句引导语，跟MainActivity
+                 "打开手机遥控界面"卡片里"或者，手机浏览器里输入："这句话
+                 对不上——同一个功能，在两个地方一个有说明一个没有，用词也
+                 该保持一致。 -->
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginLeft="18dp"
                 android:layout_gravity="center_vertical"
-                android:text=""
-                android:textSize="16sp"
-                android:lineSpacingExtra="8dp"
-                android:textColor="@color/text_secondary" />
+                android:orientation="vertical">
+                <TextView
+                    android:text="或者，手机浏览器里输入："
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_secondary" />
+                <TextView
+                    android:id="@+id/tvAddress"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text=""
+                    android:textSize="16sp"
+                    android:lineSpacingExtra="8dp"
+                    android:textColor="@color/text_primary" />
+            </LinearLayout>
         </LinearLayout>
         <View
             android:id="@+id/pwdDivider"
