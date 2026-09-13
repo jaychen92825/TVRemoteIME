@@ -328,7 +328,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 			if(kc != KeyEvent.KEYCODE_UNKNOWN){
 				if(mInputView != null && KeyEventUtils.isKeyboardFocusEvent(kc) && mInputView.isShown()){
 					if((keyAction == KEY_ACTION_PRESSED || keyAction == KEY_ACTION_DOWN)
-							&& !handleKeyboardFocusEvent(kc)){
+							&& !handleKeyboardFocusEvent(kc, 0)){
 						if(!(shouldRouteKeyThroughAdb(kc) && isSendToAdbService(kc))) sendKeyCode(kc);
 					}
 				}
@@ -525,7 +525,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 
 	@Override
 	public boolean onKeyDown(int keyCode, KeyEvent event) {
-		if(handleKeyboardFocusEvent(keyCode)) return true;
+		if(handleKeyboardFocusEvent(keyCode, event.getRepeatCount())) return true;
 		if (Environment.needDebug) {
 			Environment.debug(TAG, "keydown-event:" + keyCode);
 		}
@@ -540,7 +540,17 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		return super.onKeyDown(keyCode, event);
 	}
 
-	private boolean handleKeyboardFocusEvent(int keyCode){
+	//keyCode相同的OK/回车键被"按住不放"时，系统(遥控器本身的自动连发，
+	//或者部分电视盒子把鼠标点击映射成KEYCODE_DPAD_CENTER之后带的连发)
+	//会用同一个ACTION_DOWN、repeatCount依次递增(1、2、3...)反复调用
+	//onKeyDown，而不是只在真正松开后再触发一次新的按下。之前这里没有
+	//看repeatCount，每一次重复通知都会当成"又点了一次这个键"处理，
+	//表现就是"按一下字母键，输入框里却被连续打出一长串同一个字符"，
+	//完全没停下来的样子(其实是只要按键还压着没松开，就一直在收到新的
+	//repeatCount)。方向键的翻页/移动焦点本来就需要"按住连续快速移动"，
+	//所以只对这里"点击当前聚焦按键"这一个分支加repeatCount==0的判断：
+	//保证物理上只按一次，无论按住多久，都只触发一次点击。
+	private boolean handleKeyboardFocusEvent(int keyCode, int repeatCount){
 		if(mInputView != null) {
 			if (Environment.needDebug) {
 				Environment.debug(TAG, "handleKeyboardFocusEvent:" + keyCode);
@@ -558,7 +568,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 				case KeyEvent.KEYCODE_ENTER:
 				case KeyEvent.KEYCODE_DPAD_CENTER:
 					if (mInputView.isShown() && focusedView != null) {
-						clickButtonByKey(focusedView);
+						if(repeatCount == 0) clickButtonByKey(focusedView);
 						return true;
 					}
 					break;
