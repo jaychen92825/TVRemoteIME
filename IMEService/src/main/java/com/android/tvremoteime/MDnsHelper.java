@@ -11,6 +11,7 @@ import java.net.InetAddress;
 
 import javax.jmdns.JmDNS;
 import javax.jmdns.ServiceInfo;
+import javax.jmdns.impl.JmDNSImpl;
 
 /**
  * 在局域网内注册一个固定的mDNS主机名，这样盒子的局域网IP因DHCP重新分配而
@@ -74,7 +75,14 @@ public class MDnsHelper {
                     }
                     String hostLabel = buildHostLabel(appContext);
                     JmDNS instance = JmDNS.create(InetAddress.getByName(ip), hostLabel);
-                    instance.waitForAnnounced(ANNOUNCE_WAIT_TIMEOUT_MS);
+                    //waitForAnnounced()只在具体实现类JmDNSImpl上，公开的抽象类
+                    //JmDNS并没有声明这个方法——create()工厂方法目前固定返回
+                    //JmDNSImpl实例，做一次instanceof保底，万一以后库版本换了
+                    //实现类，就跳过等待、直接读(退化成"尽力而为"，不会编译不过
+                    //也不会崩)。
+                    if(instance instanceof JmDNSImpl){
+                        ((JmDNSImpl) instance).waitForAnnounced(ANNOUNCE_WAIT_TIMEOUT_MS);
+                    }
                     resolvedHostName = stripTrailingDot(instance.getHostName());
                     ServiceInfo serviceInfo = ServiceInfo.create("_http._tcp.local.",
                             appContext.getString(R.string.app_name), RemoteServer.serverPort, "path=/");
