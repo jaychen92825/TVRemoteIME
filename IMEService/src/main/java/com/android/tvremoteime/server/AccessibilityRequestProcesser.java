@@ -14,7 +14,7 @@ import org.json.JSONObject;
 import fi.iki.elonen.NanoHTTPD;
 
 /**
- * 控制端"元素列表"功能：/screenElements读取当前屏幕上可点击的元素列表，
+ * 控制端"操作列表"功能：/screenElements读取当前屏幕上可点击的元素列表，
  * /clickElement按列表下标点击其中一个。依赖ScreenAccessibilityService，
  * 用户没在系统设置里开启这个无障碍服务时，两个接口都会明确返回未启用，
  * 不会假装成功。

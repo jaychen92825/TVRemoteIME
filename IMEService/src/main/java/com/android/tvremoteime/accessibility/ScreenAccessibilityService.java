@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 控制端"元素列表"功能：读取当前屏幕上可点击的元素（文字/图标标签+位置），
+ * 控制端"操作列表"功能：读取当前屏幕上可点击的元素（文字/图标标签+位置），
  * 让用户直接从列表里点名字来操作电视，而不是像触控板那样盲划坐标。
  *
  * 跟触控板依赖的ADB shell input完全是两条独立路径：这里用的是安卓标准
@@ -138,7 +138,7 @@ public class ScreenAccessibilityService extends AccessibilityService {
         }
     }
 
-    //控制端展示元素列表时，"输入框"和"开关/勾选框"这类跟普通按钮交互方式不一样
+    //控制端展示操作列表时，"输入框"和"开关/勾选框"这类跟普通按钮交互方式不一样
     //的元素值得单独标出来（点输入框大概率会弹出电视端软键盘，点开关/勾选框是
     //切换状态而不是"跳转/触发动作"）；普通按钮和不好细分的可点击容器（比如
     //整行都能点的列表项）统一归成"button"/"item"，不强行细分意义不大。
@@ -231,7 +231,7 @@ public class ScreenAccessibilityService extends AccessibilityService {
     //标准的无障碍API，任何装了无障碍服务的App都能直接调用系统的"最近任务"
     //界面——用户反馈装了第三方按键映射App后不需要ADB权限也能触发多任务键，
     //用的正是这条路径。既然本App已经有ScreenAccessibilityService这个无障碍
-    //服务（"元素列表"功能在用），直接复用即可，不用再依赖ADB。
+    //服务（"操作列表"功能在用），直接复用即可，不用再依赖ADB。
     public boolean performRecents(){
         try {
             return performGlobalAction(GLOBAL_ACTION_RECENTS);

@@ -310,7 +310,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 				&& ScreenAccessibilityService.isServiceEnabled()
 				&& ScreenAccessibilityService.getInstance().performRecents()){
 			//多任务键优先走无障碍服务的GLOBAL_ACTION_RECENTS(不需要ADB，
-			//跟"元素列表"用的是同一个ScreenAccessibilityService)；这里直接
+			//跟"操作列表"用的是同一个ScreenAccessibilityService)；这里直接
 			//比较原始字符串而不是走下面KeyEvent.keyCodeFromString(keyCode)
 			//转换，是因为keyCodeFromString对纯数字字符串的解析行为不确定，
 			//没必要为了这一个特判去依赖它。无障碍服务没开启、或触发失败时，

@@ -487,25 +487,26 @@ $("div.tab").on("click", function(){
 	updateContainerWidth();
 	updateElementsAutoRefresh();
 })
-//方向键/元素列表这两个子Tab除了点标签切换，也支持在内容区左右滑动切换——
+//方向键/操作列表这两个子Tab除了点标签切换，也支持在内容区左右滑动切换——
 //点两个小标签来回切总感觉要"精确瞄准"，直接在当前显示的面板上一划更顺手。
 var MODE_ORDER = ["dpad", "elements"];
-//"元素列表"子Tab用的是按屏幕坐标百分比换算的空间地图，容器越宽单个
-//元素能分到的像素越多，是全站唯一一个"越宽越有用"的视图——其它Tab
+//"操作列表"子Tab用的是按屏幕坐标百分比换算的空间地图，容器越宽单个
+//条目能分到的像素越多，是全站唯一一个"越宽越有用"的视图——其它Tab
 //(按钮宫格/文件列表/dpad摇杆)都是照手机单手操作设计的，屏幕再宽也用不上，
 //没必要跟着一起解除.container的480px宽度上限。只在"输入遥控"Tab当前
-//可见、且子Tab正好是"元素列表"时才加宽，两个条件缺一都要还原。
+//可见、且子Tab正好是"操作列表"时才加宽，两个条件缺一都要还原。
 function isElementsViewVisible(){
 	return $('.tab.cur').attr('data-rel') === 'controls' && $('.mode-tab.active').attr('data-mode') === 'elements';
 }
 function updateContainerWidth(){
 	$('.container').toggleClass('wide-mode', isElementsViewVisible());
 }
-//元素列表之前只在"进入这个子Tab/点刷新/点了某个元素之后"这几个时机才会
+//操作列表之前只在"进入这个子Tab/点刷新/点了某个操作之后"这几个时机才会
 //重新拉取一次，电视画面如果是被别的方式(比如遥控器/自动播放/弹窗)改变的，
 //控制页不会知道，只能一直显示着旧内容直到用户想起来点刷新。这里改成只要
 //这个视图还看得见，就按固定间隔自动刷新，不需要用户自己惦记着点刷新——
-//离开这个视图(切到别的子Tab或别的顶层Tab)时停掉，不在后台空转。
+//离开这个视图(切到别的子Tab或别的顶层Tab)时停掉，不在后台空转。有了这个
+//自动刷新，原来那个手动"刷新"按钮就没有存在的必要了，已经去掉。
 var ELEMENTS_REFRESH_INTERVAL_MS = 3000;
 var elementsRefreshTimer = null;
 function updateElementsAutoRefresh(){
@@ -566,7 +567,7 @@ $(".mode-tab").on("click", function(){
 	}
 	$(".nav-mode").each(function(){ bindSwipe(this); });
 })();
-//元素列表：读取无障碍服务识别出的当前屏幕可点击元素，点名字直接让那个控件
+//操作列表：读取无障碍服务识别出的当前屏幕可点击元素，点名字直接让那个控件
 //执行它自己的点击逻辑（不区分是靠触摸还是遥控器焦点响应的），完全不依赖ADB，
 //标准Android TV系统也能用；没开启无障碍服务时给一个能直接跳转到电视端
 //"设置-无障碍"页面的按钮（复用/runSystem，跟"应用管理"里的系统设置入口
@@ -660,7 +661,7 @@ function loadScreenElements(){
 			list.html('<div class="elements-hint">当前屏幕没有识别到可点击元素，切换一下电视画面后点"刷新"再试试。</div>');
 			return;
 		}
-		$("#elementsStatus").text("已启用 · 共" + elements.length + "个元素");
+		$("#elementsStatus").text("已启用 · 共" + elements.length + "项操作");
 		var rows = groupElementsIntoRows(elements);
 		var html = [];
 		for(var r = 0; r < rows.length; r++){
@@ -679,10 +680,6 @@ function loadScreenElements(){
 		$("#elementsStatus").text("获取失败，请重试");
 	});
 }
-$("#btnRefreshElements").on("click", function(){
-	vibrateShort();
-	loadScreenElements();
-})
 $("#elementsList").on("click", ".element-item", function(){
 	vibrateShort();
 	var id = $(this).attr("data-id");
