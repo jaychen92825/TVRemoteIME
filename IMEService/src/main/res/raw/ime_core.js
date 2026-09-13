@@ -13,6 +13,7 @@ var curPath = "";
 var selectedPaths = [];
 var selectedPathId = 0;
 var fileOperItems = $('.file-oper-items');
+var mediaSources = [];
 
 function escapeHtml(str){
 	return String(str == null ? "" : str).replace(/[&<>"']/g, function(c){
@@ -261,6 +262,122 @@ function loadTVList(){
 		tvItems.html(html.join("\r\n"));
 	}, "text");
 }
+function mediaMessage(text){
+	$('#mediaStatus').text(text);
+}
+function mediaPoster(item){
+	if(item.pic){
+		return '<img src="'+escapeHtml(item.pic)+'" class="media-poster" />';
+	}
+	return '<div class="media-poster media-poster-empty">▶</div>';
+}
+function renderMediaSources(data){
+	mediaSources = data.sources || [];
+	$('#mediaConfigUrl').val(data.url || '');
+	if(!data.url){
+		mediaMessage('输入配置 URL 后连接。第一阶段支持 type-0 API source。');
+	}else{
+		mediaMessage('已加载 '+(data.totalSources || 0)+' 个源，支持 '+(data.supportedSources || 0)+' 个，暂未支持 '+(data.unsupportedSources || 0)+' 个。');
+	}
+}
+function loadMediaConfig(){
+	$.get('/media/config', null, function(data){
+		renderMediaSources(data);
+		if(data.supportedSources > 0) loadMediaHome();
+	}, 'json');
+}
+function loadMediaHome(){
+	$('#mediaDetail').addClass('hide').empty();
+	$('#mediaGrid').html('<div class="media-empty">正在加载首页…</div>');
+	$.get('/media/home', null, function(data){
+		renderMediaGrid(data.items || []);
+	}, 'json');
+}
+function renderMediaGrid(items){
+	var html = [];
+	if(!items.length){
+		html.push('<div class="media-empty">没有可展示内容。可以先搜索片名，或换一个支持 type-0 API 的配置源。</div>');
+	}else{
+		for(var i=0;i<items.length;i++){
+			var item = items[i];
+			html.push('<div class="media-card" data-source="'+escapeHtml(item.sourceKey)+'" data-id="'+escapeHtml(item.id)+'">');
+			html.push(mediaPoster(item));
+			html.push('<div class="media-card-title">'+escapeHtml(item.name)+'</div>');
+			html.push('<div class="media-card-meta">'+escapeHtml(item.sourceName || '')+(item.remark ? ' · '+escapeHtml(item.remark) : '')+'</div>');
+			html.push('</div>');
+		}
+	}
+	$('#mediaGrid').html(html.join(''));
+}
+function searchMedia(){
+	var q = $('#mediaSearchInput').val();
+	if(!q){
+		loadMediaHome();
+		return;
+	}
+	$('#mediaDetail').addClass('hide').empty();
+	$('#mediaGrid').html('<div class="media-empty">正在搜索…</div>');
+	$.get('/media/search', {q:q}, function(data){
+		renderMediaGrid(data.items || []);
+	}, 'json');
+}
+function loadMediaDetail(sourceKey, id){
+	$('#mediaDetail').removeClass('hide').html('<div class="media-empty">正在加载详情…</div>');
+	$.get('/media/detail', {sourceKey:sourceKey, id:id}, function(data){
+		var item = data.item;
+		if(!item){
+			$('#mediaDetail').html('<div class="media-empty">详情加载失败。</div>');
+			return;
+		}
+		var html = [];
+		html.push('<div class="media-detail-layout">');
+		html.push(mediaPoster(item));
+		html.push('<div class="media-detail-main">');
+		html.push('<div class="media-detail-title">'+escapeHtml(item.name)+'</div>');
+		html.push('<div class="media-card-meta">'+escapeHtml(item.sourceName || '')+(item.year ? ' · '+escapeHtml(item.year) : '')+(item.remark ? ' · '+escapeHtml(item.remark) : '')+'</div>');
+		if(item.desc) html.push('<div class="media-desc">'+escapeHtml(item.desc)+'</div>');
+		html.push('<div class="media-episodes">');
+		for(var i=0;i<(item.episodes || []).length;i++){
+			var ep = item.episodes[i];
+			html.push('<div class="media-episode" data-source="'+escapeHtml(item.sourceKey)+'" data-playid="'+escapeHtml(ep.playId)+'">'+escapeHtml(ep.name)+'</div>');
+		}
+		if(!(item.episodes || []).length) html.push('<div class="media-empty">这个 source 没有返回可播放剧集。</div>');
+		html.push('</div></div></div>');
+		$('#mediaDetail').html(html.join(''));
+	}, 'json');
+}
+function playMediaEpisode(sourceKey, playId){
+	mediaMessage('正在解析并发送到电视播放…');
+	$.post('/media/play', {sourceKey:sourceKey, playId:playId, useSystem:$('#playUseSystem')[0] && $('#playUseSystem')[0].checked}, function(data){
+		if(data && data.success === false){
+			mediaMessage(data.message || '播放失败');
+		}else{
+			mediaMessage('已发送到电视播放。');
+		}
+	}, 'json');
+}
+$('#btnMediaConnect').on('click', function(){
+	var url = $('#mediaConfigUrl').val();
+	mediaMessage('正在连接配置…');
+	$.post('/media/config', {url:url}, function(data){
+		if(data && data.success === false){
+			mediaMessage(data.message || '配置加载失败');
+		}else{
+			renderMediaSources(data);
+			loadMediaHome();
+		}
+	}, 'json');
+});
+$('#btnMediaSearch').on('click', searchMedia);
+$('#mediaSearchInput').on('keydown', function(e){
+	if(e.key === 'Enter' || e.keyCode === 13) searchMedia();
+});
+$('#mediaGrid').on('click', '.media-card', function(){
+	loadMediaDetail($(this).attr('data-source'), $(this).attr('data-id'));
+});
+$('#mediaDetail').on('click', '.media-episode', function(){
+	playMediaEpisode($(this).attr('data-source'), $(this).attr('data-playid'));
+});
 $("#btnEnter").on("click", function(){
 	vibrateShort();
 	//同"清空"按键：取消排队中的/textLive防抖请求，避免它带着提交前的旧文字
@@ -969,6 +1086,7 @@ reloadAppList();
 loadFileList("");
 getDiskSpace();
 loadTVList();
+loadMediaConfig();
 loadTorrentItems();
 
 //PWA分享目标(manifest.json里的share_target)：手机其它App"分享"一个视频链接过来时，

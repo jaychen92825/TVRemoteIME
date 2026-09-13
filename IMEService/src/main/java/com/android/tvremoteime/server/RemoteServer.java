@@ -171,6 +171,7 @@ public class RemoteServer extends NanoHTTPD
         this.getRequestProcessers.add(new FileRequestProcesser(this.mContext));
         this.getRequestProcessers.add(new AppIconRequestProcesser(this.mContext));
         this.getRequestProcessers.add(new TVRequestProcesser(this.mContext));
+        this.getRequestProcessers.add(new MediaRequestProcesser(this.mContext));
         this.getRequestProcessers.add(new OtherGetRequestProcesser(this.mContext));
     }
     private void addPostRequestProcessers(){
@@ -181,6 +182,7 @@ public class RemoteServer extends NanoHTTPD
         this.postRequestProcessers.add(new PlayRequestProcesser(this.mContext));
         this.postRequestProcessers.add(new FileRequestProcesser(this.mContext));
         this.postRequestProcessers.add(new TVRequestProcesser(this.mContext));
+        this.postRequestProcessers.add(new MediaRequestProcesser(this.mContext));
         this.postRequestProcessers.add(new TorrentRequestProcesser(this.mContext));
         this.postRequestProcessers.add(new OtherPostRequestProcesser(this.mContext));
     }
