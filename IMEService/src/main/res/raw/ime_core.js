@@ -571,11 +571,27 @@ $(".mode-tab").on("click", function(){
 //用对应控件本身长相的小图标(而不是纯文字标签)标出来，跟这几种控件在
 //系统设置里的实际样子一致，比文字前缀更直观；普通按钮和不好细分的可
 //点击容器不加图标。title属性里保留文字版类型说明，方便长按/悬停查看。
+//
+//开关/勾选框/单选这三种本身带"开/关"状态——无障碍API的isChecked()能
+//直接读到，不用靠猜；图标按这个状态分别画成"选中/未选中"两种样子(勾选框
+//打勾/空框，单选实心点/空心圈，开关圆点在右/在左)，不用点开或者跳到电视
+//画面上看才知道当前是开着还是关着的。
 var ELEMENT_TYPE_ICONS = {
-	input: '<svg viewBox="0 0 24 24" width="11" height="11" class="element-type-icon"><rect x="2" y="7" width="20" height="10" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><line x1="7" y1="9.5" x2="7" y2="14.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
-	checkbox: '<svg viewBox="0 0 24 24" width="11" height="11" class="element-type-icon"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M7 12l3 3 7-7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-	switch: '<svg viewBox="0 0 24 14" width="14" height="9" class="element-type-icon"><rect x="1" y="1" width="22" height="12" rx="6" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="17" cy="7" r="4" fill="currentColor"/></svg>',
-	radio: '<svg viewBox="0 0 24 24" width="11" height="11" class="element-type-icon"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>'
+	input: {
+		"false": '<svg viewBox="0 0 24 24" width="11" height="11" class="element-type-icon"><rect x="2" y="7" width="20" height="10" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><line x1="7" y1="9.5" x2="7" y2="14.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'
+	},
+	checkbox: {
+		"true": '<svg viewBox="0 0 24 24" width="11" height="11" class="element-type-icon"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M7 12l3 3 7-7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+		"false": '<svg viewBox="0 0 24 24" width="11" height="11" class="element-type-icon"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>'
+	},
+	switch: {
+		"true": '<svg viewBox="0 0 24 14" width="14" height="9" class="element-type-icon"><rect x="1" y="1" width="22" height="12" rx="6" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="17" cy="7" r="4" fill="currentColor"/></svg>',
+		"false": '<svg viewBox="0 0 24 14" width="14" height="9" class="element-type-icon"><rect x="1" y="1" width="22" height="12" rx="6" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="7" cy="7" r="4" fill="currentColor"/></svg>'
+	},
+	radio: {
+		"true": '<svg viewBox="0 0 24 24" width="11" height="11" class="element-type-icon"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>',
+		"false": '<svg viewBox="0 0 24 24" width="11" height="11" class="element-type-icon"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>'
+	}
 };
 var ELEMENT_TYPE_TITLE_TAGS = {
 	input: "[输入] ",
@@ -583,6 +599,16 @@ var ELEMENT_TYPE_TITLE_TAGS = {
 	switch: "[开关] ",
 	radio: "[单选] "
 };
+var ELEMENT_STATE_TITLE_TAGS = {
+	checkbox: {"true": "已勾选 ", "false": "未勾选 "},
+	switch: {"true": "开 ", "false": "关 "},
+	radio: {"true": "已选中 ", "false": "未选中 "}
+};
+function getElementTypeIcon(type, checked){
+	var byState = ELEMENT_TYPE_ICONS[type];
+	if(!byState) return "";
+	return byState[checked ? "true" : "false"] || "";
+}
 //按纵坐标是否有重叠把元素分到同一行：排序后逐个扫描，只要当前元素的顶部
 //还落在"已经在这一行的元素们目前最靠下的底边"之上，就算同一行；否则另起
 //一行。行内按横坐标从左到右排。
@@ -632,9 +658,10 @@ function loadScreenElements(){
 			html.push('<div class="elements-row">');
 			for(var c = 0; c < rows[r].length; c++){
 				var el = rows[r][c];
-				var icon = ELEMENT_TYPE_ICONS[el.type] || "";
-				var titleText = (ELEMENT_TYPE_TITLE_TAGS[el.type] || "") + el.label;
-				html.push('<div class="element-item type-' + (el.type || 'item') + '" data-id="' + el.id +
+				var icon = getElementTypeIcon(el.type, el.checked);
+				var stateTag = (ELEMENT_STATE_TITLE_TAGS[el.type] || {})[el.checked ? "true" : "false"] || "";
+				var titleText = (ELEMENT_TYPE_TITLE_TAGS[el.type] || "") + stateTag + el.label;
+				html.push('<div class="element-item type-' + (el.type || 'item') + (el.checked ? ' checked' : '') + '" data-id="' + el.id +
 					'" title="' + escapeHtml(titleText) + '">' + icon + '<span>' + escapeHtml(el.label) + '</span></div>');
 			}
 			html.push('</div>');

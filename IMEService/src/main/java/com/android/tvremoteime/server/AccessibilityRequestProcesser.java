@@ -63,6 +63,7 @@ public class AccessibilityRequestProcesser implements RequestProcesser {
                     obj.put("id", el.id);
                     obj.put("label", el.label);
                     obj.put("type", el.type);
+                    obj.put("checked", el.checked);
                     obj.put("left", el.left);
                     obj.put("top", el.top);
                     obj.put("right", el.right);

@@ -36,11 +36,13 @@ public class ScreenAccessibilityService extends AccessibilityService {
         public final int id;
         public final String label;
         public final String type;
+        public final boolean checked;
         public final int left, top, right, bottom;
-        public ElementInfo(int id, String label, String type, Rect bounds){
+        public ElementInfo(int id, String label, String type, boolean checked, Rect bounds){
             this.id = id;
             this.label = label;
             this.type = type;
+            this.checked = checked;
             this.left = bounds.left;
             this.top = bounds.top;
             this.right = bounds.right;
@@ -116,7 +118,11 @@ public class ScreenAccessibilityService extends AccessibilityService {
                 node.getBoundsInScreen(bounds);
                 if(!bounds.isEmpty() && !isDuplicateOfAncestor(label, bounds, nearestAncestor)){
                     cachedNodes.add(AccessibilityNodeInfo.obtain(node));
-                    ElementInfo info = new ElementInfo(cachedNodes.size() - 1, label, classifyElement(node), bounds);
+                    //isChecked()对开关/勾选框/单选这几种可勾选控件反映的就是当前
+                    //的开/关、勾选/未勾选状态；对不可勾选的普通按钮固定返回false，
+                    //不用按类型分别处理，直接一起传给控制端，只有勾选类元素的图标
+                    //才会用上这个字段。
+                    ElementInfo info = new ElementInfo(cachedNodes.size() - 1, label, classifyElement(node), node.isChecked(), bounds);
                     result.add(info);
                     ancestorForChildren = info;
                 }

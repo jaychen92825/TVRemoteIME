@@ -539,15 +539,31 @@ body {
 	color: var(--color-primary);
 }
 
+/* 开关/勾选框/单选的图标形状本身就分"选中/未选中"两种画法(见ime_core.js
+   的ELEMENT_TYPE_ICONS)，颜色上再加一层区分——选中的用醒目的橙色，没选中
+   的用跟普通按钮一样不打眼的灰色，两种状态哪怕图标很小也能一眼分清，
+   不用凑近了看形状细节。 */
 .element-item.type-checkbox,
 .element-item.type-switch,
 .element-item.type-radio {
-	border-left-color: #f5a623;
+	border-left-color: var(--color-border);
 }
 
 .element-item.type-checkbox .element-type-icon,
 .element-item.type-switch .element-type-icon,
 .element-item.type-radio .element-type-icon {
+	color: var(--color-text-secondary);
+}
+
+.element-item.type-checkbox.checked,
+.element-item.type-switch.checked,
+.element-item.type-radio.checked {
+	border-left-color: #f5a623;
+}
+
+.element-item.type-checkbox.checked .element-type-icon,
+.element-item.type-switch.checked .element-type-icon,
+.element-item.type-radio.checked .element-type-icon {
 	color: #f5a623;
 }
 
