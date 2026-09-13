@@ -633,23 +633,31 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		//this.onFinishInputView(true);
 		//this.onFinishCandidatesView(true);
 	}
-	//遥控器返回键、键盘上的收起按钮(不管是遥控器OK键点还是触屏点)三个
-	//入口都要"收起键盘"。之前先后试过：补hideWindowByKey标记、把隐藏
-	//动作丢进handler.post()异步执行、把"不显示"这个选择持久化下来——
-	//三次都是照着onEvaluateInputViewShown()/hideWindow()这条内部路径
-	//去修，但实机反馈是点了"完全没反应"，不是"闪一下又弹回来"，说明
-	//这条内部路径在这台设备上可能压根没被系统采纳，不是"被别的逻辑
-	//盖回去"这么简单。
+	//遥控器返回键、键盘上的收起按钮(不管是遥控器OK键点还是触屏点)，
+	//这两个入口在语义上是同一件事："临时把当前这次弹出的键盘收起来"，
+	//不代表用户想改变以后的默认行为。键盘要不要弹出，规则一共三层：
+	//  1. 控制端网页上的"显示/隐藏电视软键盘"开关(Environment.
+	//     isKeyboardViewVisible/setKeyboardViewVisible持久化的偏好)——
+	//     决定"有客户端连上之后，点输入框默认弹不弹"，只应该由用户在
+	//     网页上主动切换时改变。
+	//  2. 还没有任何客户端连接时，默认展开(isKeyboardViewVisible里
+	//     !hasActiveClient这条兜底)，保证第一次使用时用户能从键盘的
+	//     帮助入口拿到二维码/地址去连接控制端。
+	//  3. 这里的"收起"操作——只是临时收起当前这一次，不属于上面两条
+	//     规则要决定的"默认值"，所以不能写Environment.setKeyboardViewVisible()
+	//     去持久化它，不然就会把用户在网页上设置的"默认显示"偏好悄悄
+	//     清掉，下次点新输入框也不会再按第1/2条重新弹出了。
 	//
-	//hideWindow()是InputMethodService内部的protected方法，只是直接
-	//摆弄这个输入法弹出窗口自身的可见性，不会经过系统InputMethodManager
-	//那一层，也就不会让系统知道"这次隐藏是IME自己主动请求的"。
-	//requestHideSelf(int)则是Android从API 3就有的公开API，专门给IME
-	//自己申请隐藏用，内部会调用InputMethodManager.hideSoftInputFromInputMethod()
-	//走正规的系统IPC通道。两者保留(hideWindowByKey标记+持久化偏好+
-	//旧的finishInput()都不去掉)，同时加上requestHideSelf(0)，双保险。
+	//之前这里加过一行setKeyboardViewVisible(this,false)，是追查"点了
+	//没反应"时一次方向错误的尝试(真正起作用的是下面的requestHideSelf)，
+	//会导致"点一下收起键盘，网页上的默认显示开关就被清空"这个副作用，
+	//已去掉。
+	//
+	//hideWindowByKey这个标记只影响"这一次"的onEvaluateInputViewShown()
+	//求值结果，不持久化，配合requestHideSelf(0)(官方API，会通知系统
+	//InputMethodManager，比内部的hideWindow()更可靠)一起，做到"仅这次
+	//收起"，不影响下次弹出时的判断。
 	private void collapseKeyboardView(){
-		Environment.setKeyboardViewVisible(this, false);
 		hideWindowByKey = true;
 		requestHideSelf(0);
 		finishInput();
