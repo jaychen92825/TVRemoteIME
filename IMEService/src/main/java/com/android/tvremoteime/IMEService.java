@@ -634,21 +634,24 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		//this.onFinishCandidatesView(true);
 	}
 	//遥控器返回键、键盘上的收起按钮(不管是遥控器OK键点还是触屏点)三个
-	//入口都要"收起键盘"，之前各自零散地写hideWindowByKey+finishInput()，
-	//还漏过其中一两处——但即使三处都补全也发现还是会被弹回来：真正的
-	//原因是onEvaluateInputViewShown()依赖的Environment.isKeyboardViewVisible()
-	//在没有显式持久化偏好、且当前没有活跃控制端客户端时，默认就是"应该
-	//显示"。hideWindowByKey只能让"这一次"评估返回false，是个一次性的
-	//豁免，不会改变这个默认值本身——只要后面任何原因(不一定是用户操作，
-	//系统内部也可能重新计算一次可见性)重新问一次"现在该不该显示"，
-	//答案又变回默认的"该显示"，键盘就又弹回来了，表现就是"怎么按都收
-	//不起来"。这里改成先把这个选择持久化成"不显示"(跟控制端网页上
-	//"显示/隐藏电视软键盘"开关是同一个存储项，语义完全一致：用户主动
-	//表达了"现在不需要软键盘")，再走flag+finishInput()这条已知能让
-	//当次调用立即隐藏的路径——两者缺一都只能收起一瞬间又弹回来。
+	//入口都要"收起键盘"。之前先后试过：补hideWindowByKey标记、把隐藏
+	//动作丢进handler.post()异步执行、把"不显示"这个选择持久化下来——
+	//三次都是照着onEvaluateInputViewShown()/hideWindow()这条内部路径
+	//去修，但实机反馈是点了"完全没反应"，不是"闪一下又弹回来"，说明
+	//这条内部路径在这台设备上可能压根没被系统采纳，不是"被别的逻辑
+	//盖回去"这么简单。
+	//
+	//hideWindow()是InputMethodService内部的protected方法，只是直接
+	//摆弄这个输入法弹出窗口自身的可见性，不会经过系统InputMethodManager
+	//那一层，也就不会让系统知道"这次隐藏是IME自己主动请求的"。
+	//requestHideSelf(int)则是Android从API 3就有的公开API，专门给IME
+	//自己申请隐藏用，内部会调用InputMethodManager.hideSoftInputFromInputMethod()
+	//走正规的系统IPC通道。两者保留(hideWindowByKey标记+持久化偏好+
+	//旧的finishInput()都不去掉)，同时加上requestHideSelf(0)，双保险。
 	private void collapseKeyboardView(){
 		Environment.setKeyboardViewVisible(this, false);
 		hideWindowByKey = true;
+		requestHideSelf(0);
 		finishInput();
 	}
 	//键盘上40多个按键全部共用同一份@drawable/key(或key_on/key_off)背景
