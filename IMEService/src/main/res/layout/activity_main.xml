@@ -45,26 +45,24 @@
                 android:textColor="@color/text_secondary"
                 android:textSize="14sp"
                 android:text=""/>
-            <!-- 之前只给左右padding清零了minWidth/minHeight，但系统Button
-                 默认样式自带的上下padding、以及字体本身的行间距(ascent/
-                 descent)没清，实际量出来的按钮比预期大一圈、图标在里面
-                 也没有真正居中。这里把四周padding、字体行间距一起清零，
-                 再用固定的正方形尺寸+显式居中，效果才是真的按钮多大图标
-                 就在正中间多大。 -->
-            <Button
+            <!-- 之前用文字按钮显示"↻"字符，清零了padding/includeFontPadding
+                 之后按钮本身大小是对的，但"↻"这个字形在系统字体里左右
+                 两侧留白不对称(箭头集中在右下)，导致图标视觉上还是偏，
+                 这不是padding能解决的问题。换成ImageButton+矢量图标后，
+                 图标是按精确路径画的正方形图形，天然居中，不再受字体
+                 字形影响。 -->
+            <ImageButton
                 android:id="@+id/btnCheckUpdate"
                 android:layout_width="30dp"
                 android:layout_height="30dp"
                 android:layout_marginLeft="6dp"
                 android:minWidth="0dp"
                 android:minHeight="0dp"
-                android:padding="0dp"
-                android:gravity="center"
-                android:includeFontPadding="false"
+                android:padding="5dp"
+                android:scaleType="fitCenter"
                 android:background="@drawable/bg_button"
-                android:text="↻"
-                android:textColor="@color/white"
-                android:textSize="16sp"
+                android:src="@drawable/ic_refresh"
+                android:contentDescription="@null"
                 android:nextFocusDown="@id/etDLNAName"
                 android:onClick="onClick"/>
             <TextView
