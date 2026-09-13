@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 竖屏/默认布局：单列从上到下依次排布①-⑥，不做左右两栏。横屏(实际TV
-     宽屏场景)用的是res/layout-land/activity_main.xml那份两栏布局——两份
-     文件里的控件id必须保持完全一致，MainActivity.java靠这些id
-     findViewById，换成哪个布局都要能正常工作。 -->
+<!-- 之前竖屏/横屏各有一份布局(横屏两栏)，因为原来有6个卡片，单列在窄屏
+     下会拖得很长。DLNA名称挪到顶栏、访问口令去掉按钮变自动生效、检查更新
+     变成顶栏的图标按钮之后，只剩3个卡片，内容短了很多，不再需要为了控制
+     总高度专门做一份横屏两栏布局——两份文件保持id完全一致这件事本身还是
+     持续的维护负担(之前就因为漏同步一个id导致横屏必崩)，合并成一份更省心。 -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -16,7 +17,12 @@
         android:orientation="vertical"
         android:padding="28dp">
 
-        <!-- 自定义顶部标题，替代系统标题栏 -->
+        <!-- 自定义顶部标题，替代系统标题栏。DLNA投屏名称本来自己占一整个
+             卡片，但它就是个"改个名字"的简单操作，跟App名称/版本号放
+             同一行、点开输入框直接改，改完移开焦点自动生效，不需要单独
+             一块地方也不需要额外的"设置"按钮。检查更新同理，从一整个
+             卡片(标题+状态文字+按钮)缩成版本号后面一个图标按钮，点了
+             有结果用Toast提示，不需要常驻一行状态文字占地方。 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -35,11 +41,45 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginLeft="10dp"
-                android:layout_marginBottom="2dp"
                 android:gravity="bottom"
                 android:textColor="@color/text_secondary"
                 android:textSize="14sp"
                 android:text=""/>
+            <Button
+                android:id="@+id/btnCheckUpdate"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginLeft="6dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:background="@drawable/bg_button"
+                android:paddingLeft="10dp"
+                android:paddingRight="10dp"
+                android:text="↻"
+                android:textColor="@color/white"
+                android:textSize="16sp"
+                android:nextFocusDown="@id/etDLNAName"
+                android:onClick="onClick"/>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="16dp"
+                android:layout_marginRight="8dp"
+                android:text="设备名"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp"/>
+            <EditText
+                android:id="@+id/etDLNAName"
+                android:layout_width="0dp"
+                android:layout_height="34dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_edit"
+                android:hint="如：客厅、卧室"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="14sp"
+                android:nextFocusUp="@id/btnCheckUpdate"
+                android:nextFocusDown="@id/btnUseIME"/>
         </LinearLayout>
 
         <!-- ① 启用输入法服务 -->
@@ -89,6 +129,7 @@
                     android:paddingRight="16dp"
                     android:text="设置"
                     android:textColor="@color/white"
+                    android:nextFocusUp="@id/etDLNAName"
                     android:nextFocusDown="@id/btnSetIME"
                     android:onClick="onClick"/>
             </LinearLayout>
@@ -123,34 +164,30 @@
                     android:text="设置"
                     android:textColor="@color/white"
                     android:nextFocusUp="@id/btnUseIME"
-                    android:nextFocusDown="@id/btnStartService"
                     android:onClick="onClick"/>
             </LinearLayout>
 
+            <!-- 之前这行还有一句"设置失败时可手动启动服务"的说明文字——
+                 这个按钮本身只在还没设成默认输入法时才显示(见
+                 refreshStatus)，出现的场景已经说明了"前面没弄成功"，
+                 不需要再单独一句话解释。 -->
             <LinearLayout
                 android:id="@+id/manualStartRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
+                android:gravity="center_vertical|end"
                 android:orientation="horizontal">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="13sp"
-                    android:text="设置失败时可手动启动服务"/>
                 <Button
                     android:id="@+id/btnStartService"
                     android:layout_width="wrap_content"
                     android:layout_height="38dp"
                     android:background="@drawable/bg_button"
-                    android:paddingLeft="12dp"
-                    android:paddingRight="12dp"
-                    android:text="手动启动"
+                    android:paddingLeft="16dp"
+                    android:paddingRight="16dp"
+                    android:text="▶ 手动启动"
                     android:textColor="@color/white"
                     android:nextFocusUp="@id/btnSetIME"
-                    android:nextFocusDown="@id/etTestInput"
+                    android:nextFocusDown="@id/etAccessCode"
                     android:onClick="onClick"/>
             </LinearLayout>
         </LinearLayout>
@@ -196,10 +233,8 @@
                     android:text=""/>
             </LinearLayout>
 
-            <!-- 访问口令原来是独立的一个卡片，本身就是这张卡片里QR码/地址的
-                 一部分信息，单独起一节反而要把同一个口令看两遍（这里一遍纯
-                 文字展示，那边一遍在输入框里等修改）——合并成一行，展示和
-                 修改共用同一个输入框。 -->
+            <!-- 访问口令：跟DLNA名称一样，改成输入框失焦自动生效，不需要
+                 单独一个"修改"按钮。 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -223,21 +258,7 @@
                     android:inputType="text"
                     android:textColor="@color/text_primary"
                     android:textColorHint="@color/text_secondary"
-                    android:nextFocusUp="@id/etTestInput"
-                    android:nextFocusDown="@id/btnSetAccessCode"/>
-                <Button
-                    android:id="@+id/btnSetAccessCode"
-                    android:layout_width="wrap_content"
-                    android:layout_height="42dp"
-                    android:layout_marginLeft="10dp"
-                    android:background="@drawable/bg_button"
-                    android:paddingLeft="16dp"
-                    android:paddingRight="16dp"
-                    android:text="修改"
-                    android:textColor="@color/white"
-                    android:nextFocusUp="@id/etAccessCode"
-                    android:nextFocusDown="@id/etDLNAName"
-                    android:onClick="onClick"/>
+                    android:nextFocusDown="@id/etTestInput"/>
             </LinearLayout>
         </LinearLayout>
 
@@ -247,8 +268,7 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:background="@drawable/bg_card"
-            android:padding="16dp"
-            android:layout_marginBottom="14dp">
+            android:padding="16dp">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -266,101 +286,7 @@
                 android:hint="点此，用手机在控制端输入试试"
                 android:textColor="@color/text_primary"
                 android:textColorHint="@color/text_secondary"
-                android:nextFocusDown="@id/etAccessCode"/>
-        </LinearLayout>
-
-        <!-- ④ DLNA投屏名称 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@drawable/bg_card"
-            android:padding="16dp"
-            android:layout_marginBottom="14dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="10dp"
-                android:text="④ DLNA投屏名称"
-                android:textColor="@color/accent"
-                android:textSize="17sp"
-                android:textStyle="bold"/>
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-                <EditText
-                    android:id="@+id/etDLNAName"
-                    android:layout_width="0dp"
-                    android:layout_height="42dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_edit"
-                    android:hint="如：客厅、卧室"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_secondary"
-                    android:nextFocusUp="@id/btnSetAccessCode"
-                    android:nextFocusDown="@id/btnSetDLNA"/>
-                <Button
-                    android:id="@+id/btnSetDLNA"
-                    android:layout_width="wrap_content"
-                    android:layout_height="42dp"
-                    android:layout_marginLeft="10dp"
-                    android:background="@drawable/bg_button"
-                    android:paddingLeft="16dp"
-                    android:paddingRight="16dp"
-                    android:text="设置"
-                    android:textColor="@color/white"
-                    android:nextFocusUp="@id/etDLNAName"
-                    android:nextFocusDown="@id/btnCheckUpdate"
-                    android:onClick="onClick"/>
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- ⑤ 检查更新 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@drawable/bg_card"
-            android:padding="16dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="10dp"
-                android:text="⑤ 检查更新"
-                android:textColor="@color/accent"
-                android:textSize="17sp"
-                android:textStyle="bold"/>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-                <TextView
-                    android:id="@+id/tvUpdateStatus"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginRight="10dp"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="14sp"
-                    android:text="点击检查是否有新版本"/>
-                <Button
-                    android:id="@+id/btnCheckUpdate"
-                    android:layout_width="wrap_content"
-                    android:layout_height="38dp"
-                    android:background="@drawable/bg_button"
-                    android:paddingLeft="16dp"
-                    android:paddingRight="16dp"
-                    android:text="检查更新"
-                    android:textColor="@color/white"
-                    android:nextFocusUp="@id/btnSetDLNA"
-                    android:onClick="onClick"/>
-            </LinearLayout>
+                android:nextFocusUp="@id/etAccessCode"/>
         </LinearLayout>
     </LinearLayout>
 </ScrollView>

@@ -15,6 +15,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.text.TextUtils;
 
 import com.android.tvremoteime.server.RemoteServer;
 import com.android.tvremoteime.adb.AdbHelper;
@@ -31,10 +32,8 @@ public class MainActivity extends Activity implements View.OnClickListener {
     private TextView imeDefaultStatusView;
     private EditText dlnaNameText;
     private EditText accessCodeText;
-    private TextView updateStatusView;
     private View manualStartRow;
     private Button btnSetIME;
-    private EditText testInputText;
     private volatile boolean checkingUpdate = false;
     //下面三个字段配合refreshStatus()识别"状态真的发生了变化"，而不是在
     //onClick里跳系统设置/选择器之后立刻同步检查——那些跳转都是异步的，
@@ -58,15 +57,28 @@ public class MainActivity extends Activity implements View.OnClickListener {
         imeDefaultStatusView = this.findViewById(R.id.tvIMEDefaultStatus);
         dlnaNameText = this.findViewById(R.id.etDLNAName);
         accessCodeText = this.findViewById(R.id.etAccessCode);
-        updateStatusView = this.findViewById(R.id.tvUpdateStatus);
         manualStartRow = this.findViewById(R.id.manualStartRow);
         btnSetIME = this.findViewById(R.id.btnSetIME);
-        testInputText = this.findViewById(R.id.etTestInput);
 
         this.setTitle(this.getResources().getString( R.string.app_name) + "  V" + AppPackagesHelper.getCurrentPackageVersion(this));
         ((TextView)findViewById(R.id.tvVersion)).setText("V" + AppPackagesHelper.getCurrentPackageVersion(this));
         dlnaNameText.setText(DLNAUtils.getDLNANameSuffix(this.getApplicationContext()));
         accessCodeText.setText(Environment.getAccessCode(this));
+        //DLNA名称/访问口令都不再配单独的"设置"/"修改"按钮，改成输入框失去
+        //焦点时自动生效——遥控器场景下没有"点击输入框外的地方"这种手势，
+        //焦点移到下一个控件(D-pad往下/往上)就是用户"编辑完了"最自然的信号。
+        dlnaNameText.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                if(!hasFocus) saveDLNAName();
+            }
+        });
+        accessCodeText.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                if(!hasFocus) saveAccessCode();
+            }
+        });
 
         //打开App时静默检查一次，没有更新/查不到都不打扰用户；找到更新会自动下载，
         //下载完成后跳系统安装确认框（这一步谁都跳不过，参见installApk里的说明）。
@@ -108,19 +120,6 @@ public class MainActivity extends Activity implements View.OnClickListener {
                 }
                 Environment.toast(getApplicationContext(), "服务已手动启动，稍后可尝试访问控制端页面");
                 break;
-            case R.id.btnSetDLNA:
-                DLNAUtils.setDLNANameSuffix(this.getApplicationContext(), dlnaNameText.getText().toString());
-                break;
-            case R.id.btnSetAccessCode:
-                String newCode = accessCodeText.getText().toString().trim();
-                if(newCode.isEmpty()){
-                    Environment.toast(getApplicationContext(), "口令不能为空，留空会导致控制端无鉴权，未做修改。");
-                    accessCodeText.setText(Environment.getAccessCode(this));
-                }else{
-                    Environment.setAccessCode(this, newCode);
-                    Environment.toast(getApplicationContext(), "访问口令已修改！");
-                }
-                break;
             case R.id.btnCheckUpdate:
                 checkForUpdate(true);
                 break;
@@ -139,6 +138,19 @@ public class MainActivity extends Activity implements View.OnClickListener {
             ((InputMethodManager) getApplicationContext().getSystemService(Context.INPUT_METHOD_SERVICE)).showInputMethodPicker();
         }catch (Exception ignored) {
             Environment.toast(getApplicationContext(), "抱歉，无法设置为系统默认输入法，请手动启动服务！");
+        }
+    }
+    private void saveDLNAName(){
+        DLNAUtils.setDLNANameSuffix(this.getApplicationContext(), dlnaNameText.getText().toString());
+    }
+    private void saveAccessCode(){
+        String newCode = accessCodeText.getText().toString().trim();
+        if(TextUtils.isEmpty(newCode)){
+            Environment.toast(getApplicationContext(), "口令不能为空，留空会导致控制端无鉴权，未做修改。");
+            accessCodeText.setText(Environment.getAccessCode(this));
+        }else if(!newCode.equals(Environment.getAccessCode(this))){
+            Environment.setAccessCode(this, newCode);
+            Environment.toast(getApplicationContext(), "访问口令已修改！");
         }
     }
     private void refreshStatus(){
@@ -170,15 +182,15 @@ public class MainActivity extends Activity implements View.OnClickListener {
         imeDefaultStatusView.setText(isDefault ? "已是默认" : "未设默认");
         imeDefaultStatusView.setTextColor(getResources().getColor(isDefault ? R.color.status_ok : R.color.text_secondary));
 
-        //已经是默认输入法时"手动启动"这个兜底按钮就真用不上了（它自己的说明
-        //文字也写着是"设置失败时"才用得到），一直显示只是让页面看起来还有一步
-        //没做完。隐藏的同时要把原本指向它的D-pad焦点链路(nextFocusUp/Down)
-        //也一起改到隐藏后的前后控件上——遥控器场景下没有触屏/鼠标，指向一个
-        //GONE掉的View会导致这个方向直接焦点搜索失败，而不是自动跳过它。
+        //已经是默认输入法时"手动启动"这个兜底按钮就真用不上了，一直显示
+        //只是让页面看起来还有一步没做完。隐藏的同时要把原本指向它的D-pad
+        //焦点链路(nextFocusUp/Down)也一起改到隐藏后的前后控件上——遥控器
+        //场景下没有触屏/鼠标，指向一个GONE掉的View会导致这个方向直接焦点
+        //搜索失败，而不是自动跳过它。
         boolean showManualStart = !isDefault;
         manualStartRow.setVisibility(showManualStart ? View.VISIBLE : View.GONE);
-        btnSetIME.setNextFocusDownId(showManualStart ? R.id.btnStartService : R.id.etTestInput);
-        testInputText.setNextFocusUpId(showManualStart ? R.id.btnStartService : R.id.btnSetIME);
+        btnSetIME.setNextFocusDownId(showManualStart ? R.id.btnStartService : R.id.etAccessCode);
+        accessCodeText.setNextFocusUpId(showManualStart ? R.id.btnStartService : R.id.btnSetIME);
 
         String address = RemoteServer.getServerAddress(this);
         String accessCode = Environment.getAccessCode(this);
@@ -198,13 +210,16 @@ public class MainActivity extends Activity implements View.OnClickListener {
         }
     }
 
-    //manualTrigger=true时(用户手动点"检查更新")，查不到/已是最新都要给出文字反馈；
+    //manualTrigger=true时(用户手动点检查更新图标)，查不到/已是最新都要给出反馈；
     //manualTrigger=false时(App打开时静默检查一次)，查不到/网络不通就悄悄不做声，
     //不能因为查询失败就弹提示打扰用户——最常见原因就是当前网络访问不了github.com。
+    //反馈原来是写在检查更新卡片自己的一行常驻状态文字里，现在这个卡片已经
+    //缩成顶栏一个图标按钮，没地方常驻文字了，改用跟这个Activity别处一致的
+    //Toast——反正这几条本来就是一次性的过程提示，不需要一直留在屏幕上。
     private void checkForUpdate(final boolean manualTrigger){
         if(checkingUpdate) return;
         checkingUpdate = true;
-        if(manualTrigger) updateStatusView.setText("检查中…");
+        if(manualTrigger) Environment.toast(getApplicationContext(), "正在检查更新…");
         final int currentVersionCode = AppPackagesHelper.getCurrentVersionCode(this);
         new Thread(new Runnable(){
             @Override
@@ -216,7 +231,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
                         public void run(){
                             checkingUpdate = false;
                             if(manualTrigger){
-                                updateStatusView.setText(info == null ? "检查更新失败，请稍后重试" : "当前已是最新版本");
+                                Environment.toast(getApplicationContext(), info == null ? "检查更新失败，请稍后重试" : "当前已是最新版本");
                             }
                         }
                     });
@@ -225,7 +240,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
                 runOnUiThread(new Runnable(){
                     @Override
                     public void run(){
-                        updateStatusView.setText("发现新版本 " + info.versionName + "，正在下载…");
+                        Environment.toast(getApplicationContext(), "发现新版本 " + info.versionName + "，正在下载…");
                     }
                 });
                 File dir = getExternalFilesDir(null);
@@ -237,10 +252,10 @@ public class MainActivity extends Activity implements View.OnClickListener {
                     public void run(){
                         checkingUpdate = false;
                         if(ok){
-                            updateStatusView.setText("已下载新版本 " + info.versionName + "，请确认安装");
+                            Environment.toast(getApplicationContext(), "已下载新版本 " + info.versionName + "，请确认安装");
                             installApk(apkFile);
                         }else{
-                            updateStatusView.setText("下载新版本失败，请稍后重试");
+                            Environment.toast(getApplicationContext(), "下载新版本失败，请稍后重试");
                         }
                     }
                 });
