@@ -472,6 +472,7 @@ $("div.tab").on("click", function(){
 	tabs.filter('[data-tab="' + o.attr('data-rel')+ '"]').removeClass("hide");
 	o.addClass('cur');
 	updateContainerWidth();
+	updateElementsAutoRefresh();
 })
 //方向键/元素列表这两个子Tab除了点标签切换，也支持在内容区左右滑动切换——
 //点两个小标签来回切总感觉要"精确瞄准"，直接在当前显示的面板上一划更顺手。
@@ -481,10 +482,26 @@ var MODE_ORDER = ["dpad", "elements"];
 //(按钮宫格/文件列表/dpad摇杆)都是照手机单手操作设计的，屏幕再宽也用不上，
 //没必要跟着一起解除.container的480px宽度上限。只在"输入遥控"Tab当前
 //可见、且子Tab正好是"元素列表"时才加宽，两个条件缺一都要还原。
+function isElementsViewVisible(){
+	return $('.tab.cur').attr('data-rel') === 'controls' && $('.mode-tab.active').attr('data-mode') === 'elements';
+}
 function updateContainerWidth(){
-	var onControlsTab = $('.tab.cur').attr('data-rel') === 'controls';
-	var onElementsMode = $('.mode-tab.active').attr('data-mode') === 'elements';
-	$('.container').toggleClass('wide-mode', onControlsTab && onElementsMode);
+	$('.container').toggleClass('wide-mode', isElementsViewVisible());
+}
+//元素列表之前只在"进入这个子Tab/点刷新/点了某个元素之后"这几个时机才会
+//重新拉取一次，电视画面如果是被别的方式(比如遥控器/自动播放/弹窗)改变的，
+//控制页不会知道，只能一直显示着旧内容直到用户想起来点刷新。这里改成只要
+//这个视图还看得见，就按固定间隔自动刷新，不需要用户自己惦记着点刷新——
+//离开这个视图(切到别的子Tab或别的顶层Tab)时停掉，不在后台空转。
+var ELEMENTS_REFRESH_INTERVAL_MS = 3000;
+var elementsRefreshTimer = null;
+function updateElementsAutoRefresh(){
+	if(isElementsViewVisible()){
+		if(!elementsRefreshTimer) elementsRefreshTimer = setInterval(loadScreenElements, ELEMENTS_REFRESH_INTERVAL_MS);
+	}else if(elementsRefreshTimer){
+		clearInterval(elementsRefreshTimer);
+		elementsRefreshTimer = null;
+	}
 }
 function switchMode(mode){
 	$(".mode-tab").removeClass("active");
@@ -492,6 +509,7 @@ function switchMode(mode){
 	$(".nav-mode").addClass("hide");
 	$('.nav-mode[data-mode="' + mode + '"]').removeClass("hide");
 	updateContainerWidth();
+	updateElementsAutoRefresh();
 	if(mode === "elements") loadScreenElements();
 }
 $(".mode-tab").on("click", function(){
@@ -663,7 +681,11 @@ $(".direction, #btnDel").on(isSupportTouch ? "touchstart" : "mousedown",function
 		postKeyActionCode(o.attr("data-key"), 1);
 		console.log("onkeydown:" + o.attr("data-key"));
 })
-$(".direction, #btnDel").on(isSupportTouch ? "touchend" : "mouseup",function(){
+//touchcancel(手指被系统手势/来电等打断，不会触发touchend)之前没处理——
+//不止是视觉上的蓝色高亮卡住不消失，更麻烦的是postKeyActionCode(key,1)开的
+//那个100ms一次的keydown重复定时器也永远不会被(key,2)那次调用清掉，等于
+//电视端会一直收到这个方向键"按住不放"的信号。跟touchend一样处理即可。
+$(".direction, #btnDel").on(isSupportTouch ? "touchend touchcancel" : "mouseup",function(){
 		var o=$(this);
 		postKeyActionCode(o.attr("data-key"), 2);
 		console.log("onkeyup:" + o.attr("data-key"));
@@ -674,7 +696,7 @@ $(".otherbtn").on(isSupportTouch ? "touchstart" : "mousedown", function() {
 	vibrateShort();
 	postKeyCode(o.attr("data-key"));
 })
-$(".direction,.otherbtn").on(isSupportTouch ? "touchend touchmove" : "mouseup mousemove", function() {
+$(".direction,.otherbtn").on(isSupportTouch ? "touchend touchcancel touchmove" : "mouseup mousemove", function() {
 	$(".direction,.otherbtn").removeClass("pressed");
 })
 $("#cbListSystem").on("click", reloadAppList);
@@ -945,3 +967,4 @@ if (sharedPlayUrl) {
 showCurrentVersion();
 loadDeviceName();
 updateContainerWidth();
+updateElementsAutoRefresh();

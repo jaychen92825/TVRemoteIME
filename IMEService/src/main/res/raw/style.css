@@ -20,7 +20,12 @@
 * {
 	-webkit-box-sizing: border-box;
 	-moz-box-sizing: border-box;
-	box-sizing: border-box
+	box-sizing: border-box;
+	/* 移动端WebKit/Chrome默认会在任何可点击元素上盖一层灰色/半透明的矩形
+	   "点按高亮"，不认border-radius(圆形按钮点起来就变成方块)，尺寸也经常
+	   比元素本身大一圈；页面自己已经用.pressed/:active这套class做了颜色
+	   反馈，不需要再叠加一层系统默认的高亮效果。 */
+	-webkit-tap-highlight-color: transparent;
 }
 
 /* label默认是行内排布，checkbox/文字各自的默认垂直对齐方式(baseline)
