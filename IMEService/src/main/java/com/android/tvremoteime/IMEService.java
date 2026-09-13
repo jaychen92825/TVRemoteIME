@@ -653,14 +653,23 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	//会导致"点一下收起键盘，网页上的默认显示开关就被清空"这个副作用，
 	//已去掉。
 	//
-	//hideWindowByKey这个标记只影响"这一次"的onEvaluateInputViewShown()
-	//求值结果，不持久化，配合requestHideSelf(0)(官方API，会通知系统
-	//InputMethodManager，比内部的hideWindow()更可靠)一起，做到"仅这次
-	//收起"，不影响下次弹出时的判断。
+	//之前还一起保留了hideWindowByKey标记+finishInput()(内部会调用
+	//onFinishInput())这一套旧路径，跟requestHideSelf(0)"双保险"。但
+	//这两条路径都不会同步触发onEvaluateInputViewShown()去消费这个
+	//标记——真正消费它的是"下一次"onEvaluateInputViewShown()调用，而
+	//这一次调用恰好是用户点击*下一个*输入框时系统为了决定"这个新输入框
+	//要不要弹键盘"发起的评估。于是这个本该只管"这一次收起"的标记，
+	//实际上错误地拦截了下一个输入框本该正常弹出的键盘，表现就是"点新
+	//输入框，键盘弹出后又立即被折叠"。另外手动调用finishInput()里的
+	//onFinishInput()，语义上是在告诉框架"这次输入会话结束了"，但用户
+	//只是想临时收起键盘、并没有离开这个输入框，这个调用本身也是不
+	//合适的，一并去掉。
+	//
+	//requestHideSelf(0)是官方API，会直接通知系统InputMethodManager
+	//隐藏当前显示的输入法窗口，不需要靠onEvaluateInputViewShown()配合
+	//就能立即生效(已实机验证)，单独留着这一行就够了。
 	private void collapseKeyboardView(){
-		hideWindowByKey = true;
 		requestHideSelf(0);
-		finishInput();
 	}
 	//键盘上40多个按键全部共用同一份@drawable/key(或key_on/key_off)背景
 	//资源(通过btn_input_style的android:background，或者这里手动
