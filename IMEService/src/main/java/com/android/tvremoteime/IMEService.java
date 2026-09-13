@@ -701,12 +701,22 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		if(v instanceof Button){
 			if(v.getId() == R.id.btnClose){
 				//直接touch点击这个按钮走的是这条路径(而不是遥控器OK键走的
-				//clickButtonByKey，那边已经正确设置了这个标记)，漏了这一行
-				//的直接后果就是"点了收起键盘的按钮，键盘却没收起来"——
-				//onEvaluateInputViewShown()依赖这个标记才能保证finishInput()
-				//之后立刻真正隐藏，见该方法里的说明。
+				//clickButtonByKey，那边是在onKeyDown按键事件分发栈里直接
+				//同步调用，已经验证过没问题)。这里补上hideWindowByKey之后
+				//还是收不起来——怀疑是触摸事件分发(View.performClick那一整套
+				//调用栈)本身在点击处理完之后还有后续逻辑，会把刚设置好的
+				//隐藏状态覆盖回去，这跟按键事件分发是两条不同的系统调用栈，
+				//没法直接照搬。改成用handler.post()把真正的隐藏动作丢到
+				//当前这次触摸事件完全处理完、调用栈弹出之后再执行，跟
+				//refreshKeyboardViewVisibility()里"控制端发指令强制隐藏"
+				//用的是同一个思路。
 				this.hideWindowByKey = true;
-				this.finishInput();
+				handler.post(new Runnable() {
+					@Override
+					public void run() {
+						finishInput();
+					}
+				});
 			}else {
 				commitText(((Button) v).getText().toString());
 			}
