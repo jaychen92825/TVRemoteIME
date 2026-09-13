@@ -599,11 +599,6 @@ var ELEMENT_TYPE_TITLE_TAGS = {
 	switch: "[开关] ",
 	radio: "[单选] "
 };
-var ELEMENT_STATE_TITLE_TAGS = {
-	checkbox: {"true": "已勾选 ", "false": "未勾选 "},
-	switch: {"true": "开 ", "false": "关 "},
-	radio: {"true": "已选中 ", "false": "未选中 "}
-};
 function getElementTypeIcon(type, checked){
 	var byState = ELEMENT_TYPE_ICONS[type];
 	if(!byState) return "";
@@ -659,8 +654,7 @@ function loadScreenElements(){
 			for(var c = 0; c < rows[r].length; c++){
 				var el = rows[r][c];
 				var icon = getElementTypeIcon(el.type, el.checked);
-				var stateTag = (ELEMENT_STATE_TITLE_TAGS[el.type] || {})[el.checked ? "true" : "false"] || "";
-				var titleText = (ELEMENT_TYPE_TITLE_TAGS[el.type] || "") + stateTag + el.label;
+				var titleText = (ELEMENT_TYPE_TITLE_TAGS[el.type] || "") + el.label;
 				html.push('<div class="element-item type-' + (el.type || 'item') + (el.checked ? ' checked' : '') + '" data-id="' + el.id +
 					'" title="' + escapeHtml(titleText) + '">' + icon + '<span>' + escapeHtml(el.label) + '</span></div>');
 			}
