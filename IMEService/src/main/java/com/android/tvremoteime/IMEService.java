@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.graphics.Point;
+import android.graphics.drawable.Drawable;
 import android.inputmethodservice.InputMethodService;
 import android.os.Handler;
 import android.os.IBinder;
@@ -175,8 +176,9 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		tvPassword = helpDialog.findViewById(R.id.tvPassword);
 
 		toggleCapsState(true);
+		mutateAllKeyBackgrounds();
 
-        return mInputView; 
+        return mInputView;
     }
 
 	@Override
@@ -631,17 +633,48 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		//this.onFinishInputView(true);
 		//this.onFinishCandidatesView(true);
 	}
+	//键盘上40多个按键全部共用同一份@drawable/key(或key_on/key_off)背景
+	//资源(通过btn_input_style的android:background，或者这里手动
+	//setBackgroundResource指定)。Android对完全相同的drawable资源请求
+	//可能返回同一个缓存中的Drawable实例，几个按键实际上在共享同一份
+	//"当前状态"——一个按键被按下/获得焦点时系统对这个共享实例调用的
+	//setState()，会连带影响到其它引用了同一个未mutate()过的实例的按键，
+	//表现出来就是"按完一个键，高亮跑到别的键上不消失"或者"明明移开了
+	//焦点，原来那个键还亮着"。每次通过资源id重新设置背景后都补一次
+	//mutate()，让这个View拿到的是它自己独立的Drawable实例，状态互不
+	//传染。
+	private static void setKeyBackground(View v, int resId){
+		v.setBackgroundResource(resId);
+		Drawable bg = v.getBackground();
+		if(bg != null) bg.mutate();
+	}
+	//给已经inflate出来的所有按键背景各自mutate一次——覆盖"这个键从头到尾
+	//只是被方向键扫过路过、从没真正按下过"的情况：它的背景从始至终都是
+	//XML里声明的@drawable/key，从来没经过上面setKeyBackground()那次
+	//"重新设置+mutate"，如果不在这里单独处理，同样会共享同一个Drawable
+	//实例。
+	private void mutateAllKeyBackgrounds(){
+		for(int i = 0; i < mInputView.getChildCount() - 1; i++){
+			View rowView = mInputView.getChildAt(i);
+			if(!(rowView instanceof LinearLayout)) continue;
+			LinearLayout row = (LinearLayout) rowView;
+			for(int j = 0; j < row.getChildCount(); j++){
+				Drawable bg = row.getChildAt(j).getBackground();
+				if(bg != null) bg.mutate();
+			}
+		}
+	}
 	private void clickButtonByKey(final View v){
 		switch (v.getId()) {
 			case R.id.btnCaps:
-				v.setBackgroundResource(capsOn ? R.drawable.key_pressed_on : R.drawable.key_pressed_off);
+				setKeyBackground(v, capsOn ? R.drawable.key_pressed_on : R.drawable.key_pressed_off);
 				break;
 			case R.id.btnClose:
 				this.hideWindowByKey = true;
 				this.finishInput();
 				return;
 			default:
-				v.setBackgroundResource(R.drawable.key_pressed);
+				setKeyBackground(v, R.drawable.key_pressed);
 				break;
 		}
 		clickButton(v, false);
@@ -649,9 +682,9 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 			@Override
 			public void run() {
 				if(v == btnCaps){
-					v.setBackgroundResource(capsOn ? R.drawable.key_on : R.drawable.key_off);
+					setKeyBackground(v, capsOn ? R.drawable.key_on : R.drawable.key_off);
 				}else{
-					v.setBackgroundResource(R.drawable.key);
+					setKeyBackground(v, R.drawable.key);
 				}
 				v.requestFocus();
 			}
@@ -696,7 +729,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	private void toggleCapsState(boolean resetCapsButtonState){
 		capsOn = !capsOn;
 		if(resetCapsButtonState)
-			btnCaps.setBackgroundResource(capsOn ? R.drawable.key_on : R.drawable.key_off);
+			setKeyBackground(btnCaps, capsOn ? R.drawable.key_on : R.drawable.key_off);
 		resetButtonChar(qweLine);
 		resetButtonChar(asdLine);
 		resetButtonChar(zxcLine);
@@ -718,30 +751,38 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	private void showHelpDialog(){
 		if(mServer == null) return;
 
+        //地址(mDNS域名/IP)本身在一次IME进程存活期间不会变，只需要算一次、
+        //缓存在addressView文字里，用它的文字是否为空当作"算过没有"的标记，
+        //跟MainActivity的"打开手机遥控界面"卡片是同一个格式：不区分"固定
+        //地址"/IP的技术差异，统一用"或者"连接两个可尝试的地址，都去掉
+        //http://前缀和结尾斜杠，展示成用户实际会敲的样子。
         if(addressView.getText().length() == 0) {
-            String address = mServer.getServerAddress();
-            String accessCode = Environment.getAccessCode(this);
-            //地址格式跟MainActivity的"打开手机遥控界面"卡片保持一致：
-            //不区分"固定地址"/IP地址的技术差异，统一用"或者"连接两个可
-            //尝试的地址，都去掉http://前缀和结尾斜杠，展示成用户实际会
-            //敲的样子。
             addressView.setText(Environment.forDisplay(MDnsHelper.getAddress())
-                    + "\n或者\n" + Environment.forDisplay(address));
-            //密码留空表示用户主动选择了"不需要密码登录"，这时不展示任何
-            //密码提示——用户没设置密码，就不该在这里凭空冒出一个"密码"的
-            //概念来。
-            boolean hasPassword = accessCode != null && accessCode.length() > 0;
-            pwdDivider.setVisibility(hasPassword ? View.VISIBLE : View.GONE);
-            pwdRow.setVisibility(hasPassword ? View.VISIBLE : View.GONE);
-            if(hasPassword) tvPassword.setText(accessCode);
-            String encodedCode;
-            try {
-                encodedCode = java.net.URLEncoder.encode(accessCode, "UTF-8");
-            } catch (java.io.UnsupportedEncodingException e) {
-                encodedCode = accessCode;
-            }
-            qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(address + "login?code=" + encodedCode, 300, 300));
+                    + "\n或者\n" + Environment.forDisplay(mServer.getServerAddress()));
         }
+
+        //口令不一样——用户完全可能在键盘弹窗还开着的同一个IME进程存活期间，
+        //切到MainActivity把口令从空改成非空(或者反过来)。如果跟上面地址
+        //一样只算一次、缓存下来，改完口令后再打开这个弹窗，密码栏该出现
+        //却不出现(或者该消失却还留着)，二维码里编码的登录口令也会是改
+        //之前的旧值，扫码登录会失败。所以口令相关的这部分每次弹窗都要
+        //重新读取，不跟地址共用那个"只算一次"的判断。
+        String address = mServer.getServerAddress();
+        String accessCode = Environment.getAccessCode(this);
+        //密码留空表示用户主动选择了"不需要密码登录"，这时不展示任何
+        //密码提示——用户没设置密码，就不该在这里凭空冒出一个"密码"的
+        //概念来。
+        boolean hasPassword = accessCode != null && accessCode.length() > 0;
+        pwdDivider.setVisibility(hasPassword ? View.VISIBLE : View.GONE);
+        pwdRow.setVisibility(hasPassword ? View.VISIBLE : View.GONE);
+        if(hasPassword) tvPassword.setText(accessCode);
+        String encodedCode;
+        try {
+            encodedCode = java.net.URLEncoder.encode(accessCode, "UTF-8");
+        } catch (java.io.UnsupportedEncodingException e) {
+            encodedCode = accessCode;
+        }
+        qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(address + "login?code=" + encodedCode, 300, 300));
 
 		helpDialog.setVisibility(View.VISIBLE);
 	}
