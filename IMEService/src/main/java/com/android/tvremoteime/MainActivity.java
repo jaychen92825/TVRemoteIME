@@ -141,12 +141,9 @@ public class MainActivity extends Activity implements View.OnClickListener {
     }
     private void saveAccessCode(){
         String newCode = accessCodeText.getText().toString().trim();
-        if(TextUtils.isEmpty(newCode)){
-            Environment.toast(getApplicationContext(), "口令不能为空，留空会导致控制端无鉴权，未做修改。");
-            accessCodeText.setText(Environment.getAccessCode(this));
-        }else if(!newCode.equals(Environment.getAccessCode(this))){
+        if(!newCode.equals(Environment.getAccessCode(this))){
             Environment.setAccessCode(this, newCode);
-            Environment.toast(getApplicationContext(), "访问口令已修改！");
+            Environment.toast(getApplicationContext(), TextUtils.isEmpty(newCode) ? "已设置为无需密码登录！" : "访问口令已修改！");
         }
     }
     private void refreshStatus(){

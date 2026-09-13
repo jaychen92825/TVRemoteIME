@@ -69,6 +69,8 @@ public class Environment {
      * 用户可以在App主界面"打开手机遥控界面"卡片里随时改成自己的口令(见MainActivity/
      * setAccessCode)。默认口令是固定值而不是随机生成，方便用户第一次连接时
      * 不用先打开App主界面查看随机口令是多少，直接就能输入默认值登录。
+     * 用户也可以把口令留空，代表主动选择"不需要密码登录"——RemoteServer的
+     * checkAuth/handleLogin会把空口令当成"直接放行"而不是"永远对不上"。
      */
     public static String getAccessCode(Context context){
         SharedPreferences prefs = context.getApplicationContext()

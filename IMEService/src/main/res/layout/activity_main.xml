@@ -197,11 +197,10 @@
                 android:textStyle="bold"/>
 
             <!-- 扫码/手动输入是两种"打开界面"的等价选项，放一行左右并列；
-                 之前"或者，手机浏览器里输入："这句话跟它对应的地址值
-                 分别在两个不相干的容器里(一个在QR右边、一个在下面另起
-                 一整行)，视觉上完全脱节，看着像两件事。现在把说明文字
-                 和地址值放进同一个竖排容器里，紧挨着显示，并且整体跟
-                 QR图片一起垂直居中对齐，两个选项才像是真的在"并排"。 -->
+                 密码本质上是"手动输入地址"这条路径才用得上的东西(扫码
+                 登录不用管密码)，跟地址放在同一栏里、紧接在地址下面，
+                 不需要单独占一整行卡片宽度、也不需要用分割线特意隔开
+                 成一个独立小节。 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -227,10 +226,9 @@
                 </LinearLayout>
                 <LinearLayout
                     android:layout_width="0dp"
-                    android:layout_height="130dp"
+                    android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:layout_marginLeft="14dp"
-                    android:gravity="center_vertical"
                     android:orientation="vertical">
                     <TextView
                         android:layout_width="wrap_content"
@@ -248,43 +246,35 @@
                         android:textIsSelectable="true"
                         android:textSize="14sp"
                         android:text=""/>
+                    <!-- 密码：跟DLNA名称一样，改成输入框失焦自动生效，不需要
+                         单独一个"修改"按钮；留空表示登录不需要密码。 -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginRight="8dp"
+                            android:text="密码"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp"/>
+                        <EditText
+                            android:id="@+id/etAccessCode"
+                            android:layout_width="0dp"
+                            android:layout_height="36dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_edit"
+                            android:hint="留空则不需要密码"
+                            android:inputType="text"
+                            android:textColor="@color/text_primary"
+                            android:textColorHint="@color/text_secondary"
+                            android:textSize="13sp"
+                            android:nextFocusDown="@id/btnStartService"/>
+                    </LinearLayout>
                 </LinearLayout>
-            </LinearLayout>
-
-            <!-- 密码是跟"打开界面"不同的另一件事(改登录密码)，跟上面的
-                 扫码/地址区块之间加一条分割线，避免看起来像地址区块的
-                 延续。密码：跟DLNA名称一样，改成输入框失焦自动生效，
-                 不需要单独一个"修改"按钮。 -->
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginTop="14dp"
-                android:background="@color/text_secondary"
-                android:alpha="0.2"/>
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginRight="10dp"
-                    android:text="密码"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="14sp"/>
-                <EditText
-                    android:id="@+id/etAccessCode"
-                    android:layout_width="0dp"
-                    android:layout_height="42dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_edit"
-                    android:hint="输入新密码"
-                    android:inputType="text"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_secondary"
-                    android:nextFocusDown="@id/btnStartService"/>
             </LinearLayout>
         </LinearLayout>
 

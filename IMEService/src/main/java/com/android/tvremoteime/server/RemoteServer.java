@@ -227,7 +227,10 @@ public class RemoteServer extends NanoHTTPD
     private Response handleLogin(IHTTPSession session){
         String code = session.getParms().get("code");
         String accessCode = Environment.getAccessCode(mContext);
-        if(TextUtils.isEmpty(accessCode) || !accessCode.equals(code)){
+        //访问口令留空表示用户主动选择了"不需要密码登录"，这时任何人扫码/
+        //访问都应该直接放行，而不是反过来因为"口令是空的，肯定对不上"
+        //被拒绝——那样就把"不需要密码"变成了"谁都登不进去"。
+        if(!TextUtils.isEmpty(accessCode) && !accessCode.equals(code)){
             return createPlainTextResponse(Response.Status.FORBIDDEN, "口令错误，请重新扫码或在应用主界面查看当前口令。");
         }
         String token = generateSessionToken();
