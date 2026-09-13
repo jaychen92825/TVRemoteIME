@@ -270,6 +270,7 @@ $("#btnEnter").on("click", function(){
 	var text = $input.val();
 	if(text != ""){
 		$input.val("");
+		autoResizeInputArea();
 		$.post("/text", {text: text}, function(){
 			postKeyCode("66");
 		});
@@ -277,10 +278,23 @@ $("#btnEnter").on("click", function(){
 		postKeyCode("66");
 	}
 })
+//输入框高度跟着实际内容走：先把height设回auto让scrollHeight量出"刚好
+//装下当前文字"需要多高，再把height设成这个值——不这样先重置成auto的话，
+//文字变少时scrollHeight会一直保持之前撑开过的高度，只会越长越高、
+//缩不回去。CSS里的max-height+overflow-y兜底，超过封顶高度后变成内部
+//滚动，不会无限撑高把下面的按键区顶出屏幕。
+function autoResizeInputArea(){
+	var el = document.getElementById("inputarea");
+	if(!el) return;
+	el.style.height = "auto";
+	el.style.height = el.scrollHeight + "px";
+}
+autoResizeInputArea();
 //输入框内容实时同步到电视端（对应输入法的组字预览状态，还没真正提交），
 //加个小延迟避免每敲一下都发一次请求
 var composingTimer = null;
 $("#inputarea").on("input", function(){
+	autoResizeInputArea();
 	var text = $(this).val();
 	if(composingTimer) clearTimeout(composingTimer);
 	composingTimer = setTimeout(function(){
@@ -693,6 +707,7 @@ $("#btnCls").on("click",function(){
 	//显示着旧文字，这时候要是再点一下回车，又会把这段"已经清空过"的旧文字
 	//重新发送一遍。
 	$("#inputarea").val("");
+	autoResizeInputArea();
 })
 $(".direction, #btnDel").on(isSupportTouch ? "touchstart" : "mousedown",function(){
 		var o=$(this);

@@ -90,6 +90,11 @@ body {
 	box-shadow: 0 1px 4px rgba(0,0,0,0.05);
 }
 
+/* 之前固定height:55px，不管实际输入了几行文字，输入框永远显示两行高度，
+   短文字时下面空出一大截。改成min-height只占一行、由JS(见ime_core.js的
+   autoResizeInputArea)根据scrollHeight实时把height撑到刚好装下当前文字，
+   换行了才会变高；max-height封顶+超出后允许内部滚动，避免粘贴长文本时
+   输入框把下面的按键都顶下去。 */
 #inputarea {
 	outline: 0;
 	color: var(--color-text);
@@ -99,8 +104,11 @@ body {
 	border: none;
 	font-size: 16px;
 	font-family: "Microsoft YaHei",Arial,sans-serif;
+	line-height: 22px;
 	resize: none;
-	height: 55px;
+	min-height: 22px;
+	max-height: 110px;
+	overflow-y: auto;
 	background: transparent;
 }
 
