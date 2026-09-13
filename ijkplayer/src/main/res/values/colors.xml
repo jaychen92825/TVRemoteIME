@@ -11,4 +11,9 @@
     <color name="Grey_700">#616161</color>
     <color name="Grey_800">#424242</color>
     <color name="Grey_900">#212121</color>
+
+    <!-- ijkplayer是独立的library module，没法直接引用主App module里
+         values/colors.xml的@color/accent(依赖方向反了)，这里按同一个
+         色值单独定义一份，让加载动画的配色跟全站主题蓝保持一致。 -->
+    <color name="accent">#3ea6ff</color>
 </resources>

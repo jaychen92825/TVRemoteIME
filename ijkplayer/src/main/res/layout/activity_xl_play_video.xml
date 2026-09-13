@@ -148,30 +148,34 @@
                 </LinearLayout>
             </FrameLayout>
 
-            <!-- loading-->
-            <RelativeLayout
+            <!-- loading：之前是系统默认的圆点转圈样式，没有任何配色，跟
+                 全站已经统一的主题蓝完全不搭，文字还被挤在旁边一个仅
+                 100dp宽的小盒子里。换成主题蓝的自定义圆环转圈动画(见
+                 loading_spinner.xml)，文字挪到下方居中，容器改成
+                 wrap_content不再限死宽高，更宽松。 -->
+            <LinearLayout
                 android:id="@+id/app_video_loading"
-                android:layout_width="100dp"
-                android:layout_height="50dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_centerInParent="true"
-                android:indeterminateBehavior="repeat"
-                android:indeterminateOnly="true"
+                android:orientation="vertical"
+                android:gravity="center_horizontal"
                 android:visibility="gone">
                 <ProgressBar
-                    android:layout_width="50dp"
-                    android:layout_height="50dp"
-                    android:id="@+id/progressBar" />
+                    android:id="@+id/progressBar"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:indeterminate="true"
+                    android:indeterminateDrawable="@drawable/loading_spinner" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_alignParentEnd="true"
-                    android:layout_alignParentRight="true"
-                    android:layout_centerVertical="true"
-                    android:layout_marginLeft="5dp"
+                    android:layout_marginTop="12dp"
                     android:textColor="#ffffffff"
+                    android:textSize="14sp"
                     android:text="缓冲中" />
-            </RelativeLayout>
+            </LinearLayout>
 
             <!--playlist-->
             <android.support.v7.widget.RecyclerView

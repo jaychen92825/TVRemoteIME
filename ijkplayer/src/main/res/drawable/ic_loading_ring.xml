@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 加载动画用的基础图形：一个留了缺口的圆环(270°弧线)，配合外层
+     loading_spinner.xml的animated-rotate连续旋转，看起来就是常见的
+     那种"转圈"进度指示，而不是系统默认那个不成套的圆点样式。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:pathData="M24,4 A20,20 0 1 1 4,24"
+        android:strokeColor="@color/accent"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>
