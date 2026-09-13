@@ -112,6 +112,9 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	private View helpDialog = null;
 	private ImageView qrCodeImage = null;
 	private TextView  addressView = null;
+	private View pwdDivider = null;
+	private View pwdRow = null;
+	private TextView tvPassword = null;
 
 	private RemoteServer mServer = null;
 	private LinearLayout qweLine = null;
@@ -167,6 +170,9 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		helpDialog = mInputView.findViewById(R.id.helpDialog);
 		qrCodeImage = helpDialog.findViewById(R.id.ivQRCode);
 		addressView = helpDialog.findViewById(R.id.tvAddress);
+		pwdDivider = helpDialog.findViewById(R.id.pwdDivider);
+		pwdRow = helpDialog.findViewById(R.id.pwdRow);
+		tvPassword = helpDialog.findViewById(R.id.tvPassword);
 
 		toggleCapsState(true);
 
@@ -713,14 +719,21 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		if(mServer == null) return;
 
         if(addressView.getText().length() == 0) {
-            String version = AppPackagesHelper.getCurrentPackageVersion(this);
-            TextView title = helpDialog.findViewById(R.id.title);
-            title.setText(title.getText() + " " + version);
             String address = mServer.getServerAddress();
             String accessCode = Environment.getAccessCode(this);
-            addressView.setText(address
-                    + "\n固定地址：" + MDnsHelper.getAddress()
-                    + "\n访问口令：" + accessCode);
+            //地址格式跟MainActivity的"打开手机遥控界面"卡片保持一致：
+            //不区分"固定地址"/IP地址的技术差异，统一用"或者"连接两个可
+            //尝试的地址，都去掉http://前缀和结尾斜杠，展示成用户实际会
+            //敲的样子。
+            addressView.setText(Environment.forDisplay(MDnsHelper.getAddress())
+                    + "\n或者\n" + Environment.forDisplay(address));
+            //密码留空表示用户主动选择了"不需要密码登录"，这时不展示任何
+            //密码提示——用户没设置密码，就不该在这里凭空冒出一个"密码"的
+            //概念来。
+            boolean hasPassword = accessCode != null && accessCode.length() > 0;
+            pwdDivider.setVisibility(hasPassword ? View.VISIBLE : View.GONE);
+            pwdRow.setVisibility(hasPassword ? View.VISIBLE : View.GONE);
+            if(hasPassword) tvPassword.setText(accessCode);
             String encodedCode;
             try {
                 encodedCode = java.net.URLEncoder.encode(accessCode, "UTF-8");

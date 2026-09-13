@@ -183,16 +183,9 @@ public class MainActivity extends Activity implements View.OnClickListener {
         //去掉了http://前缀和结尾的"/"——手机浏览器基本都不需要手动输
         //协议头，展示成用户实际会敲的样子，而不是给一个技术上完整、但
         //照抄会多打字符的URL。
-        addressView.setText(forDisplay(MDnsHelper.getAddress()) + "\n或者\n" + forDisplay(address));
+        addressView.setText(Environment.forDisplay(MDnsHelper.getAddress()) + "\n或者\n" + Environment.forDisplay(address));
         String loginUrl = address + "login?code=" + encodeParam(accessCode);
         qrCodeImage.setImageBitmap(QRCodeGen.generateBitmap(loginUrl, 130, 130));
-    }
-
-    private static String forDisplay(String url){
-        String result = url;
-        if(result.startsWith("http://")) result = result.substring("http://".length());
-        if(result.endsWith("/")) result = result.substring(0, result.length() - 1);
-        return result;
     }
 
     //访问口令现在支持自定义，可能包含&/=/空格等字符，拼进URL查询参数前必须编码

@@ -6,6 +6,7 @@
     <!-- 主界面配色 -->
     <color name="bg_dark">#1b1f24</color>
     <color name="card_bg">#262b31</color>
+    <color name="key_bg">#2f353c</color>
     <color name="accent">#3ea6ff</color>
     <color name="accent_pressed">#2f86d1</color>
     <color name="text_primary">#eceff1</color>

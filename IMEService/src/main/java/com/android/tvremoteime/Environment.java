@@ -89,6 +89,16 @@ public class Environment {
         prefs.edit().putString(PREF_ACCESS_CODE, code).apply();
     }
 
+    //MainActivity的"打开手机遥控界面"卡片和IMEService键盘上的扫码帮助弹窗
+    //都要展示同一种"用户实际会敲的地址"格式，抽到这里共用，避免两处各写
+    //一份、以后改格式漏改一处。
+    public static String forDisplay(String url){
+        String result = url;
+        if(result.startsWith("http://")) result = result.substring("http://".length());
+        if(result.endsWith("/")) result = result.substring(0, result.length() - 1);
+        return result;
+    }
+
     private static String generateAccessCode(){
         return "123456";
     }

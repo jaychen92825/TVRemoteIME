@@ -11,7 +11,7 @@
         <item name="android:layout_height">match_parent</item>
         <item name="android:layout_weight">1</item>
         <item name="android:textSize">20sp</item>
-        <item name="android:textColor">#fff</item>
+        <item name="android:textColor">@color/text_primary</item>
         <item name="android:layout_marginRight">5dp</item>
         <item name="android:background">@drawable/key</item>
         <item name="android:onClick">onClick</item>

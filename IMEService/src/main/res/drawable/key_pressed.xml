@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 遥控器按OK键"点"一个已聚焦的按键时，走的不是View自身真实的按下态
+     (那是给触屏用的)，是clickButtonByKey()手动setBackgroundResource成
+     这个纯色、200ms后再手动切回静止态来模拟"按下反馈"，所以这里必须是
+     一张单独的、非selector的纯色图，不能用key.xml这个三态选择器。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/accent_pressed" />
+    <corners android:radius="6dp" />
+</shape>

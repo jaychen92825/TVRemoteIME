@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!-- 之前是灰色(#444)背景+9-patch立体浮雕按键的老式软键盘观感。这次只重做
+     视觉(配色、圆角、图标、帮助弹窗排版)，IMEService.java里所有的id、
+     以及requestNextButtonFocus()依赖的"mInputView直接子View必须是5个按键
+     行+最后一个helpDialog"这个结构完全不变——那段方向键导航逻辑是按
+     子View下标手动算的，不是走Android原生焦点系统，动了结构会直接break。 -->
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="fill_parent"
     android:layout_height="wrap_content"
-    android:background="#444"
+    android:background="@color/bg_dark"
     android:padding="10dp"
     android:focusable="true">
 
@@ -153,7 +158,7 @@
             android:id="@+id/btnDelete"
             style="@style/btn_input_style"
             android:layout_width="wrap_content"
-            android:src="@drawable/delete_icon" />
+            android:src="@drawable/ic_kb_backspace" />
     </LinearLayout>
 
     <LinearLayout
@@ -169,7 +174,7 @@
             android:id="@+id/btnCaps"
             style="@style/btn_input_style"
             android:layout_width="wrap_content"
-            android:src="@drawable/shift_icon"
+            android:src="@drawable/ic_kb_shift"
             android:background="@drawable/key_off"/>
 
         <Button
@@ -204,7 +209,7 @@
             android:id="@+id/btnEnter"
             style="@style/btn_input_style"
             android:layout_width="wrap_content"
-            android:src="@drawable/enter_icon" />
+            android:src="@drawable/ic_kb_enter" />
     </LinearLayout>
 
     <LinearLayout
@@ -232,7 +237,7 @@
             android:id="@+id/btnSpace"
             style="@style/btn_input_style"
             android:layout_width="wrap_content"
-            android:src="@drawable/space_icon" />
+            android:src="@drawable/ic_kb_space" />
 
         <Button
             style="@style/btn_input_style"
@@ -248,7 +253,7 @@
 
         <ImageButton
             android:id="@+id/btnHelp"
-            android:src="@drawable/net_icon"
+            android:src="@drawable/ic_kb_qrcode"
             android:layout_width="wrap_content"
             style="@style/btn_input_style" />
         <Button
@@ -256,6 +261,14 @@
             style="@style/btn_input_style"
             android:text="▲" />
     </LinearLayout>
+    <!-- 帮助弹窗：跟MainActivity"打开手机遥控界面"卡片用同一套视觉语言
+         (卡片圆角+扫码/地址并排+密码单独一行)，标题也从原来"远程输入请
+         扫描或直接访问以下地址：Version 113"这种生硬拼接的技术说明，
+         换成直接说人话的一句"手机扫码即可远程输入"，版本号不再往这里塞——
+         MainActivity顶栏本来就常驻显示版本号，这里不需要重复。
+         密码单独用pwdRow这一行展示，留空表示"不需要密码登录"时由
+         IMEService.showHelpDialog()把这一整行隐藏掉，而不是显示一个
+         空密码框——用户不需要知道"密码"这个概念，既然本来就没设置。 -->
     <RelativeLayout
         android:id="@+id/helpDialog"
         android:layout_width="match_parent"
@@ -263,46 +276,74 @@
         android:orientation="vertical"
         android:layout_centerHorizontal="true"
         android:layout_alignParentTop="true"
-        android:background="#d5d1d1"
+        android:background="@drawable/bg_card"
+        android:padding="18dp"
         android:visibility="gone">
-        <RelativeLayout
-            android:id="@+id/titlelayout"
+        <TextView
+            android:id="@+id/title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_centerHorizontal="true"
             android:layout_alignParentTop="true"
-            android:background="#4a4a4a"
-            android:padding="5dp">
-            <TextView
-                android:id="@+id/title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_centerVertical="true"
-                android:text="远程输入请扫描或直接访问以下地址：Version "
-                android:textColor="#ffffff"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-        </RelativeLayout>
+            android:text="手机扫码即可远程输入"
+            android:textColor="@color/text_primary"
+            android:textSize="17sp"
+            android:textStyle="bold" />
         <LinearLayout
-            android:layout_width="320dp"
+            android:id="@+id/helpContentRow"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_below="@+id/titlelayout"
-            android:orientation="vertical"
-            android:padding="10dp"
-            android:background="#d5d1d1"
-            android:layout_centerInParent="true">
+            android:layout_below="@+id/title"
+            android:layout_marginTop="14dp"
+            android:orientation="horizontal">
             <ImageView
                 android:id="@+id/ivQRCode"
                 android:layout_width="@dimen/qrWH"
-                android:layout_height="@dimen/qrWH" />
+                android:layout_height="@dimen/qrWH"
+                android:background="@color/white"
+                android:padding="6dp"/>
             <TextView
                 android:id="@+id/tvAddress"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginLeft="18dp"
+                android:layout_gravity="center_vertical"
                 android:text=""
                 android:textSize="16sp"
-                android:textColor="#845909"
-                android:layout_marginTop="10dp" />
+                android:lineSpacingExtra="8dp"
+                android:textColor="@color/text_secondary" />
+        </LinearLayout>
+        <View
+            android:id="@+id/pwdDivider"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_below="@+id/helpContentRow"
+            android:layout_marginTop="16dp"
+            android:background="@color/divider"
+            android:visibility="gone" />
+        <LinearLayout
+            android:id="@+id/pwdRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/pwdDivider"
+            android:layout_marginTop="14dp"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="10dp"
+                android:text="密码"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp" />
+            <TextView
+                android:id="@+id/tvPassword"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textColor="@color/accent"
+                android:textSize="20sp"
+                android:textStyle="bold" />
         </LinearLayout>
     </RelativeLayout>
 </RelativeLayout>

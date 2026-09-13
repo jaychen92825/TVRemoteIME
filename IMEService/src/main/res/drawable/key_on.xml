@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "大小写"键开启(已大写)时的静止样子：用主题蓝的浅色底表示"当前生效中"，
+     不需要靠图标本身变色也能一眼看出状态，跟MainActivity那边"选中变绿"的
+     思路一致(只是这里的语义是"开关中"而不是"对/错"，所以用主题蓝而不是
+     status_ok的绿色)。原来放在drawable-hdpi下(历史遗留，内容其实是密度
+     无关的位图选择器，不需要按密度区分)，这次顺手挪回drawable/跟其余
+     key_*.xml放一起。 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape>
+            <solid android:color="#4D3EA6FF" />
+            <corners android:radius="6dp" />
+            <stroke android:width="2dp" android:color="@color/accent" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape>
+            <solid android:color="@color/accent_pressed" />
+            <corners android:radius="6dp" />
+        </shape>
+    </item>
+    <item>
+        <shape>
+            <solid android:color="#2E3EA6FF" />
+            <corners android:radius="6dp" />
+        </shape>
+    </item>
+</selector>

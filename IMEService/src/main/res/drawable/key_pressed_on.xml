@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "大小写"键在开启状态下被遥控器OK键按下时的瞬时反馈，见key_pressed.xml
+     的说明。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/accent_pressed" />
+    <corners android:radius="6dp" />
+</shape>
