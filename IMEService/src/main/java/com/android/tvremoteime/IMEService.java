@@ -700,6 +700,12 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	private void clickButton(View v, boolean resetCapsButtonState){
 		if(v instanceof Button){
 			if(v.getId() == R.id.btnClose){
+				//直接touch点击这个按钮走的是这条路径(而不是遥控器OK键走的
+				//clickButtonByKey，那边已经正确设置了这个标记)，漏了这一行
+				//的直接后果就是"点了收起键盘的按钮，键盘却没收起来"——
+				//onEvaluateInputViewShown()依赖这个标记才能保证finishInput()
+				//之后立刻真正隐藏，见该方法里的说明。
+				this.hideWindowByKey = true;
 				this.finishInput();
 			}else {
 				commitText(((Button) v).getText().toString());

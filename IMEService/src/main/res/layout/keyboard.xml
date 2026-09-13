@@ -256,10 +256,13 @@
             android:src="@drawable/ic_kb_qrcode"
             android:layout_width="wrap_content"
             style="@style/btn_input_style" />
+        <!-- 这个键是收起键盘，之前用"▲"(向上箭头)容易让人误以为是别的
+             功能——手机键盘上"收起"通常用向下箭头表示"把键盘往下收走"，
+             换成"▼"更符合直觉。 -->
         <Button
             android:id="@+id/btnClose"
             style="@style/btn_input_style"
-            android:text="▲" />
+            android:text="▼" />
     </LinearLayout>
     <!-- 帮助弹窗：跟MainActivity"打开手机遥控界面"卡片用同一套视觉语言
          (卡片圆角+扫码/地址并排+密码单独一行)，标题也从原来"远程输入请
