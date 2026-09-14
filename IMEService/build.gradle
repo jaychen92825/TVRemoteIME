@@ -74,7 +74,7 @@ dependencies {
     // CatVod type-3 spider jars link against these APIs at runtime. Keep the
     // Java 7 / old-Android compatible lines because this app still supports API 14.
     compile 'com.squareup.okhttp3:okhttp:3.12.13'
-    compile 'com.google.code.gson:gson:2.8.9'
+    compile 'com.google.code.gson:gson:2.8.5'
     compile project(path: ':ijkplayer')
     compile project(path: ':AdbLib')
     compile project(path: ':DroidDLNA')
