@@ -1,19 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 之前这里是9-patch位图(key_focused/key_normal/key_pressed.9.png)画出来的
-     立体浮雕按键，年代感很重。改成用shape直接画：焦点态是主题蓝的浅色底+
-     描边(呼应遥控器方向盘的焦点样式)，按下态是纯色深蓝，平时是跟键盘背景
-     区分开的深灰。 -->
+     立体浮雕按键，年代感很重。改成用shape直接画：焦点态是纯色亮蓝(呼应
+     遥控器方向盘的焦点样式)，按下态是纯色深蓝，平时是跟键盘背景区分开的
+     深灰。
+
+     之前焦点态用的是18%透明度的浅蓝浅描边，在电视上隔几米看几乎看不出跟
+     深灰底的区别，遥控器方向键翻页翻到哪个键完全看不出来——改成纯色不
+     透明的亮蓝，跟深灰底/深蓝按下态三级对比清楚分明。
+
+     state_pressed分支还从原来的第二位挪到了第一位：selector按声明顺序
+     取第一个状态匹配的item，而"被按下"的按键同时也是"聚焦"的(尤其是
+     触屏点击——down的一瞬间即是pressed又是focused)，focused排在pressed
+     前面的话，pressed这个分支实际上永远匹配不到、按下反馈就没有了。 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_focused="true">
-        <shape>
-            <solid android:color="#2E3EA6FF" />
-            <corners android:radius="6dp" />
-            <stroke android:width="2dp" android:color="@color/accent" />
-        </shape>
-    </item>
     <item android:state_pressed="true">
         <shape>
             <solid android:color="@color/accent_pressed" />
+            <corners android:radius="6dp" />
+        </shape>
+    </item>
+    <item android:state_focused="true">
+        <shape>
+            <solid android:color="@color/accent" />
             <corners android:radius="6dp" />
         </shape>
     </item>

@@ -4,24 +4,29 @@
      思路一致(只是这里的语义是"开关中"而不是"对/错"，所以用主题蓝而不是
      status_ok的绿色)。原来放在drawable-hdpi下(历史遗留，内容其实是密度
      无关的位图选择器，不需要按密度区分)，这次顺手挪回drawable/跟其余
-     key_*.xml放一起。 -->
+     key_*.xml放一起。
+
+     焦点态改成纯色不透明的亮蓝，跟key.xml/key_off.xml保持同一个"当前
+     被选中"的样子——遥控器翻页要一眼看出焦点在哪，比区分"这个键还处在
+     开关的开启态"更重要，何况开启态本身已经靠图标(大写的Shift图标会
+     变化，见IMEService.toggleCapsState)和翻焦点前后的静止态区分开了。
+     state_pressed分支也挪到第一位，原因同key.xml。 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_focused="true">
-        <shape>
-            <solid android:color="#4D3EA6FF" />
-            <corners android:radius="6dp" />
-            <stroke android:width="2dp" android:color="@color/accent" />
-        </shape>
-    </item>
     <item android:state_pressed="true">
         <shape>
             <solid android:color="@color/accent_pressed" />
             <corners android:radius="6dp" />
         </shape>
     </item>
+    <item android:state_focused="true">
+        <shape>
+            <solid android:color="@color/accent" />
+            <corners android:radius="6dp" />
+        </shape>
+    </item>
     <item>
         <shape>
-            <solid android:color="#2E3EA6FF" />
+            <solid android:color="#4D3EA6FF" />
             <corners android:radius="6dp" />
         </shape>
     </item>

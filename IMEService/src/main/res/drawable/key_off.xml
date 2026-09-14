@@ -2,18 +2,20 @@
 <!-- "大小写"键关闭(未大写)时的样子，跟普通按键完全一样——这个状态本来
      就是"没什么特殊"，不需要跟key.xml区分视觉，只是code里用不同的资源名
      分别表示"开/关"两种静止状态，这里保留独立文件是为了跟IMEService.java
-     里setBackgroundResource(R.drawable.key_off)这个引用对应上。 -->
+     里setBackgroundResource(R.drawable.key_off)这个引用对应上。
+
+     焦点态改成纯色不透明的亮蓝(原因见key.xml)，state_pressed分支也挪到
+     第一位，跟key.xml保持一致。 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_focused="true">
-        <shape>
-            <solid android:color="#2E3EA6FF" />
-            <corners android:radius="6dp" />
-            <stroke android:width="2dp" android:color="@color/accent" />
-        </shape>
-    </item>
     <item android:state_pressed="true">
         <shape>
             <solid android:color="@color/accent_pressed" />
+            <corners android:radius="6dp" />
+        </shape>
+    </item>
+    <item android:state_focused="true">
+        <shape>
+            <solid android:color="@color/accent" />
             <corners android:radius="6dp" />
         </shape>
     </item>
