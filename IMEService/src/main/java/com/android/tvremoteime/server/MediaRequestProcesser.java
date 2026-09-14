@@ -122,7 +122,7 @@ public class MediaRequestProcesser implements RequestProcesser {
     }
 
     private List<MediaItem> search(MediaSource source, String keyword) throws Exception {
-        if (source.isType3Csp()) return new Type3SourceAdapter(context, source).search(keyword);
+        if (source.isType3Csp()) return new Type3SourceAdapter(context, source).search(keyword, 6);
         return new Type0SourceAdapter(source).search(keyword);
     }
 
@@ -137,10 +137,13 @@ public class MediaRequestProcesser implements RequestProcesser {
     }
 
     private MediaSource firstHomeSource() {
+        MediaSource fallback = null;
         for (MediaSource source : configManager.getSources()) {
-            if (source.isType0()) return source;
+            if (!source.isSupported()) continue;
+            if (source.indexs == 1) return source;
+            if (fallback == null) fallback = source;
         }
-        return null;
+        return fallback;
     }
 
     private MediaSource requireSource(String sourceKey) throws Exception {

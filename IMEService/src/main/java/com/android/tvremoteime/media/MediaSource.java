@@ -10,6 +10,8 @@ public class MediaSource {
     public String api;
     public String spider;
     public String ext;
+    public int indexs;
+    public int timeout;
     public boolean searchable;
 
     public boolean isSupported() {
@@ -32,6 +34,8 @@ public class MediaSource {
         obj.put("type", type);
         obj.put("api", MediaItem.safe(api));
         obj.put("spider", MediaItem.safe(spider));
+        obj.put("indexs", indexs);
+        obj.put("timeout", timeout);
         obj.put("searchable", searchable);
         obj.put("supported", isSupported());
         return obj;
