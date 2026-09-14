@@ -2,8 +2,13 @@ package com.android.tvremoteime.server;
 
 import android.content.Context;
 import android.text.TextUtils;
+import android.util.Log;
 
+import com.android.tvremoteime.IMEService;
 import com.android.tvremoteime.VideoPlayHelper;
+import com.android.tvremoteime.media.MediaBinary;
+import com.android.tvremoteime.media.MediaBrowseResult;
+import com.android.tvremoteime.media.MediaCategory;
 import com.android.tvremoteime.media.MediaConfigManager;
 import com.android.tvremoteime.media.MediaDetail;
 import com.android.tvremoteime.media.MediaItem;
@@ -14,9 +19,17 @@ import com.android.tvremoteime.media.Type3SourceAdapter;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletionService;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import fi.iki.elonen.NanoHTTPD;
 
@@ -39,15 +52,18 @@ public class MediaRequestProcesser implements RequestProcesser {
         try {
             if (session.getMethod() == NanoHTTPD.Method.GET) {
                 if ("/media/config".equals(fileName)) return configResponse();
-                if ("/media/home".equals(fileName)) return homeResponse();
-                if ("/media/search".equals(fileName)) return searchResponse(params.get("q"));
+                if ("/media/home".equals(fileName)) return homeResponse(params.get("sourceKey"));
+                if ("/media/category".equals(fileName)) return categoryResponse(params.get("sourceKey"), params.get("id"), params.get("page"));
+                if ("/media/search".equals(fileName)) return searchResponse(params.get("q"), params.get("sourceKey"));
                 if ("/media/detail".equals(fileName)) return detailResponse(params.get("sourceKey"), params.get("id"));
+                if ("/media/image".equals(fileName)) return imageResponse(params.get("url"));
             } else if (session.getMethod() == NanoHTTPD.Method.POST) {
                 if ("/media/config".equals(fileName)) return saveConfigResponse(params.get("url"));
                 if ("/media/play".equals(fileName)) return playResponse(params);
             }
             return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.NOT_FOUND, "Error 404, file not found.");
         } catch (Exception e) {
+            Log.e(IMEService.TAG, "media request failed: " + fileName, e);
             return errorResponse(e.getMessage());
         }
     }
@@ -67,68 +83,58 @@ public class MediaRequestProcesser implements RequestProcesser {
         return ok(obj);
     }
 
-    private NanoHTTPD.Response searchResponse(String keyword) throws Exception {
-        JSONArray items = new JSONArray();
-        String lastError = "";
-        int tried = 0;
-        long deadline = System.currentTimeMillis() + 24000;
-        if (!TextUtils.isEmpty(keyword)) {
-            for (MediaSource source : configManager.getSources()) {
-                if (!source.isSupported() || !source.searchable) continue;
-                if (System.currentTimeMillis() >= deadline) break;
-                try {
-                    int seconds = (int) Math.max(1, Math.min(4, (deadline - System.currentTimeMillis()) / 1000));
-                    addItems(items, search(source, keyword, seconds));
-                } catch (Exception e) {
-                    lastError = e.getMessage();
-                }
-                tried++;
-                if (items.length() >= 60) break;
-            }
-        }
+    private NanoHTTPD.Response searchResponse(String keyword, String sourceKey) throws Exception {
         JSONObject obj = new JSONObject();
-        obj.put("items", items);
-        if (items.length() == 0 && !TextUtils.isEmpty(keyword)) {
-            obj.put("message", !TextUtils.isEmpty(lastError) && tried == 0 ? lastError : "没有搜到结果，请输入更具体的片名再试。");
-        } else if (items.length() > 0 && System.currentTimeMillis() >= deadline) {
-            obj.put("message", "已返回部分结果，部分源响应较慢已跳过。");
+        JSONArray items = new JSONArray();
+        if (TextUtils.isEmpty(keyword)) {
+            obj.put("items", items);
+            return ok(obj);
         }
-        return ok(obj);
-    }
 
-    private NanoHTTPD.Response homeResponse() throws Exception {
-        JSONObject obj = new JSONObject();
-        JSONArray items = new JSONArray();
-        String lastError = "";
-        int tried = 0;
-        long deadline = System.currentTimeMillis() + 17000;
-        for (MediaSource source : homeCandidates()) {
-            if (System.currentTimeMillis() >= deadline) break;
-            try {
-                int seconds = (int) Math.max(1, Math.min(4, (deadline - System.currentTimeMillis()) / 1000));
-                addItems(items, home(source, seconds));
-                tried++;
-                if (items.length() > 0) break;
-            } catch (Exception e) {
-                tried++;
-                lastError = e.getMessage();
-            }
+        MediaSource selected = configManager.getSource(sourceKey);
+        if (selected != null && selected.isSupported() && selected.searchable) {
+            addItems(items, search(selected, keyword, false));
+            obj.put("sourceKey", selected.key);
+            obj.put("sourceName", selected.name);
+            obj.put("searchedSources", 1);
+        } else {
+            SearchBatch batch = quickSearch(keyword);
+            addItems(items, batch.items);
+            obj.put("searchedSources", batch.searchedSources);
+            obj.put("global", true);
         }
         obj.put("items", items);
         if (items.length() == 0) {
-            obj.put("message", tried == 0 ? "这个配置暂时没有可用首页源。" : "首页源响应较慢，可以直接搜索片名。");
-        } else if (tried > 1 || !TextUtils.isEmpty(lastError)) {
-            obj.put("message", "已跳过响应较慢的首页源。");
+            obj.put("message", selected != null && selected.searchable ? "当前源没有搜索到结果。" : "快速搜索源没有返回结果。");
         }
         return ok(obj);
     }
 
-    private NanoHTTPD.Response listResponse(MediaSource source, boolean requireSearchable, String keyword) throws Exception {
+    private NanoHTTPD.Response homeResponse(String sourceKey) throws Exception {
+        MediaSource source = requestedSource(sourceKey);
+        if (source == null) throw new Exception("这个配置没有可用的点播源");
+        MediaBrowseResult result = home(source);
+        JSONObject obj = new JSONObject();
+        obj.put("sourceKey", source.key);
+        obj.put("sourceName", source.name);
+        JSONArray categories = new JSONArray();
+        JSONArray items = new JSONArray();
+        addCategories(categories, result.categories);
+        addItems(items, result.items);
+        obj.put("categories", categories);
+        obj.put("items", items);
+        return ok(obj);
+    }
+
+    private NanoHTTPD.Response categoryResponse(String sourceKey, String id, String page) throws Exception {
+        if (TextUtils.isEmpty(id)) throw new Exception("未指定分类");
+        MediaSource source = requireSource(sourceKey);
         JSONObject obj = new JSONObject();
         JSONArray items = new JSONArray();
-        if (source != null && source.isSupported() && (!requireSearchable || source.searchable)) {
-            addItems(items, TextUtils.isEmpty(keyword) ? home(source) : search(source, keyword));
-        }
+        addItems(items, category(source, id, page));
+        obj.put("sourceKey", source.key);
+        obj.put("sourceName", source.name);
+        obj.put("categoryId", id);
         obj.put("items", items);
         return ok(obj);
     }
@@ -153,24 +159,28 @@ public class MediaRequestProcesser implements RequestProcesser {
         return ok(obj);
     }
 
-    private List<MediaItem> home(MediaSource source) throws Exception {
+    private NanoHTTPD.Response imageResponse(String url) throws Exception {
+        if (TextUtils.isEmpty(url)) throw new Exception("未指定图片地址");
+        MediaBinary image = com.android.tvremoteime.media.MediaHttp.getBinary(url);
+        return NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, image.mimeType,
+                new ByteArrayInputStream(image.data), image.data.length);
+    }
+
+    private MediaBrowseResult home(MediaSource source) throws Exception {
         if (source.isType3Csp()) return new Type3SourceAdapter(context, source).home();
-        return new Type0SourceAdapter(source).home();
+        MediaBrowseResult result = new MediaBrowseResult();
+        result.items = new Type0SourceAdapter(source).home();
+        return result;
     }
 
-    private List<MediaItem> home(MediaSource source, int maxSeconds) throws Exception {
-        if (source.isType3Csp()) return new Type3SourceAdapter(context, source).home(maxSeconds);
-        return new Type0SourceAdapter(source).home();
-    }
-
-    private List<MediaItem> search(MediaSource source, String keyword) throws Exception {
-        if (source.isType3Csp()) return new Type3SourceAdapter(context, source).search(keyword, 6);
+    private List<MediaItem> search(MediaSource source, String keyword, boolean quick) throws Exception {
+        if (source.isType3Csp()) return new Type3SourceAdapter(context, source).search(keyword, quick);
         return new Type0SourceAdapter(source).search(keyword);
     }
 
-    private List<MediaItem> search(MediaSource source, String keyword, int maxSeconds) throws Exception {
-        if (source.isType3Csp()) return new Type3SourceAdapter(context, source).search(keyword, maxSeconds);
-        return new Type0SourceAdapter(source).search(keyword);
+    private List<MediaItem> category(MediaSource source, String id, String page) throws Exception {
+        if (source.isType3Csp()) return new Type3SourceAdapter(context, source).category(id, page);
+        return new Type0SourceAdapter(source).category(id, page);
     }
 
     private MediaDetail detail(MediaSource source, String id) throws Exception {
@@ -183,29 +193,9 @@ public class MediaRequestProcesser implements RequestProcesser {
         return new Type0SourceAdapter(source).resolve(playId);
     }
 
-    private MediaSource firstHomeSource() {
-        MediaSource fallback = null;
-        for (MediaSource source : configManager.getSources()) {
-            if (!source.isSupported()) continue;
-            if (source.indexs == 1) return source;
-            if (fallback == null) fallback = source;
-        }
-        return fallback;
-    }
-
-    private List<MediaSource> homeCandidates() {
-        ArrayList<MediaSource> result = new ArrayList<MediaSource>();
-        ArrayList<MediaSource> fallback = new ArrayList<MediaSource>();
-        for (MediaSource source : configManager.getSources()) {
-            if (!source.isSupported()) continue;
-            if (source.indexs == 1) result.add(source);
-            else if (fallback.size() < 8) fallback.add(source);
-        }
-        for (MediaSource source : fallback) {
-            if (!result.contains(source)) result.add(source);
-            if (result.size() >= 8) break;
-        }
-        return result;
+    private MediaSource requestedSource(String sourceKey) {
+        MediaSource source = TextUtils.isEmpty(sourceKey) ? null : configManager.getSource(sourceKey);
+        return source != null && source.isSupported() ? source : configManager.getDefaultSource();
     }
 
     private MediaSource requireSource(String sourceKey) throws Exception {
@@ -226,10 +216,65 @@ public class MediaRequestProcesser implements RequestProcesser {
         obj.put("totalSources", sources.size());
         obj.put("supportedSources", supported);
         obj.put("unsupportedSources", sources.size() - supported);
+        MediaSource defaultSource = configManager.getDefaultSource();
+        obj.put("defaultSourceKey", defaultSource == null ? "" : defaultSource.key);
     }
 
     private void addItems(JSONArray arr, List<MediaItem> items) throws Exception {
         for (MediaItem item : items) arr.put(item.toJson());
+    }
+
+    private void addCategories(JSONArray arr, List<MediaCategory> categories) throws Exception {
+        for (MediaCategory category : categories) arr.put(category.toJson());
+    }
+
+    private SearchBatch quickSearch(final String keyword) throws Exception {
+        final List<MediaSource> candidates = new ArrayList<MediaSource>();
+        for (MediaSource source : configManager.getSources()) {
+            if (source.isSupported() && source.searchable && source.quickSearch) candidates.add(source);
+        }
+        SearchBatch batch = new SearchBatch();
+        if (candidates.isEmpty()) return batch;
+
+        ExecutorService executor = Executors.newFixedThreadPool(Math.min(6, candidates.size()));
+        CompletionService<List<MediaItem>> completion = new ExecutorCompletionService<List<MediaItem>>(executor);
+        List<Future<List<MediaItem>>> futures = new ArrayList<Future<List<MediaItem>>>();
+        for (final MediaSource source : candidates) {
+            futures.add(completion.submit(new Callable<List<MediaItem>>() {
+                @Override
+                public List<MediaItem> call() throws Exception {
+                    return search(source, keyword, true);
+                }
+            }));
+        }
+
+        long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(30);
+        try {
+            for (int i = 0; i < candidates.size(); i++) {
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0 || batch.items.size() >= 60) break;
+                Future<List<MediaItem>> future = completion.poll(remaining, TimeUnit.MILLISECONDS);
+                if (future == null) break;
+                batch.searchedSources++;
+                try {
+                    List<MediaItem> result = future.get();
+                    for (MediaItem item : result) {
+                        batch.items.add(item);
+                        if (batch.items.size() >= 60) break;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        } finally {
+            for (Future<List<MediaItem>> future : futures) future.cancel(true);
+            executor.shutdownNow();
+        }
+        return batch;
+    }
+
+    private static class SearchBatch {
+        final List<MediaItem> items = new ArrayList<MediaItem>();
+        int searchedSources;
     }
 
     private NanoHTTPD.Response ok(JSONObject obj) {

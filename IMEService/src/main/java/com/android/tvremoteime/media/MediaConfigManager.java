@@ -60,6 +60,20 @@ public class MediaConfigManager {
         return null;
     }
 
+    public MediaSource getDefaultSource() {
+        List<MediaSource> sources = getSources();
+        String home = getConfig() == null ? "" : getConfig().optString("home");
+        if (!TextUtils.isEmpty(home)) {
+            for (MediaSource source : sources) {
+                if (home.equals(source.key) && source.isSupported()) return source;
+            }
+        }
+        for (MediaSource source : sources) {
+            if (source.isSupported()) return source;
+        }
+        return null;
+    }
+
     public static List<MediaSource> parseSources(JSONObject config) {
         ArrayList<MediaSource> result = new ArrayList<MediaSource>();
         if (config == null) return result;
@@ -77,8 +91,9 @@ public class MediaConfigManager {
             source.spider = item.optString("jar", defaultSpider);
             source.ext = readExt(item);
             source.indexs = item.optInt("indexs", 0);
-            source.timeout = item.optInt("timeout", 10);
+            source.timeout = item.optInt("timeout", 30);
             source.searchable = item.optInt("searchable", 1) != 0;
+            source.quickSearch = item.optInt("quickSearch", 1) != 0;
             result.add(source);
         }
         return result;

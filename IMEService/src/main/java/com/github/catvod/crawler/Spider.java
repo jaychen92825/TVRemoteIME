@@ -5,9 +5,21 @@ import android.content.Context;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+import okhttp3.Dns;
+import okhttp3.OkHttpClient;
 
 public abstract class Spider {
     public String siteKey;
+
+    public static Dns safeDns() {
+        return Dns.SYSTEM;
+    }
+
+    public static OkHttpClient client() {
+        return ClientHolder.CLIENT;
+    }
 
     public void init(Context context) throws Exception {
     }
@@ -65,5 +77,14 @@ public abstract class Spider {
     }
 
     public void destroy() {
+    }
+
+    private static class ClientHolder {
+        static final OkHttpClient CLIENT = new OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(true)
+                .build();
     }
 }

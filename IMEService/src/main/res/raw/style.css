@@ -77,6 +77,54 @@ body {
 	align-items: center;
 }
 
+.media-source-row {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 9px;
+	font-size: 13px;
+	color: var(--color-text-secondary);
+}
+
+#mediaSourceSelect {
+	width: 100%;
+	height: 32px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-sm);
+	padding: 0 8px;
+	background: var(--color-card-bg);
+	color: var(--color-text);
+	font-size: 13px;
+}
+
+.media-categories {
+	display: flex;
+	gap: 7px;
+	overflow-x: auto;
+	padding: 0 1px 10px;
+	-webkit-overflow-scrolling: touch;
+}
+
+.media-category {
+	flex: 0 0 auto;
+	height: 30px;
+	padding: 0 11px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-sm);
+	background: var(--color-card-bg);
+	color: var(--color-text-secondary);
+	font-size: 13px;
+	line-height: 28px;
+	cursor: pointer;
+}
+
+.media-category.active {
+	border-color: var(--color-primary);
+	background: var(--color-primary-soft);
+	color: var(--color-primary-dark);
+}
+
 #mediaConfigUrl,#mediaSearchInput {
 	flex: 1;
 	min-width: 0;

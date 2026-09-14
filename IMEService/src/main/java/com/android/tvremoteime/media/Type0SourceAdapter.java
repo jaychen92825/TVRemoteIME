@@ -31,6 +31,14 @@ public class Type0SourceAdapter {
         return requestList(urlWith("ac", "videolist", "wd", keyword));
     }
 
+    public List<MediaItem> category(String id, String page) throws Exception {
+        Uri.Builder builder = Uri.parse(source.api).buildUpon();
+        builder.appendQueryParameter("ac", "videolist");
+        builder.appendQueryParameter("t", id);
+        builder.appendQueryParameter("pg", TextUtils.isEmpty(page) ? "1" : page);
+        return requestList(builder.build().toString());
+    }
+
     public MediaDetail detail(String id) throws Exception {
         List<MediaItem> list = requestList(urlWith("ac", "videolist", "ids", id));
         if (list.isEmpty()) return null;
