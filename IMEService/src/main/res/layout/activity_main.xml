@@ -272,6 +272,7 @@
                             android:textColor="@color/text_primary"
                             android:textColorHint="@color/text_secondary"
                             android:textSize="13sp"
+                            android:nextFocusUp="@id/btnSetIME"
                             android:nextFocusDown="@id/btnStartService"/>
                     </LinearLayout>
                 </LinearLayout>
