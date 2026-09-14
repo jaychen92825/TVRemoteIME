@@ -141,8 +141,13 @@ public class MediaRequestProcesser implements RequestProcesser {
 
     private NanoHTTPD.Response detailResponse(String sourceKey, String id) throws Exception {
         MediaSource source = requireSource(sourceKey);
+        if (source.indexs == 1) throw new Exception("索引源卡片需要按片名搜索，不能直接加载详情");
+        if (TextUtils.isEmpty(id)) throw new Exception("媒体源没有返回详情 ID");
         MediaDetail detail = detail(source, id);
-        if (detail == null) throw new Exception("未找到详情");
+        if (detail == null) {
+            String displayId = id.length() > 64 ? id.substring(0, 64) + "..." : id;
+            throw new Exception("源「" + source.name + "」未返回详情，ID=" + displayId);
+        }
         JSONObject obj = new JSONObject();
         obj.put("item", detail.toJson());
         return ok(obj);

@@ -388,7 +388,7 @@ function renderMediaGrid(items){
 	}else{
 		for(var i=0;i<items.length;i++){
 			var item = items[i];
-			html.push('<div class="media-card" data-source="'+escapeHtml(item.sourceKey)+'" data-id="'+escapeHtml(item.id)+'">');
+			html.push('<div class="media-card" data-source="'+escapeHtml(item.sourceKey)+'" data-id="'+escapeHtml(item.id)+'" data-name="'+escapeHtml(item.name)+'">');
 			html.push(mediaPoster(item));
 			html.push('<div class="media-card-title">'+escapeHtml(item.name)+'</div>');
 			html.push('<div class="media-card-meta">'+escapeHtml(item.sourceName || '')+(item.remark ? ' · '+escapeHtml(item.remark) : '')+'</div>');
@@ -496,7 +496,16 @@ $('#mediaSearchInput').on('keydown', function(e){
 	if(e.key === 'Enter' || e.keyCode === 13) searchMedia();
 });
 $('#mediaGrid').on('click', '.media-card', function(){
-	loadMediaDetail($(this).attr('data-source'), $(this).attr('data-id'));
+	var sourceKey = $(this).attr('data-source') || '';
+	var id = $(this).attr('data-id') || '';
+	var name = $(this).attr('data-name') || '';
+	var source = sourceByKey(sourceKey);
+	if((source && Number(source.indexs) === 1) || !id || id.indexOf('msearch:') === 0){
+		$('#mediaSearchInput').val(name);
+		searchMedia();
+		return;
+	}
+	loadMediaDetail(sourceKey, id);
 });
 $('#mediaDetail').on('click', '.media-episode', function(){
 	playMediaEpisode($(this).attr('data-source'), $(this).attr('data-flag'), $(this).attr('data-playid'));
