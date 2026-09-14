@@ -14,6 +14,7 @@ import com.android.tvremoteime.media.Type3SourceAdapter;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -38,7 +39,7 @@ public class MediaRequestProcesser implements RequestProcesser {
         try {
             if (session.getMethod() == NanoHTTPD.Method.GET) {
                 if ("/media/config".equals(fileName)) return configResponse();
-                if ("/media/home".equals(fileName)) return listResponse(firstHomeSource(), false, null);
+                if ("/media/home".equals(fileName)) return homeResponse();
                 if ("/media/search".equals(fileName)) return searchResponse(params.get("q"));
                 if ("/media/detail".equals(fileName)) return detailResponse(params.get("sourceKey"), params.get("id"));
             } else if (session.getMethod() == NanoHTTPD.Method.POST) {
@@ -69,20 +70,56 @@ public class MediaRequestProcesser implements RequestProcesser {
     private NanoHTTPD.Response searchResponse(String keyword) throws Exception {
         JSONArray items = new JSONArray();
         String lastError = "";
+        int tried = 0;
+        long deadline = System.currentTimeMillis() + 24000;
         if (!TextUtils.isEmpty(keyword)) {
             for (MediaSource source : configManager.getSources()) {
                 if (!source.isSupported() || !source.searchable) continue;
+                if (System.currentTimeMillis() >= deadline) break;
                 try {
-                    addItems(items, search(source, keyword));
+                    int seconds = (int) Math.max(1, Math.min(4, (deadline - System.currentTimeMillis()) / 1000));
+                    addItems(items, search(source, keyword, seconds));
                 } catch (Exception e) {
                     lastError = e.getMessage();
                 }
+                tried++;
                 if (items.length() >= 60) break;
             }
         }
         JSONObject obj = new JSONObject();
         obj.put("items", items);
-        if (items.length() == 0 && !TextUtils.isEmpty(lastError)) obj.put("message", lastError);
+        if (items.length() == 0 && !TextUtils.isEmpty(keyword)) {
+            obj.put("message", !TextUtils.isEmpty(lastError) && tried == 0 ? lastError : "没有搜到结果，请输入更具体的片名再试。");
+        } else if (items.length() > 0 && System.currentTimeMillis() >= deadline) {
+            obj.put("message", "已返回部分结果，部分源响应较慢已跳过。");
+        }
+        return ok(obj);
+    }
+
+    private NanoHTTPD.Response homeResponse() throws Exception {
+        JSONObject obj = new JSONObject();
+        JSONArray items = new JSONArray();
+        String lastError = "";
+        int tried = 0;
+        long deadline = System.currentTimeMillis() + 17000;
+        for (MediaSource source : homeCandidates()) {
+            if (System.currentTimeMillis() >= deadline) break;
+            try {
+                int seconds = (int) Math.max(1, Math.min(4, (deadline - System.currentTimeMillis()) / 1000));
+                addItems(items, home(source, seconds));
+                tried++;
+                if (items.length() > 0) break;
+            } catch (Exception e) {
+                tried++;
+                lastError = e.getMessage();
+            }
+        }
+        obj.put("items", items);
+        if (items.length() == 0) {
+            obj.put("message", tried == 0 ? "这个配置暂时没有可用首页源。" : "首页源响应较慢，可以直接搜索片名。");
+        } else if (tried > 1 || !TextUtils.isEmpty(lastError)) {
+            obj.put("message", "已跳过响应较慢的首页源。");
+        }
         return ok(obj);
     }
 
@@ -121,8 +158,18 @@ public class MediaRequestProcesser implements RequestProcesser {
         return new Type0SourceAdapter(source).home();
     }
 
+    private List<MediaItem> home(MediaSource source, int maxSeconds) throws Exception {
+        if (source.isType3Csp()) return new Type3SourceAdapter(context, source).home(maxSeconds);
+        return new Type0SourceAdapter(source).home();
+    }
+
     private List<MediaItem> search(MediaSource source, String keyword) throws Exception {
         if (source.isType3Csp()) return new Type3SourceAdapter(context, source).search(keyword, 6);
+        return new Type0SourceAdapter(source).search(keyword);
+    }
+
+    private List<MediaItem> search(MediaSource source, String keyword, int maxSeconds) throws Exception {
+        if (source.isType3Csp()) return new Type3SourceAdapter(context, source).search(keyword, maxSeconds);
         return new Type0SourceAdapter(source).search(keyword);
     }
 
@@ -144,6 +191,21 @@ public class MediaRequestProcesser implements RequestProcesser {
             if (fallback == null) fallback = source;
         }
         return fallback;
+    }
+
+    private List<MediaSource> homeCandidates() {
+        ArrayList<MediaSource> result = new ArrayList<MediaSource>();
+        ArrayList<MediaSource> fallback = new ArrayList<MediaSource>();
+        for (MediaSource source : configManager.getSources()) {
+            if (!source.isSupported()) continue;
+            if (source.indexs == 1) result.add(source);
+            else if (fallback.size() < 8) fallback.add(source);
+        }
+        for (MediaSource source : fallback) {
+            if (!result.contains(source)) result.add(source);
+            if (result.size() >= 8) break;
+        }
+        return result;
     }
 
     private MediaSource requireSource(String sourceKey) throws Exception {
