@@ -1,7 +1,6 @@
 package com.android.tvremoteime.media;
 
 import android.content.Context;
-import android.content.ContextWrapper;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -11,12 +10,15 @@ import com.github.catvod.crawler.SpiderNull;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.net.URL;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import dalvik.system.DexClassLoader;
 
@@ -50,7 +52,7 @@ public class MediaSpiderManager {
             Thread.currentThread().setContextClassLoader(loader);
             Spider spider = (Spider) loader.loadClass(className).newInstance();
             spider.siteKey = source.key;
-            spider.init(spiderContext(loader), MediaItem.safe(source.ext));
+            spider.init(context, MediaItem.safe(source.ext));
             spiders.put(spiderKey, spider);
             return spider;
         } finally {
@@ -67,7 +69,7 @@ public class MediaSpiderManager {
         String dexPath = jar.getAbsolutePath();
         File dependency = prepareDependencyJar(jarSpec);
         if (dependency != null) dexPath = dexPath + File.pathSeparator + dependency.getAbsolutePath();
-        loader = new SpiderClassLoader(dexPath, dexDir.getAbsolutePath(), libDir.getAbsolutePath(), context.getClassLoader());
+        loader = new SpiderClassLoader(dexPath, dexDir.getAbsolutePath(), libDir.getAbsolutePath(), context.getClassLoader(), jar);
         invokeInit(loader);
         loaders.put(key, loader);
         return loader;
@@ -131,7 +133,7 @@ public class MediaSpiderManager {
             Thread.currentThread().setContextClassLoader(loader);
             Class<?> clz = loader.loadClass("com.github.catvod.spider.Init");
             Method method = clz.getMethod("init", Context.class);
-            method.invoke(clz, spiderContext(loader));
+            method.invoke(clz, context);
         } catch (Throwable e) {
             Log.w(IMEService.TAG, "media spider init skipped", e);
         } finally {
@@ -139,18 +141,12 @@ public class MediaSpiderManager {
         }
     }
 
-    private Context spiderContext(final ClassLoader loader) {
-        return new ContextWrapper(context) {
-            @Override
-            public ClassLoader getClassLoader() {
-                return loader;
-            }
-        };
-    }
-
     private static class SpiderClassLoader extends DexClassLoader {
-        SpiderClassLoader(String dexPath, String optimizedDirectory, String librarySearchPath, ClassLoader parent) {
+        private final File resourceJar;
+
+        SpiderClassLoader(String dexPath, String optimizedDirectory, String librarySearchPath, ClassLoader parent, File resourceJar) {
             super(dexPath, optimizedDirectory, librarySearchPath, parent);
+            this.resourceJar = resourceJar;
         }
 
         @Override
@@ -173,10 +169,46 @@ public class MediaSpiderManager {
             return super.loadClass(name, resolve);
         }
 
+        @Override
+        public URL getResource(String name) {
+            URL url = findJarResource(name);
+            return url != null ? url : super.getResource(name);
+        }
+
+        @Override
+        public InputStream getResourceAsStream(String name) {
+            try {
+                URL url = getResource(name);
+                return url == null ? null : url.openStream();
+            } catch (Throwable e) {
+                return super.getResourceAsStream(name);
+            }
+        }
+
         private static boolean shouldPreferSpiderDex(String name) {
             return name != null
                     && name.startsWith("com.github.catvod.")
                     && !name.startsWith("com.github.catvod.crawler.");
+        }
+
+        private URL findJarResource(String name) {
+            if (resourceJar == null || TextUtils.isEmpty(name)) return null;
+            ZipFile zip = null;
+            try {
+                zip = new ZipFile(resourceJar);
+                ZipEntry entry = zip.getEntry(name);
+                if (entry == null) return null;
+                return new URL("jar:" + resourceJar.toURI().toURL().toString() + "!/" + name);
+            } catch (Throwable e) {
+                return null;
+            } finally {
+                if (zip != null) {
+                    try {
+                        zip.close();
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }
         }
     }
 
