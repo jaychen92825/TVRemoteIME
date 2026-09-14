@@ -343,7 +343,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 			//没必要为了这一个特判去依赖它。无障碍服务没开启、或触发失败时，
 			//直接落到下面的通用分支，走已有的ADB/原生注入兜底逻辑。
 		}else {
-			final int kc = KeyEvent.keyCodeFromString(keyCode);
+			final int kc = parseKeyCode(keyCode);
 			if(kc != KeyEvent.KEYCODE_UNKNOWN){
 				// The internal player has no InputConnection, so web remote keys must be
 				// delivered to its Activity instead of the IME's text-input channel.
@@ -387,6 +387,16 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 					}
 				}
 			}
+		}
+	}
+
+	private int parseKeyCode(String keyCode){
+		if(keyCode == null) return KeyEvent.KEYCODE_UNKNOWN;
+		String value = keyCode.trim();
+		try {
+			return Integer.parseInt(value);
+		} catch (NumberFormatException ignored) {
+			return KeyEvent.keyCodeFromString(value);
 		}
 	}
 

@@ -104,7 +104,7 @@ public class InputRequestProcesser implements RequestProcesser {
     }
 
     private static boolean dispatchKeyToPlayer(String keyCode, int keyAction){
-        int code = KeyEvent.keyCodeFromString(keyCode);
+        int code = parseKeyCode(keyCode);
         if(code == KeyEvent.KEYCODE_UNKNOWN) return false;
 
         switch (keyAction) {
@@ -118,6 +118,16 @@ public class InputRequestProcesser implements RequestProcesser {
                 return XLVideoPlayActivity.dispatchRemoteKeyEvent(code, KeyEvent.ACTION_UP);
             default:
                 return false;
+        }
+    }
+
+    private static int parseKeyCode(String keyCode){
+        if(keyCode == null) return KeyEvent.KEYCODE_UNKNOWN;
+        String value = keyCode.trim();
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            return KeyEvent.keyCodeFromString(value);
         }
     }
 
