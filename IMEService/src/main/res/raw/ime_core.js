@@ -424,7 +424,13 @@ function searchMedia(){
 }
 function loadMediaDetail(sourceKey, id){
 	$('#mediaDetail').removeClass('hide').html('<div class="media-empty">正在加载详情…</div>');
-	$.ajax({url:'/media/detail', data:{sourceKey:sourceKey, id:id}, dataType:'json', timeout:30000, success:function(data){
+	$.ajax({url:'/media/detail', data:{sourceKey:sourceKey, id:id}, dataType:'json', timeout:65000, success:function(data){
+		if(data && data.success === false){
+			var message = data.message || '详情加载失败';
+			mediaMessage('详情加载失败：'+message);
+			$('#mediaDetail').html('<div class="media-empty">详情加载失败：'+escapeHtml(message)+'</div>');
+			return;
+		}
 		var item = data.item;
 		if(!item){
 			$('#mediaDetail').html('<div class="media-empty">详情加载失败。</div>');
@@ -445,9 +451,10 @@ function loadMediaDetail(sourceKey, id){
 		if(!(item.episodes || []).length) html.push('<div class="media-empty">这个 source 没有返回可播放剧集。</div>');
 		html.push('</div></div></div>');
 		$('#mediaDetail').html(html.join(''));
-	}, error:function(){
-		mediaMessage('详情加载超时，请换一个搜索结果试试。');
-		$('#mediaDetail').html('<div class="media-empty">详情加载超时，请换一个搜索结果试试。</div>');
+	}, error:function(xhr, status){
+		var message = status === 'timeout' ? '详情加载超时，请稍后重试。' : '详情请求失败，请稍后重试。';
+		mediaMessage(message);
+		$('#mediaDetail').html('<div class="media-empty">'+message+'</div>');
 	}});
 }
 function playMediaEpisode(sourceKey, flag, playId){

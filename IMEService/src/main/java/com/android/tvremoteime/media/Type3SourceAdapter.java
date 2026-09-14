@@ -11,6 +11,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -139,10 +140,14 @@ public class Type3SourceAdapter {
         String body = withSpiderLoader(spider, new Callable<String>() {
             @Override
             public String call() throws Exception {
-                return spider.detailContent(Collections.singletonList(itemId));
+                // Match FongMi exactly. Some guarded spiders replace the item in
+                // this fixed-size list while normalizing an encoded detail id.
+                return spider.detailContent(Arrays.asList(itemId));
             }
         });
         List<MediaItem> list = parseList(body);
+        Log.i(IMEService.TAG, "media spider detail: " + source.key + ", idLength="
+                + length(itemId) + ", items=" + list.size() + ", bodyLength=" + length(body));
         if (list.isEmpty()) return null;
         MediaItem item = list.get(0);
         if (item instanceof MediaDetail) return (MediaDetail) item;
