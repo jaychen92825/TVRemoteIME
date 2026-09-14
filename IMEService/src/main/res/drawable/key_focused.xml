@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 当前遥控器/D-pad导航焦点所在的键：跟key.xml等selector里的state_focused
+     分支本来想画的样子一样(纯色不透明的accent亮蓝)，但改成手动在代码里
+     直接setBackgroundResource成这张图，不再依赖View.isFocused()触发
+     selector自动切换——实机验证过后者在这个IME输入法弹出窗口的场景下
+     并不可靠(哪怕selector本身状态和颜色都没问题，走遥控器方向键切换
+     焦点时，视觉上就是"完全没有任何变化"，跟静止态别无二致)。改成跟
+     "按下反馈"(key_pressed.xml)一样的手动画法，才能保证真正显示出来。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/accent" />
+    <corners android:radius="6dp" />
+</shape>

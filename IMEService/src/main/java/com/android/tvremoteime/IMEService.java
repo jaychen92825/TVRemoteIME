@@ -592,6 +592,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	}
 
 	private void requestNextButtonFocus(int keyCode){
+		final View previouslyFocused = focusedView;
 		if(focusedView == null){
 			focusedView =  ((LinearLayout)mInputView.getChildAt(0)).getChildAt(0);
 		}else {
@@ -634,6 +635,10 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 			focusedView = container.getChildAt(index);
 		}
 
+		if(previouslyFocused != null && previouslyFocused != focusedView){
+			applyRestBackground(previouslyFocused);
+		}
+		applyFocusBackground(focusedView);
 		focusedView.requestFocus();
 		focusedView.requestFocusFromTouch();
 	}
@@ -691,6 +696,25 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	//焦点，原来那个键还亮着"。每次通过资源id重新设置背景后都补一次
 	//mutate()，让这个View拿到的是它自己独立的Drawable实例，状态互不
 	//传染。
+	//某个键当前既不是焦点、也没被按下时该有的静止背景：caps键要按开关
+	//状态在key_on/key_off之间选，其它键固定用key。抽出来是因为"恢复
+	//成静止态"这个操作现在有两处需要(方向键切走焦点时、按下反馈flash
+	//结束时)，避免同样的if/else逻辑抄两份、改的时候漏改一处。
+	private void applyRestBackground(View v){
+		if(v == btnCaps){
+			setKeyBackground(v, capsOn ? R.drawable.key_on : R.drawable.key_off);
+		}else{
+			setKeyBackground(v, R.drawable.key);
+		}
+	}
+	//手动把"当前遥控器/D-pad焦点在哪个键上"画出来，不依赖
+	//View.isFocused()去触发key.xml等selector里的state_focused分支——
+	//实机验证过后者在这个IME弹出窗口里不可靠，切焦点时selector压根不会
+	//切换外观。所有键统一用同一张key_focused.xml(不分caps是否开启)，
+	//理由见requestNextButtonFocus()里的调用处。
+	private void applyFocusBackground(View v){
+		setKeyBackground(v, R.drawable.key_focused);
+	}
 	private static void setKeyBackground(View v, int resId){
 		v.setBackgroundResource(resId);
 		Drawable bg = v.getBackground();
@@ -728,19 +752,19 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		handler.postDelayed(new Runnable() {
 			@Override
 			public void run() {
-				if(v == btnCaps){
-					setKeyBackground(v, capsOn ? R.drawable.key_on : R.drawable.key_off);
-				}else{
-					setKeyBackground(v, R.drawable.key);
-				}
 				//这个200ms之后的revert是异步的：如果用户按完这个键之后，
 				//在这200ms内已经用方向键挪到了别的键上(focusedView已经
-				//指向别的View)，这里绝不能再无条件v.requestFocus()把焦点
-				//抢回这个已经按过、早就该恢复成普通背景的旧键——那样做的
-				//直接后果就是"高亮明明该跟着挪到新按键上，却又跳回上一个
-				//按过的键，看起来像是高亮消不掉"。只有这个键仍然是当前
-				//真正要聚焦的键时，才需要重新申请一次焦点。
-				if(v == focusedView) v.requestFocus();
+				//指向别的View)，这里不能再无条件把这个键画成"当前焦点"的
+				//高亮样子、也不能无条件requestFocus()把焦点抢回来——那样
+				//做的直接后果就是"高亮明明该跟着挪到新按键上，却又跳回
+				//上一个按过的键"。只有这个键仍然是当前真正的焦点时，才
+				//恢复成高亮态+重新申请一次焦点；否则恢复成普通静止态。
+				if(v == focusedView){
+					applyFocusBackground(v);
+					v.requestFocus();
+				}else{
+					applyRestBackground(v);
+				}
 			}
 		}, 200);
 	}
@@ -774,7 +798,16 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 	@Override
 	public void onClick(View v) {
 		clickButton(v, true);
+		//触屏/鼠标点击也要跟遥控器方向键一样手动挪一下高亮：把上一个
+		//focusedView画回静止态，把这次点的这个键画成高亮态——原因见
+		//applyFocusBackground()的说明，不能指望View.isFocused()触发
+		//selector自动切换外观。
 		if(v.getId() != R.id.btnClose) {
+			View previouslyFocused = focusedView;
+			if(previouslyFocused != null && previouslyFocused != v){
+				applyRestBackground(previouslyFocused);
+			}
+			applyFocusBackground(v);
 			v.requestFocusFromTouch();
 			focusedView = v;
 		}
