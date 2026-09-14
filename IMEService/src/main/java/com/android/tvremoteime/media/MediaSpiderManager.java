@@ -1,6 +1,7 @@
 package com.android.tvremoteime.media;
 
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -49,7 +50,7 @@ public class MediaSpiderManager {
             Thread.currentThread().setContextClassLoader(loader);
             Spider spider = (Spider) loader.loadClass(className).newInstance();
             spider.siteKey = source.key;
-            spider.init(context, MediaItem.safe(source.ext));
+            spider.init(spiderContext(loader), MediaItem.safe(source.ext));
             spiders.put(spiderKey, spider);
             return spider;
         } finally {
@@ -63,8 +64,10 @@ public class MediaSpiderManager {
         File jar = prepareJar(key, jarSpec);
         File dexDir = context.getDir("media_spider_dex", Context.MODE_PRIVATE);
         File libDir = context.getDir("media_spider_lib", Context.MODE_PRIVATE);
-        ClassLoader parent = dependencyLoader(jarSpec, dexDir, libDir);
-        loader = new DexClassLoader(jar.getAbsolutePath(), dexDir.getAbsolutePath(), libDir.getAbsolutePath(), parent);
+        String dexPath = jar.getAbsolutePath();
+        File dependency = prepareDependencyJar(jarSpec);
+        if (dependency != null) dexPath = dexPath + File.pathSeparator + dependency.getAbsolutePath();
+        loader = new SpiderClassLoader(dexPath, dexDir.getAbsolutePath(), libDir.getAbsolutePath(), context.getClassLoader());
         invokeInit(loader);
         loaders.put(key, loader);
         return loader;
@@ -97,19 +100,18 @@ public class MediaSpiderManager {
         return file;
     }
 
-    private ClassLoader dependencyLoader(String jarSpec, File dexDir, File libDir) {
+    private File prepareDependencyJar(String jarSpec) {
         String jarUrl = jarSpec.split(";md5;", 2)[0].trim();
-        ClassLoader parent = context.getClassLoader();
-        if (!needsMergeDependency(jarUrl)) return parent;
+        if (!needsMergeDependency(jarUrl)) return null;
         try {
             String dependencyUrl = new URL(new URL(jarUrl), "fty.jar").toString();
             File file = new File(context.getDir("media_spider_dep", Context.MODE_PRIVATE), md5(dependencyUrl) + ".jar");
             if (!isValid(file, "")) MediaHttp.downloadRequired(dependencyUrl, file);
             file.setReadOnly();
-            return new DexClassLoader(file.getAbsolutePath(), dexDir.getAbsolutePath(), libDir.getAbsolutePath(), parent);
+            return file;
         } catch (Throwable e) {
             Log.w(IMEService.TAG, "media spider dependency skipped", e);
-            return parent;
+            return null;
         }
     }
 
@@ -129,11 +131,52 @@ public class MediaSpiderManager {
             Thread.currentThread().setContextClassLoader(loader);
             Class<?> clz = loader.loadClass("com.github.catvod.spider.Init");
             Method method = clz.getMethod("init", Context.class);
-            method.invoke(clz, context);
+            method.invoke(clz, spiderContext(loader));
         } catch (Throwable e) {
             Log.w(IMEService.TAG, "media spider init skipped", e);
         } finally {
             Thread.currentThread().setContextClassLoader(original);
+        }
+    }
+
+    private Context spiderContext(final ClassLoader loader) {
+        return new ContextWrapper(context) {
+            @Override
+            public ClassLoader getClassLoader() {
+                return loader;
+            }
+        };
+    }
+
+    private static class SpiderClassLoader extends DexClassLoader {
+        SpiderClassLoader(String dexPath, String optimizedDirectory, String librarySearchPath, ClassLoader parent) {
+            super(dexPath, optimizedDirectory, librarySearchPath, parent);
+        }
+
+        @Override
+        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+            if (shouldPreferSpiderDex(name)) {
+                synchronized (this) {
+                    Class<?> clazz = findLoadedClass(name);
+                    if (clazz == null) {
+                        try {
+                            clazz = findClass(name);
+                        } catch (ClassNotFoundException ignored) {
+                        }
+                    }
+                    if (clazz != null) {
+                        if (resolve) resolveClass(clazz);
+                        return clazz;
+                    }
+                }
+            }
+            return super.loadClass(name, resolve);
+        }
+
+        private static boolean shouldPreferSpiderDex(String name) {
+            return name != null
+                    && name.startsWith("com.github.catvod.")
+                    && !name.startsWith("com.github.catvod.crawler.");
         }
     }
 
