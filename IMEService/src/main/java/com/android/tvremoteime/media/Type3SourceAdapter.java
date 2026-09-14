@@ -2,7 +2,9 @@ package com.android.tvremoteime.media;
 
 import android.content.Context;
 import android.text.TextUtils;
+import android.util.Log;
 
+import com.android.tvremoteime.IMEService;
 import com.github.catvod.crawler.Spider;
 
 import org.json.JSONArray;
@@ -10,6 +12,7 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -27,30 +30,35 @@ public class Type3SourceAdapter {
         this.source = source;
     }
 
-    public List<MediaItem> home() throws Exception {
-        return home(source.timeout);
-    }
-
-    public List<MediaItem> home(final int maxSeconds) throws Exception {
-        return callWithTimeout(new Callable<List<MediaItem>>() {
+    public MediaBrowseResult home() throws Exception {
+        return callWithTimeout(new Callable<MediaBrowseResult>() {
             @Override
-            public List<MediaItem> call() throws Exception {
+            public MediaBrowseResult call() throws Exception {
                 return doHome();
             }
-        }, maxSeconds);
+        }, operationTimeout());
     }
 
     public List<MediaItem> search(final String keyword) throws Exception {
-        return search(keyword, source.timeout);
+        return search(keyword, false);
     }
 
-    public List<MediaItem> search(final String keyword, int maxSeconds) throws Exception {
+    public List<MediaItem> search(final String keyword, final boolean quick) throws Exception {
         return callWithTimeout(new Callable<List<MediaItem>>() {
             @Override
             public List<MediaItem> call() throws Exception {
-                return doSearch(keyword);
+                return doSearch(keyword, quick);
             }
-        }, maxSeconds);
+        }, operationTimeout());
+    }
+
+    public List<MediaItem> category(final String id, final String page) throws Exception {
+        return callWithTimeout(new Callable<List<MediaItem>>() {
+            @Override
+            public List<MediaItem> call() throws Exception {
+                return doCategory(id, page);
+            }
+        }, operationTimeout());
     }
 
     public MediaDetail detail(final String id) throws Exception {
@@ -59,7 +67,7 @@ public class Type3SourceAdapter {
             public MediaDetail call() throws Exception {
                 return doDetail(id);
             }
-        }, source.timeout);
+        }, operationTimeout());
     }
 
     public String resolve(final String flag, final String playId) throws Exception {
@@ -68,31 +76,59 @@ public class Type3SourceAdapter {
             public String call() throws Exception {
                 return doResolve(flag, playId);
             }
-        }, source.timeout);
+        }, operationTimeout());
     }
 
-    private List<MediaItem> doHome() throws Exception {
+    private MediaBrowseResult doHome() throws Exception {
         final Spider spider = spider();
-        return withSpiderLoader(spider, new Callable<List<MediaItem>>() {
+        return withSpiderLoader(spider, new Callable<MediaBrowseResult>() {
             @Override
-            public List<MediaItem> call() throws Exception {
-                List<MediaItem> video = parseList(spider.homeVideoContent());
-                if (!video.isEmpty()) return video;
-                return parseList(spider.homeContent(true));
+            public MediaBrowseResult call() throws Exception {
+                MediaBrowseResult result = new MediaBrowseResult();
+                // CatVod sources may initialize state while building the category list.
+                // Keep the same order as FongMi/OKTV: home first, recommendations second.
+                String home = spider.homeContent(true);
+                String video = spider.homeVideoContent();
+                result.categories = MediaVodParser.parseCategories(home);
+                result.items = parseList(home);
+                List<MediaItem> recommendations = parseList(video);
+                if (!recommendations.isEmpty()) result.items = recommendations;
+                Log.i(IMEService.TAG, "media spider home: " + source.key + ", categories="
+                        + result.categories.size() + ", items=" + result.items.size()
+                        + ", homeLength=" + length(home) + ", videoLength=" + length(video));
+                return result;
             }
         });
     }
 
-    private List<MediaItem> doSearch(String keyword) throws Exception {
+    private List<MediaItem> doSearch(String keyword, final boolean quick) throws Exception {
         if (TextUtils.isEmpty(keyword)) return new ArrayList<MediaItem>();
         final Spider spider = spider();
         final String key = keyword;
         return withSpiderLoader(spider, new Callable<List<MediaItem>>() {
             @Override
             public List<MediaItem> call() throws Exception {
-                String body = spider.searchContent(key, false);
-                if (TextUtils.isEmpty(body)) body = spider.searchContent(key, false, "1");
-                return parseList(body);
+                String body = spider.searchContent(key, quick);
+                List<MediaItem> items = parseList(body);
+                Log.i(IMEService.TAG, "media spider search: " + source.key + ", quick=" + quick
+                        + ", items=" + items.size() + ", bodyLength=" + length(body));
+                return items;
+            }
+        });
+    }
+
+    private List<MediaItem> doCategory(String id, String page) throws Exception {
+        final Spider spider = spider();
+        final String typeId = id;
+        final String pageNumber = TextUtils.isEmpty(page) ? "1" : page;
+        return withSpiderLoader(spider, new Callable<List<MediaItem>>() {
+            @Override
+            public List<MediaItem> call() throws Exception {
+                String body = spider.categoryContent(typeId, pageNumber, true, new HashMap<String, String>());
+                List<MediaItem> items = parseList(body);
+                Log.i(IMEService.TAG, "media spider category: " + source.key + ", id=" + typeId
+                        + ", items=" + items.size() + ", bodyLength=" + length(body));
+                return items;
             }
         });
     }
@@ -164,6 +200,14 @@ public class Type3SourceAdapter {
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    private int operationTimeout() {
+        return Math.min(60, Math.max(30, source.timeout));
+    }
+
+    private int length(String value) {
+        return value == null ? 0 : value.length();
     }
 
     private <T> T withSpiderLoader(Spider spider, Callable<T> callable) throws Exception {
