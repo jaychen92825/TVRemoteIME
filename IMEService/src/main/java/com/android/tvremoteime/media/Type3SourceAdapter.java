@@ -11,6 +11,12 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class Type3SourceAdapter {
     private final Context context;
@@ -22,20 +28,60 @@ public class Type3SourceAdapter {
     }
 
     public List<MediaItem> home() throws Exception {
+        return callWithTimeout(new Callable<List<MediaItem>>() {
+            @Override
+            public List<MediaItem> call() throws Exception {
+                return doHome();
+            }
+        }, source.timeout);
+    }
+
+    public List<MediaItem> search(final String keyword) throws Exception {
+        return search(keyword, source.timeout);
+    }
+
+    public List<MediaItem> search(final String keyword, int maxSeconds) throws Exception {
+        return callWithTimeout(new Callable<List<MediaItem>>() {
+            @Override
+            public List<MediaItem> call() throws Exception {
+                return doSearch(keyword);
+            }
+        }, maxSeconds);
+    }
+
+    public MediaDetail detail(final String id) throws Exception {
+        return callWithTimeout(new Callable<MediaDetail>() {
+            @Override
+            public MediaDetail call() throws Exception {
+                return doDetail(id);
+            }
+        }, source.timeout);
+    }
+
+    public String resolve(final String flag, final String playId) throws Exception {
+        return callWithTimeout(new Callable<String>() {
+            @Override
+            public String call() throws Exception {
+                return doResolve(flag, playId);
+            }
+        }, source.timeout);
+    }
+
+    private List<MediaItem> doHome() throws Exception {
         Spider spider = spider();
         List<MediaItem> video = parseList(spider.homeVideoContent());
         if (!video.isEmpty()) return video;
         return parseList(spider.homeContent(true));
     }
 
-    public List<MediaItem> search(String keyword) throws Exception {
+    private List<MediaItem> doSearch(String keyword) throws Exception {
         if (TextUtils.isEmpty(keyword)) return new ArrayList<MediaItem>();
         String body = spider().searchContent(keyword, false);
         if (TextUtils.isEmpty(body)) body = spider().searchContent(keyword, false, "1");
         return parseList(body);
     }
 
-    public MediaDetail detail(String id) throws Exception {
+    private MediaDetail doDetail(String id) throws Exception {
         String body = spider().detailContent(Collections.singletonList(id));
         List<MediaItem> list = parseList(body);
         if (list.isEmpty()) return null;
@@ -54,7 +100,7 @@ public class Type3SourceAdapter {
         return detail;
     }
 
-    public String resolve(String flag, String playId) throws Exception {
+    private String doResolve(String flag, String playId) throws Exception {
         if (TextUtils.isEmpty(playId)) return "";
         if (isDirectUrl(playId)) return playId;
         String body = spider().playerContent(MediaItem.safe(flag), playId, Collections.<String>emptyList());
@@ -74,6 +120,19 @@ public class Type3SourceAdapter {
         String trimmed = body.trim();
         if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return new ArrayList<MediaItem>();
         return MediaVodParser.parseJson(trimmed, source);
+    }
+
+    private <T> T callWithTimeout(Callable<T> callable, int seconds) throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        Future<T> future = executor.submit(callable);
+        try {
+            return future.get(Math.max(5, seconds), TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            throw new Exception("spider 调用超时");
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     private String extractUrl(Object value) {

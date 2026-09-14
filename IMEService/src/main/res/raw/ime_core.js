@@ -283,33 +283,40 @@ function renderMediaSources(data){
 function loadMediaConfig(){
 	$.get('/media/config', null, function(data){
 		renderMediaSources(data);
-		showMediaReady();
+		if(data.supportedSources > 0) loadMediaHome();
+		else showMediaReady();
 	}, 'json');
 }
-function hasType0HomeSource(){
+function hasHomeSource(){
 	for(var i=0;i<mediaSources.length;i++){
-		if(mediaSources[i].supported && mediaSources[i].type == 0) return true;
+		if(mediaSources[i].supported) return true;
 	}
 	return false;
 }
 function showMediaReady(){
 	$('#mediaDetail').addClass('hide').empty();
-	if(hasType0HomeSource()){
+	if(hasHomeSource()){
 		loadMediaHome();
 	}else if(mediaSources.length){
-		$('#mediaGrid').html('<div class="media-empty">这个配置以 type-3 spider 源为主，请直接搜索片名。</div>');
+		$('#mediaGrid').html('<div class="media-empty">这个配置暂时没有可用点播源。</div>');
 	}else{
 		$('#mediaGrid').html('<div class="media-empty">输入配置 URL 后连接。</div>');
 	}
 }
 function loadMediaHome(){
 	$('#mediaDetail').addClass('hide').empty();
-	if(!hasType0HomeSource()){
-		$('#mediaGrid').html('<div class="media-empty">这个配置没有可直接展示首页的 type-0 源，请搜索片名。</div>');
+	if(!hasHomeSource()){
+		$('#mediaGrid').html('<div class="media-empty">这个配置暂时没有可用点播源。</div>');
 		return;
 	}
 	$('#mediaGrid').html('<div class="media-empty">正在加载首页…</div>');
 	$.ajax({url:'/media/home', dataType:'json', timeout:20000, success:function(data){
+		if(data && data.success === false){
+			mediaMessage(data.message || '首页加载失败');
+			$('#mediaGrid').html('<div class="media-empty">首页加载失败，可以直接搜索片名。</div>');
+			return;
+		}
+		if(data.message) mediaMessage(data.message);
 		renderMediaGrid(data.items || []);
 	}, error:function(){
 		mediaMessage('首页加载超时，请直接搜索片名。');
@@ -396,7 +403,8 @@ $('#btnMediaConnect').on('click', function(){
 			mediaMessage(data.message || '配置加载失败');
 		}else{
 			renderMediaSources(data);
-			showMediaReady();
+			if(data.supportedSources > 0) loadMediaHome();
+			else showMediaReady();
 		}
 	}, error:function(){
 		mediaMessage('配置连接超时，请检查地址或稍后重试。');
