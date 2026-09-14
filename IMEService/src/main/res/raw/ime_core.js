@@ -283,15 +283,38 @@ function renderMediaSources(data){
 function loadMediaConfig(){
 	$.get('/media/config', null, function(data){
 		renderMediaSources(data);
-		if(data.supportedSources > 0) loadMediaHome();
+		showMediaReady();
 	}, 'json');
+}
+function hasType0HomeSource(){
+	for(var i=0;i<mediaSources.length;i++){
+		if(mediaSources[i].supported && mediaSources[i].type == 0) return true;
+	}
+	return false;
+}
+function showMediaReady(){
+	$('#mediaDetail').addClass('hide').empty();
+	if(hasType0HomeSource()){
+		loadMediaHome();
+	}else if(mediaSources.length){
+		$('#mediaGrid').html('<div class="media-empty">这个配置以 type-3 spider 源为主，请直接搜索片名。</div>');
+	}else{
+		$('#mediaGrid').html('<div class="media-empty">输入配置 URL 后连接。</div>');
+	}
 }
 function loadMediaHome(){
 	$('#mediaDetail').addClass('hide').empty();
+	if(!hasType0HomeSource()){
+		$('#mediaGrid').html('<div class="media-empty">这个配置没有可直接展示首页的 type-0 源，请搜索片名。</div>');
+		return;
+	}
 	$('#mediaGrid').html('<div class="media-empty">正在加载首页…</div>');
-	$.get('/media/home', null, function(data){
+	$.ajax({url:'/media/home', dataType:'json', timeout:20000, success:function(data){
 		renderMediaGrid(data.items || []);
-	}, 'json');
+	}, error:function(){
+		mediaMessage('首页加载超时，请直接搜索片名。');
+		$('#mediaGrid').html('<div class="media-empty">首页加载超时，请直接搜索片名。</div>');
+	}});
 }
 function renderMediaGrid(items){
 	var html = [];
@@ -312,19 +335,22 @@ function renderMediaGrid(items){
 function searchMedia(){
 	var q = $('#mediaSearchInput').val();
 	if(!q){
-		loadMediaHome();
+		showMediaReady();
 		return;
 	}
 	$('#mediaDetail').addClass('hide').empty();
 	$('#mediaGrid').html('<div class="media-empty">正在搜索…</div>');
-	$.get('/media/search', {q:q}, function(data){
+	$.ajax({url:'/media/search', data:{q:q}, dataType:'json', timeout:30000, success:function(data){
 		if(data.message) mediaMessage(data.message);
 		renderMediaGrid(data.items || []);
-	}, 'json');
+	}, error:function(){
+		mediaMessage('搜索超时，可以换个关键词或稍后重试。');
+		$('#mediaGrid').html('<div class="media-empty">搜索超时，可以换个关键词或稍后重试。</div>');
+	}});
 }
 function loadMediaDetail(sourceKey, id){
 	$('#mediaDetail').removeClass('hide').html('<div class="media-empty">正在加载详情…</div>');
-	$.get('/media/detail', {sourceKey:sourceKey, id:id}, function(data){
+	$.ajax({url:'/media/detail', data:{sourceKey:sourceKey, id:id}, dataType:'json', timeout:30000, success:function(data){
 		var item = data.item;
 		if(!item){
 			$('#mediaDetail').html('<div class="media-empty">详情加载失败。</div>');
@@ -345,29 +371,36 @@ function loadMediaDetail(sourceKey, id){
 		if(!(item.episodes || []).length) html.push('<div class="media-empty">这个 source 没有返回可播放剧集。</div>');
 		html.push('</div></div></div>');
 		$('#mediaDetail').html(html.join(''));
-	}, 'json');
+	}, error:function(){
+		mediaMessage('详情加载超时，请换一个搜索结果试试。');
+		$('#mediaDetail').html('<div class="media-empty">详情加载超时，请换一个搜索结果试试。</div>');
+	}});
 }
 function playMediaEpisode(sourceKey, flag, playId){
 	mediaMessage('正在解析并发送到电视播放…');
-	$.post('/media/play', {sourceKey:sourceKey, flag:flag, playId:playId, useSystem:$('#playUseSystem')[0] && $('#playUseSystem')[0].checked}, function(data){
+	$.ajax({url:'/media/play', type:'POST', data:{sourceKey:sourceKey, flag:flag, playId:playId, useSystem:$('#playUseSystem')[0] && $('#playUseSystem')[0].checked}, dataType:'json', timeout:30000, success:function(data){
 		if(data && data.success === false){
 			mediaMessage(data.message || '播放失败');
 		}else{
 			mediaMessage('已发送到电视播放。');
 		}
-	}, 'json');
+	}, error:function(){
+		mediaMessage('播放解析超时，请换一条线路或换一个源。');
+	}});
 }
 $('#btnMediaConnect').on('click', function(){
 	var url = $('#mediaConfigUrl').val();
 	mediaMessage('正在连接配置…');
-	$.post('/media/config', {url:url}, function(data){
+	$.ajax({url:'/media/config', type:'POST', data:{url:url}, dataType:'json', timeout:30000, success:function(data){
 		if(data && data.success === false){
 			mediaMessage(data.message || '配置加载失败');
 		}else{
 			renderMediaSources(data);
-			loadMediaHome();
+			showMediaReady();
 		}
-	}, 'json');
+	}, error:function(){
+		mediaMessage('配置连接超时，请检查地址或稍后重试。');
+	}});
 });
 $('#btnMediaSearch').on('click', searchMedia);
 $('#mediaSearchInput').on('keydown', function(e){
