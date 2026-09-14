@@ -76,6 +76,8 @@ public class MediaConfigManager {
             source.api = item.optString("api");
             source.spider = item.optString("jar", defaultSpider);
             source.ext = readExt(item);
+            source.indexs = item.optInt("indexs", 0);
+            source.timeout = item.optInt("timeout", 10);
             source.searchable = item.optInt("searchable", 1) != 0;
             result.add(source);
         }
