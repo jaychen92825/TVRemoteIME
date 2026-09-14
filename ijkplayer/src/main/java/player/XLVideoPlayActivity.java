@@ -213,13 +213,24 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_UP:
             case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_BACK:
+            case KeyEvent.KEYCODE_ESCAPE:
+                activity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (activity != runningInstance || !isForeground || activity.isFinishing()) {
+                            return;
+                        }
+                        long eventTime = android.os.SystemClock.uptimeMillis();
+                        activity.dispatchKeyEvent(new KeyEvent(eventTime, eventTime, remoteAction, remoteKeyCode, 0));
+                    }
+                });
+                return true;
             case KeyEvent.KEYCODE_DPAD_LEFT:
             case KeyEvent.KEYCODE_DPAD_RIGHT:
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_SPACE:
-            case KeyEvent.KEYCODE_BACK:
-            case KeyEvent.KEYCODE_ESCAPE:
             case KeyEvent.KEYCODE_HEADSETHOOK:
             case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
             case KeyEvent.KEYCODE_MEDIA_PLAY:
@@ -233,13 +244,65 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                         if (activity != runningInstance || !isForeground || activity.isFinishing()) {
                             return;
                         }
-                        long eventTime = android.os.SystemClock.uptimeMillis();
-                        activity.dispatchKeyEvent(new KeyEvent(eventTime, eventTime, remoteAction, remoteKeyCode, 0));
+                        activity.handleRemotePlayerControl(remoteKeyCode, remoteAction);
                     }
                 });
                 return true;
             default:
                 return false;
+        }
+    }
+
+    private void handleRemotePlayerControl(int keyCode, int action) {
+        if (mVideoView == null) {
+            return;
+        }
+        boolean isKeyDown = action == KeyEvent.ACTION_DOWN;
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+                if (isKeyDown) {
+                    previewKeySeek(-GlobalSettings.FastForwardInterval);
+                } else {
+                    finishKeySeek();
+                }
+                break;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                if (isKeyDown) {
+                    previewKeySeek(GlobalSettings.FastForwardInterval);
+                } else {
+                    finishKeySeek();
+                }
+                break;
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+                if (isKeyDown) {
+                    doPauseResume();
+                    show(defaultTimeout);
+                }
+                break;
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+                if (isKeyDown && !mVideoView.isPlaying()) {
+                    start();
+                    show(defaultTimeout);
+                }
+                break;
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+                if (isKeyDown && mVideoView.isPlaying()) {
+                    getCurrentPosition();
+                    statusChange(STATUS_PAUSE);
+                    pause();
+                    show(defaultTimeout);
+                }
+                break;
+            default:
+                break;
         }
     }
 
