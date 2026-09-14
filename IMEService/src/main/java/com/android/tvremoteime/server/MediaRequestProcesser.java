@@ -38,7 +38,7 @@ public class MediaRequestProcesser implements RequestProcesser {
         try {
             if (session.getMethod() == NanoHTTPD.Method.GET) {
                 if ("/media/config".equals(fileName)) return configResponse();
-                if ("/media/home".equals(fileName)) return listResponse(firstSupported(), false, null);
+                if ("/media/home".equals(fileName)) return listResponse(firstHomeSource(), false, null);
                 if ("/media/search".equals(fileName)) return searchResponse(params.get("q"));
                 if ("/media/detail".equals(fileName)) return detailResponse(params.get("sourceKey"), params.get("id"));
             } else if (session.getMethod() == NanoHTTPD.Method.POST) {
@@ -136,9 +136,9 @@ public class MediaRequestProcesser implements RequestProcesser {
         return new Type0SourceAdapter(source).resolve(playId);
     }
 
-    private MediaSource firstSupported() {
+    private MediaSource firstHomeSource() {
         for (MediaSource source : configManager.getSources()) {
-            if (source.isSupported()) return source;
+            if (source.isType0()) return source;
         }
         return null;
     }
