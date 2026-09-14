@@ -1,9 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 之前完全没有state_focused分支：遥控器方向键在"设置"/"重启服务"这些
+     按钮之间切换焦点时，背景永远是同一个静止态的accent蓝，看不出焦点
+     在哪个按钮上——这是在MainActivity这个普通Activity窗口里，Android
+     原生的焦点渲染机制本身没问题，只是这里从一开始就没画"焦点态"这个
+     分支。加一个焦点态：沿用跟静止态一样的accent填色(不然会跟已经很蓝
+     的静止态没法区分)，加一圈白色描边作为清晰的焦点指示。 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_pressed="true">
         <shape>
             <solid android:color="@color/accent_pressed" />
             <corners android:radius="6dp" />
+        </shape>
+    </item>
+    <item android:state_focused="true">
+        <shape>
+            <solid android:color="@color/accent" />
+            <corners android:radius="6dp" />
+            <stroke android:width="3dp" android:color="@color/white" />
         </shape>
     </item>
     <item>
