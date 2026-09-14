@@ -23,6 +23,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class Type3SourceAdapter {
+    private static final ExecutorService SPIDER_EXECUTOR = Executors.newCachedThreadPool();
+
     private final Context context;
     private final MediaSource source;
 
@@ -89,11 +91,13 @@ public class Type3SourceAdapter {
                 // CatVod sources may initialize state while building the category list.
                 // Keep the same order as FongMi/OKTV: home first, recommendations second.
                 String home = spider.homeContent(true);
-                String video = spider.homeVideoContent();
                 result.categories = MediaVodParser.parseCategories(home);
                 result.items = parseList(home);
-                List<MediaItem> recommendations = parseList(video);
-                if (!recommendations.isEmpty()) result.items = recommendations;
+                String video = "";
+                if (result.items.isEmpty()) {
+                    video = spider.homeVideoContent();
+                    result.items = parseList(video);
+                }
                 Log.i(IMEService.TAG, "media spider home: " + source.key + ", categories="
                         + result.categories.size() + ", items=" + result.items.size()
                         + ", homeLength=" + length(home) + ", videoLength=" + length(video));
@@ -195,15 +199,16 @@ public class Type3SourceAdapter {
     }
 
     private <T> T callWithTimeout(Callable<T> callable, int seconds) throws Exception {
-        ExecutorService executor = Executors.newSingleThreadExecutor();
-        Future<T> future = executor.submit(callable);
+        Future<T> future = SPIDER_EXECUTOR.submit(callable);
         try {
             return future.get(Math.max(1, seconds), TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            throw e;
         } catch (TimeoutException e) {
             future.cancel(true);
             throw new Exception("spider 调用超时");
-        } finally {
-            executor.shutdownNow();
         }
     }
 
@@ -216,12 +221,14 @@ public class Type3SourceAdapter {
     }
 
     private <T> T withSpiderLoader(Spider spider, Callable<T> callable) throws Exception {
-        ClassLoader original = Thread.currentThread().getContextClassLoader();
-        try {
-            Thread.currentThread().setContextClassLoader(spider.getClass().getClassLoader());
-            return callable.call();
-        } finally {
-            Thread.currentThread().setContextClassLoader(original);
+        synchronized (spider) {
+            ClassLoader original = Thread.currentThread().getContextClassLoader();
+            try {
+                Thread.currentThread().setContextClassLoader(spider.getClass().getClassLoader());
+                return callable.call();
+            } finally {
+                Thread.currentThread().setContextClassLoader(original);
+            }
         }
     }
 

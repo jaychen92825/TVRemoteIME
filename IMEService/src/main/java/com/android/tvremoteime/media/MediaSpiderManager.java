@@ -16,8 +16,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
 import java.net.URL;
 import java.security.MessageDigest;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -27,8 +26,9 @@ public class MediaSpiderManager {
     private static MediaSpiderManager instance;
 
     private final Context context;
-    private final Map<String, DexClassLoader> loaders = new HashMap<String, DexClassLoader>();
-    private final Map<String, Spider> spiders = new HashMap<String, Spider>();
+    private final ConcurrentHashMap<String, DexClassLoader> loaders = new ConcurrentHashMap<String, DexClassLoader>();
+    private final ConcurrentHashMap<String, Spider> spiders = new ConcurrentHashMap<String, Spider>();
+    private final ConcurrentHashMap<String, Object> locks = new ConcurrentHashMap<String, Object>();
 
     public static synchronized MediaSpiderManager get(Context context) {
         if (instance == null) instance = new MediaSpiderManager(context.getApplicationContext());
@@ -39,44 +39,60 @@ public class MediaSpiderManager {
         this.context = context;
     }
 
-    public synchronized Spider getSpider(MediaSource source) throws Exception {
+    public Spider getSpider(MediaSource source) throws Exception {
         if (source == null || !source.isType3Csp()) return new SpiderNull();
         String loaderKey = md5(source.spider);
         String spiderKey = loaderKey + ":" + source.key;
         Spider cached = spiders.get(spiderKey);
         if (cached != null) return cached;
 
-        DexClassLoader loader = getLoader(loaderKey, source.spider);
-        String className = "com.github.catvod.spider." + source.api.substring("csp_".length());
-        ClassLoader original = Thread.currentThread().getContextClassLoader();
-        try {
-            Thread.currentThread().setContextClassLoader(loader);
-            Spider spider = (Spider) loader.loadClass(className).newInstance();
-            spider.siteKey = source.key;
-            spider.init(context, MediaItem.safe(source.ext));
-            spiders.put(spiderKey, spider);
-            return spider;
-        } catch (ClassNotFoundException e) {
-            Log.w(IMEService.TAG, "media spider entry missing: " + className);
-            Spider spider = new SpiderNull();
-            spider.siteKey = source.key;
-            spiders.put(spiderKey, spider);
-            return spider;
-        } finally {
-            Thread.currentThread().setContextClassLoader(original);
+        synchronized (lockFor("spider:" + spiderKey)) {
+            cached = spiders.get(spiderKey);
+            if (cached != null) return cached;
+            DexClassLoader loader = getLoader(loaderKey, source.spider);
+            String className = "com.github.catvod.spider." + source.api.substring("csp_".length());
+            ClassLoader original = Thread.currentThread().getContextClassLoader();
+            try {
+                Thread.currentThread().setContextClassLoader(loader);
+                Spider spider = (Spider) loader.loadClass(className).newInstance();
+                spider.siteKey = source.key;
+                spider.init(context, MediaItem.safe(source.ext));
+                spiders.put(spiderKey, spider);
+                return spider;
+            } catch (ClassNotFoundException e) {
+                Log.w(IMEService.TAG, "media spider entry missing: " + className);
+                Spider spider = new SpiderNull();
+                spider.siteKey = source.key;
+                spiders.put(spiderKey, spider);
+                return spider;
+            } finally {
+                Thread.currentThread().setContextClassLoader(original);
+            }
         }
     }
 
     private DexClassLoader getLoader(String key, String jarSpec) throws Exception {
         DexClassLoader loader = loaders.get(key);
         if (loader != null) return loader;
-        File jar = prepareJar(key, jarSpec);
-        File dexDir = context.getDir("media_spider_dex", Context.MODE_PRIVATE);
-        File libDir = context.getDir("media_spider_lib", Context.MODE_PRIVATE);
-        loader = new SpiderClassLoader(jar.getAbsolutePath(), dexDir.getAbsolutePath(), libDir.getAbsolutePath(), context.getClassLoader(), jar);
-        invokeInit(loader, isFanJar(jarSpec));
-        loaders.put(key, loader);
-        return loader;
+        synchronized (lockFor("loader:" + key)) {
+            loader = loaders.get(key);
+            if (loader != null) return loader;
+            File jar = prepareJar(key, jarSpec);
+            File dexDir = context.getDir("media_spider_dex", Context.MODE_PRIVATE);
+            File libDir = context.getDir("media_spider_lib", Context.MODE_PRIVATE);
+            loader = new SpiderClassLoader(jar.getAbsolutePath(), dexDir.getAbsolutePath(), libDir.getAbsolutePath(), context.getClassLoader(), jar);
+            invokeInit(loader, isFanJar(jarSpec));
+            loaders.put(key, loader);
+            return loader;
+        }
+    }
+
+    private Object lockFor(String key) {
+        Object lock = locks.get(key);
+        if (lock != null) return lock;
+        Object created = new Object();
+        Object existing = locks.putIfAbsent(key, created);
+        return existing == null ? created : existing;
     }
 
     private File prepareJar(String key, String jarSpec) throws Exception {
