@@ -85,11 +85,12 @@ function postKeyCode(keyCode){
 function postKeyActionCode(keyCode, keyAction){
 	curKeyCode = keyCode;
 	curKeyState = keyAction;
+	var shouldRepeat = keyCode === "19" || keyCode === "20" || keyCode === "21" || keyCode === "22" || keyCode === "67";
 	var action = function(){
 		var path = keyAction == 1 ? "/keydown" : "/keyup";
 		$.post(path,{code:keyCode},function(data){
 			console.log(data);
-			if(curKeyState == 1 && curKeyCode == keyCode){
+			if(shouldRepeat && curKeyState == 1 && curKeyCode == keyCode){
 				keyActionTimer = setTimeout(action, 100);
 			}else{
 				keyActionTimer = null;

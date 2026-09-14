@@ -200,6 +200,38 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         }
     }
 
+    public static boolean dispatchRemoteKeyEvent(int keyCode, int action) {
+        XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing() || !activity.hasWindowFocus()
+                || (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP)) {
+            return false;
+        }
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_BACK:
+            case KeyEvent.KEYCODE_ESCAPE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                long eventTime = android.os.SystemClock.uptimeMillis();
+                activity.dispatchKeyEvent(new KeyEvent(eventTime, eventTime, action, keyCode, 0));
+                return true;
+            default:
+                return false;
+        }
+    }
+
     private void resetVideoPath(final String videoPath, final int videoIndex){
         if(!TextUtils.isEmpty(videoPath)) {
             handler.post(new Runnable() {
