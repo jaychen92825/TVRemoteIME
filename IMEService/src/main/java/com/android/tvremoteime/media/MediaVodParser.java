@@ -9,6 +9,23 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MediaVodParser {
+    public static List<MediaCategory> parseCategories(String body) throws Exception {
+        ArrayList<MediaCategory> result = new ArrayList<MediaCategory>();
+        if (TextUtils.isEmpty(body) || !body.trim().startsWith("{")) return result;
+        JSONObject root = new JSONObject(body);
+        JSONArray types = root.optJSONArray("class");
+        if (types == null) return result;
+        for (int i = 0; i < types.length(); i++) {
+            JSONObject obj = types.optJSONObject(i);
+            if (obj == null) continue;
+            MediaCategory category = new MediaCategory();
+            category.id = obj.optString("type_id", obj.optString("id"));
+            category.name = obj.optString("type_name", obj.optString("name"));
+            if (!TextUtils.isEmpty(category.id) && !TextUtils.isEmpty(category.name)) result.add(category);
+        }
+        return result;
+    }
+
     public static List<MediaItem> parseJson(String body, MediaSource source) throws Exception {
         ArrayList<MediaItem> result = new ArrayList<MediaItem>();
         if (TextUtils.isEmpty(body)) return result;

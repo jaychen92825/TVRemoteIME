@@ -8,6 +8,7 @@ import org.apache.http.util.CharArrayBuffer;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -84,6 +85,50 @@ public class MediaHttp {
                 output.flush();
                 if (total == 0) throw new IOException("返回内容为空");
                 return file;
+            } finally {
+                try {
+                    output.close();
+                } finally {
+                    input.close();
+                }
+            }
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    public static MediaBinary getBinary(String uri) throws Exception {
+        HttpURLConnection conn = null;
+        try {
+            URL url = normalizeUrl(uri);
+            if (!"http".equalsIgnoreCase(url.getProtocol()) && !"https".equalsIgnoreCase(url.getProtocol())) {
+                throw new IOException("不支持的图片地址");
+            }
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(12000);
+            conn.setReadTimeout(18000);
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Accept", "image/*,*/*");
+            conn.setRequestProperty("Accept-Encoding", "identity");
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 TVRemoteIME Media Browser");
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 300) throw new IOException("HTTP " + code);
+            InputStream input = new BufferedInputStream(conn.getInputStream());
+            ByteArrayOutputStream output = new ByteArrayOutputStream(Math.max(4096, conn.getContentLength()));
+            try {
+                byte[] buffer = new byte[16384];
+                int read;
+                int total = 0;
+                while ((read = input.read(buffer)) != -1) {
+                    total += read;
+                    if (total > 10 * 1024 * 1024) throw new IOException("图片文件过大");
+                    output.write(buffer, 0, read);
+                }
+                MediaBinary result = new MediaBinary();
+                result.data = output.toByteArray();
+                result.mimeType = conn.getContentType();
+                if (result.mimeType == null || !result.mimeType.toLowerCase().startsWith("image/")) result.mimeType = "image/jpeg";
+                return result;
             } finally {
                 try {
                     output.close();

@@ -14,6 +14,7 @@ var selectedPaths = [];
 var selectedPathId = 0;
 var fileOperItems = $('.file-oper-items');
 var mediaSources = [];
+var currentMediaSourceKey = '';
 
 function escapeHtml(str){
 	return String(str == null ? "" : str).replace(/[&<>"']/g, function(c){
@@ -267,18 +268,40 @@ function mediaMessage(text){
 }
 function mediaPoster(item){
 	if(item.pic){
-		return '<img src="'+escapeHtml(item.pic)+'" class="media-poster" />';
+		return '<img src="/media/image?url='+escapeHtml(encodeURIComponent(item.pic))+'" class="media-poster" loading="lazy" />';
 	}
 	return '<div class="media-poster media-poster-empty">▶</div>';
 }
 function renderMediaSources(data){
 	mediaSources = data.sources || [];
 	$('#mediaConfigUrl').val(data.url || '');
+	var previous = currentMediaSourceKey;
+	var html = [];
+	for(var i=0;i<mediaSources.length;i++){
+		var source = mediaSources[i];
+		if(!source.supported) continue;
+		html.push('<option value="'+escapeHtml(source.key)+'">'+escapeHtml(source.name || source.key)+'</option>');
+	}
+	$('#mediaSourceSelect').html(html.join(''));
+	currentMediaSourceKey = sourceByKey(previous) ? previous : (data.defaultSourceKey || firstSupportedSourceKey());
+	$('#mediaSourceSelect').val(currentMediaSourceKey);
 	if(!data.url){
 		mediaMessage('输入配置 URL 后连接。支持 type-0 API 和 type-3 csp jar 源。');
 	}else{
 		mediaMessage('已加载 '+(data.totalSources || 0)+' 个源，支持 '+(data.supportedSources || 0)+' 个，暂未支持 '+(data.unsupportedSources || 0)+' 个。');
 	}
+}
+function sourceByKey(key){
+	for(var i=0;i<mediaSources.length;i++){
+		if(mediaSources[i].key === key && mediaSources[i].supported) return mediaSources[i];
+	}
+	return null;
+}
+function firstSupportedSourceKey(){
+	for(var i=0;i<mediaSources.length;i++){
+		if(mediaSources[i].supported) return mediaSources[i].key;
+	}
+	return '';
 }
 function loadMediaConfig(){
 	$.get('/media/config', null, function(data){
@@ -288,10 +311,7 @@ function loadMediaConfig(){
 	}, 'json');
 }
 function hasHomeSource(){
-	for(var i=0;i<mediaSources.length;i++){
-		if(mediaSources[i].supported) return true;
-	}
-	return false;
+	return !!sourceByKey(currentMediaSourceKey || firstSupportedSourceKey());
 }
 function showMediaReady(){
 	$('#mediaDetail').addClass('hide').empty();
@@ -305,23 +325,61 @@ function showMediaReady(){
 }
 function loadMediaHome(){
 	$('#mediaDetail').addClass('hide').empty();
+	$('#mediaCategories').empty();
 	if(!hasHomeSource()){
 		$('#mediaGrid').html('<div class="media-empty">这个配置暂时没有可用点播源。</div>');
 		return;
 	}
+	currentMediaSourceKey = $('#mediaSourceSelect').val() || currentMediaSourceKey || firstSupportedSourceKey();
 	$('#mediaGrid').html('<div class="media-empty">正在加载首页…</div>');
-	$.ajax({url:'/media/home', dataType:'json', timeout:20000, success:function(data){
+	$.ajax({url:'/media/home', data:{sourceKey:currentMediaSourceKey}, dataType:'json', timeout:65000, success:function(data){
 		if(data && data.success === false){
-			mediaMessage(data.message || '首页加载失败');
-			$('#mediaGrid').html('<div class="media-empty">首页加载失败，可以直接搜索片名。</div>');
+			mediaMessage('源加载失败：'+(data.message || '未知错误'));
+			$('#mediaGrid').html('<div class="media-empty">这个源加载失败，请切换其他源重试。</div>');
 			return;
 		}
-		if(data.message) mediaMessage(data.message);
+		currentMediaSourceKey = data.sourceKey || currentMediaSourceKey;
+		$('#mediaSourceSelect').val(currentMediaSourceKey);
+		renderMediaCategories(data.categories || [], '');
+		mediaMessage((data.sourceName || '当前源')+' · '+(data.categories || []).length+' 个分类 · '+(data.items || []).length+' 部内容');
 		renderMediaGrid(data.items || []);
 	}, error:function(){
-		mediaMessage('首页加载超时，请直接搜索片名。');
-		$('#mediaGrid').html('<div class="media-empty">首页加载超时，请直接搜索片名。</div>');
+		mediaMessage('源加载超时，请切换其他源重试。');
+		$('#mediaGrid').html('<div class="media-empty">这个源暂时没有响应。</div>');
 	}});
+}
+function renderMediaCategories(categories, activeId){
+	var html = ['<div class="media-category'+(!activeId ? ' active' : '')+'" data-id="">首页</div>'];
+	for(var i=0;i<categories.length;i++){
+		var category = categories[i];
+		html.push('<div class="media-category'+(category.id === activeId ? ' active' : '')+'" data-id="'+escapeHtml(category.id)+'">'+escapeHtml(category.name)+'</div>');
+	}
+	$('#mediaCategories').html(html.join(''));
+}
+function loadMediaCategory(id){
+	if(!id){
+		loadMediaHome();
+		return;
+	}
+	$('#mediaDetail').addClass('hide').empty();
+	$('#mediaCategories .media-category').removeClass('active');
+	$('#mediaCategories .media-category[data-id="'+cssAttributeValue(id)+'"]').addClass('active');
+	$('#mediaGrid').html('<div class="media-empty">正在加载分类…</div>');
+	$.ajax({url:'/media/category', data:{sourceKey:currentMediaSourceKey,id:id,page:'1'}, dataType:'json', timeout:65000, success:function(data){
+		if(data && data.success === false){
+			mediaMessage('分类加载失败：'+(data.message || '未知错误'));
+			$('#mediaGrid').html('<div class="media-empty">这个分类暂时无法加载。</div>');
+			return;
+		}
+		mediaMessage((data.sourceName || '当前源')+' · '+(data.items || []).length+' 部内容');
+		renderMediaGrid(data.items || []);
+	}, error:function(){
+		mediaMessage('分类加载超时，请稍后重试。');
+		$('#mediaGrid').html('<div class="media-empty">这个分类暂时没有响应。</div>');
+	}});
+}
+function cssAttributeValue(value){
+	return String(value == null ? '' : value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 function renderMediaGrid(items){
 	var html = [];
@@ -347,8 +405,17 @@ function searchMedia(){
 	}
 	$('#mediaDetail').addClass('hide').empty();
 	$('#mediaGrid').html('<div class="media-empty">正在搜索…</div>');
-	$.ajax({url:'/media/search', data:{q:q}, dataType:'json', timeout:30000, success:function(data){
+	var selected = sourceByKey(currentMediaSourceKey);
+	var sourceKey = selected && selected.searchable ? currentMediaSourceKey : '';
+	$.ajax({url:'/media/search', data:{q:q,sourceKey:sourceKey}, dataType:'json', timeout:45000, success:function(data){
+		if(data && data.success === false){
+			mediaMessage('搜索失败：'+(data.message || '未知错误'));
+			renderMediaGrid([]);
+			return;
+		}
 		if(data.message) mediaMessage(data.message);
+		else if(data.global) mediaMessage('已从 '+(data.searchedSources || 0)+' 个快速搜索源返回 '+(data.items || []).length+' 条结果。');
+		else mediaMessage((data.sourceName || '当前源')+' · '+(data.items || []).length+' 条搜索结果');
 		renderMediaGrid(data.items || []);
 	}, error:function(){
 		mediaMessage('搜索超时，可以换个关键词或稍后重试。');
@@ -411,6 +478,13 @@ $('#btnMediaConnect').on('click', function(){
 	}});
 });
 $('#btnMediaSearch').on('click', searchMedia);
+$('#mediaSourceSelect').on('change', function(){
+	currentMediaSourceKey = $(this).val() || '';
+	loadMediaHome();
+});
+$('#mediaCategories').on('click', '.media-category', function(){
+	loadMediaCategory($(this).attr('data-id') || '');
+});
 $('#mediaSearchInput').on('keydown', function(e){
 	if(e.key === 'Enter' || e.keyCode === 13) searchMedia();
 });

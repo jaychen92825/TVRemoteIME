@@ -13,6 +13,7 @@ public class MediaSource {
     public int indexs;
     public int timeout;
     public boolean searchable;
+    public boolean quickSearch;
 
     public boolean isSupported() {
         return isType0() || isType3Csp();
@@ -37,6 +38,7 @@ public class MediaSource {
         obj.put("indexs", indexs);
         obj.put("timeout", timeout);
         obj.put("searchable", searchable);
+        obj.put("quickSearch", quickSearch);
         obj.put("supported", isSupported());
         return obj;
     }
