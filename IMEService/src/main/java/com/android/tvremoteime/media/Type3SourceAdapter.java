@@ -28,12 +28,16 @@ public class Type3SourceAdapter {
     }
 
     public List<MediaItem> home() throws Exception {
+        return home(source.timeout);
+    }
+
+    public List<MediaItem> home(final int maxSeconds) throws Exception {
         return callWithTimeout(new Callable<List<MediaItem>>() {
             @Override
             public List<MediaItem> call() throws Exception {
                 return doHome();
             }
-        }, source.timeout);
+        }, maxSeconds);
     }
 
     public List<MediaItem> search(final String keyword) throws Exception {
@@ -153,7 +157,7 @@ public class Type3SourceAdapter {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         Future<T> future = executor.submit(callable);
         try {
-            return future.get(Math.max(5, seconds), TimeUnit.SECONDS);
+            return future.get(Math.max(1, seconds), TimeUnit.SECONDS);
         } catch (TimeoutException e) {
             future.cancel(true);
             throw new Exception("spider 调用超时");
