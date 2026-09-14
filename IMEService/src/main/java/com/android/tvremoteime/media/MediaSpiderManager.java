@@ -12,6 +12,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
 import java.net.URL;
 import java.security.MessageDigest;
@@ -66,11 +67,8 @@ public class MediaSpiderManager {
         File jar = prepareJar(key, jarSpec);
         File dexDir = context.getDir("media_spider_dex", Context.MODE_PRIVATE);
         File libDir = context.getDir("media_spider_lib", Context.MODE_PRIVATE);
-        String dexPath = jar.getAbsolutePath();
-        File dependency = prepareDependencyJar(jarSpec);
-        if (dependency != null) dexPath = dexPath + File.pathSeparator + dependency.getAbsolutePath();
-        loader = new SpiderClassLoader(dexPath, dexDir.getAbsolutePath(), libDir.getAbsolutePath(), context.getClassLoader(), jar);
-        invokeInit(loader);
+        loader = new SpiderClassLoader(jar.getAbsolutePath(), dexDir.getAbsolutePath(), libDir.getAbsolutePath(), context.getClassLoader(), jar);
+        invokeInit(loader, isFanJar(jarSpec));
         loaders.put(key, loader);
         return loader;
     }
@@ -102,23 +100,9 @@ public class MediaSpiderManager {
         return file;
     }
 
-    private File prepareDependencyJar(String jarSpec) {
-        String jarUrl = jarSpec.split(";md5;", 2)[0].trim();
-        if (!needsMergeDependency(jarUrl)) return null;
-        try {
-            String dependencyUrl = new URL(new URL(jarUrl), "fty.jar").toString();
-            File file = new File(context.getDir("media_spider_dep", Context.MODE_PRIVATE), md5(dependencyUrl) + ".jar");
-            if (!isValid(file, "")) MediaHttp.downloadRequired(dependencyUrl, file);
-            file.setReadOnly();
-            return file;
-        } catch (Throwable e) {
-            Log.w(IMEService.TAG, "media spider dependency skipped", e);
-            return null;
-        }
-    }
-
-    private boolean needsMergeDependency(String jarUrl) {
-        String lower = jarUrl == null ? "" : jarUrl.toLowerCase();
+    private boolean isFanJar(String jarSpec) {
+        String jarUrl = jarSpec == null ? "" : jarSpec.split(";md5;", 2)[0].trim();
+        String lower = jarUrl.toLowerCase();
         return lower.endsWith("/fan.txt") || lower.endsWith("/fan.jar") || lower.contains("/fan.");
     }
 
@@ -127,18 +111,27 @@ public class MediaSpiderManager {
         return TextUtils.isEmpty(expectedMd5) || expectedMd5.equalsIgnoreCase(md5(file));
     }
 
-    private void invokeInit(DexClassLoader loader) {
+    private void invokeInit(DexClassLoader loader, boolean required) throws Exception {
         ClassLoader original = Thread.currentThread().getContextClassLoader();
         try {
             Thread.currentThread().setContextClassLoader(loader);
             Class<?> clz = loader.loadClass("com.github.catvod.spider.Init");
             Method method = clz.getMethod("init", Context.class);
             method.invoke(clz, context);
+        } catch (ClassNotFoundException e) {
+            if (required) throw e;
         } catch (Throwable e) {
+            if (required) throw new Exception("spider 初始化失败: " + errorMessage(e), e);
             Log.w(IMEService.TAG, "media spider init skipped", e);
         } finally {
             Thread.currentThread().setContextClassLoader(original);
         }
+    }
+
+    private String errorMessage(Throwable error) {
+        Throwable cause = error instanceof InvocationTargetException && error.getCause() != null ? error.getCause() : error;
+        String message = cause.getMessage();
+        return TextUtils.isEmpty(message) ? cause.getClass().getName() : message;
     }
 
     private static class SpiderClassLoader extends DexClassLoader {
