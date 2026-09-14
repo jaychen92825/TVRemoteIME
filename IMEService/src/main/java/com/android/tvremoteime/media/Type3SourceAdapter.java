@@ -68,21 +68,40 @@ public class Type3SourceAdapter {
     }
 
     private List<MediaItem> doHome() throws Exception {
-        Spider spider = spider();
-        List<MediaItem> video = parseList(spider.homeVideoContent());
-        if (!video.isEmpty()) return video;
-        return parseList(spider.homeContent(true));
+        final Spider spider = spider();
+        return withSpiderLoader(spider, new Callable<List<MediaItem>>() {
+            @Override
+            public List<MediaItem> call() throws Exception {
+                List<MediaItem> video = parseList(spider.homeVideoContent());
+                if (!video.isEmpty()) return video;
+                return parseList(spider.homeContent(true));
+            }
+        });
     }
 
     private List<MediaItem> doSearch(String keyword) throws Exception {
         if (TextUtils.isEmpty(keyword)) return new ArrayList<MediaItem>();
-        String body = spider().searchContent(keyword, false);
-        if (TextUtils.isEmpty(body)) body = spider().searchContent(keyword, false, "1");
-        return parseList(body);
+        final Spider spider = spider();
+        final String key = keyword;
+        return withSpiderLoader(spider, new Callable<List<MediaItem>>() {
+            @Override
+            public List<MediaItem> call() throws Exception {
+                String body = spider.searchContent(key, false);
+                if (TextUtils.isEmpty(body)) body = spider.searchContent(key, false, "1");
+                return parseList(body);
+            }
+        });
     }
 
     private MediaDetail doDetail(String id) throws Exception {
-        String body = spider().detailContent(Collections.singletonList(id));
+        final Spider spider = spider();
+        final String itemId = id;
+        String body = withSpiderLoader(spider, new Callable<String>() {
+            @Override
+            public String call() throws Exception {
+                return spider.detailContent(Collections.singletonList(itemId));
+            }
+        });
         List<MediaItem> list = parseList(body);
         if (list.isEmpty()) return null;
         MediaItem item = list.get(0);
@@ -103,7 +122,15 @@ public class Type3SourceAdapter {
     private String doResolve(String flag, String playId) throws Exception {
         if (TextUtils.isEmpty(playId)) return "";
         if (isDirectUrl(playId)) return playId;
-        String body = spider().playerContent(MediaItem.safe(flag), playId, Collections.<String>emptyList());
+        final Spider spider = spider();
+        final String playFlag = MediaItem.safe(flag);
+        final String id = playId;
+        String body = withSpiderLoader(spider, new Callable<String>() {
+            @Override
+            public String call() throws Exception {
+                return spider.playerContent(playFlag, id, Collections.<String>emptyList());
+            }
+        });
         if (TextUtils.isEmpty(body)) return "";
         JSONObject obj = new JSONObject(body);
         String url = extractUrl(obj.opt("url"));
@@ -132,6 +159,16 @@ public class Type3SourceAdapter {
             throw new Exception("spider 调用超时");
         } finally {
             executor.shutdownNow();
+        }
+    }
+
+    private <T> T withSpiderLoader(Spider spider, Callable<T> callable) throws Exception {
+        ClassLoader original = Thread.currentThread().getContextClassLoader();
+        try {
+            Thread.currentThread().setContextClassLoader(spider.getClass().getClassLoader());
+            return callable.call();
+        } finally {
+            Thread.currentThread().setContextClassLoader(original);
         }
     }
 

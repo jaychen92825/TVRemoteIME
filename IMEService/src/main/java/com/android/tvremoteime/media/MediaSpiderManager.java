@@ -12,6 +12,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.lang.reflect.Method;
 import java.net.URI;
+import java.net.URL;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
@@ -43,11 +44,17 @@ public class MediaSpiderManager {
 
         DexClassLoader loader = getLoader(loaderKey, source.spider);
         String className = "com.github.catvod.spider." + source.api.substring("csp_".length());
-        Spider spider = (Spider) loader.loadClass(className).newInstance();
-        spider.siteKey = source.key;
-        spider.init(context, MediaItem.safe(source.ext));
-        spiders.put(spiderKey, spider);
-        return spider;
+        ClassLoader original = Thread.currentThread().getContextClassLoader();
+        try {
+            Thread.currentThread().setContextClassLoader(loader);
+            Spider spider = (Spider) loader.loadClass(className).newInstance();
+            spider.siteKey = source.key;
+            spider.init(context, MediaItem.safe(source.ext));
+            spiders.put(spiderKey, spider);
+            return spider;
+        } finally {
+            Thread.currentThread().setContextClassLoader(original);
+        }
     }
 
     private DexClassLoader getLoader(String key, String jarSpec) throws Exception {
@@ -56,7 +63,8 @@ public class MediaSpiderManager {
         File jar = prepareJar(key, jarSpec);
         File dexDir = context.getDir("media_spider_dex", Context.MODE_PRIVATE);
         File libDir = context.getDir("media_spider_lib", Context.MODE_PRIVATE);
-        loader = new DexClassLoader(jar.getAbsolutePath(), dexDir.getAbsolutePath(), libDir.getAbsolutePath(), context.getClassLoader());
+        ClassLoader parent = dependencyLoader(jarSpec, dexDir, libDir);
+        loader = new DexClassLoader(jar.getAbsolutePath(), dexDir.getAbsolutePath(), libDir.getAbsolutePath(), parent);
         invokeInit(loader);
         loaders.put(key, loader);
         return loader;
@@ -89,18 +97,43 @@ public class MediaSpiderManager {
         return file;
     }
 
+    private ClassLoader dependencyLoader(String jarSpec, File dexDir, File libDir) {
+        String jarUrl = jarSpec.split(";md5;", 2)[0].trim();
+        ClassLoader parent = context.getClassLoader();
+        if (!needsMergeDependency(jarUrl)) return parent;
+        try {
+            String dependencyUrl = new URL(new URL(jarUrl), "fty.jar").toString();
+            File file = new File(context.getDir("media_spider_dep", Context.MODE_PRIVATE), md5(dependencyUrl) + ".jar");
+            if (!isValid(file, "")) MediaHttp.downloadRequired(dependencyUrl, file);
+            file.setReadOnly();
+            return new DexClassLoader(file.getAbsolutePath(), dexDir.getAbsolutePath(), libDir.getAbsolutePath(), parent);
+        } catch (Throwable e) {
+            Log.w(IMEService.TAG, "media spider dependency skipped", e);
+            return parent;
+        }
+    }
+
+    private boolean needsMergeDependency(String jarUrl) {
+        String lower = jarUrl == null ? "" : jarUrl.toLowerCase();
+        return lower.endsWith("/fan.txt") || lower.endsWith("/fan.jar") || lower.contains("/fan.");
+    }
+
     private boolean isValid(File file, String expectedMd5) throws Exception {
         if (file == null || !file.exists() || file.length() == 0) return false;
         return TextUtils.isEmpty(expectedMd5) || expectedMd5.equalsIgnoreCase(md5(file));
     }
 
     private void invokeInit(DexClassLoader loader) {
+        ClassLoader original = Thread.currentThread().getContextClassLoader();
         try {
+            Thread.currentThread().setContextClassLoader(loader);
             Class<?> clz = loader.loadClass("com.github.catvod.spider.Init");
             Method method = clz.getMethod("init", Context.class);
             method.invoke(clz, context);
         } catch (Throwable e) {
             Log.w(IMEService.TAG, "media spider init skipped", e);
+        } finally {
+            Thread.currentThread().setContextClassLoader(original);
         }
     }
 
