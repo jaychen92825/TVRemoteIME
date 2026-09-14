@@ -1,12 +1,14 @@
 package com.android.tvremoteime.server;
 
 import android.content.Context;
+import android.view.KeyEvent;
 
 import com.android.tvremoteime.IMEService;
 
 import java.util.Map;
 
 import fi.iki.elonen.NanoHTTPD;
+import player.XLVideoPlayActivity;
 
 /**
  * Created by kingt on 2018/1/7.
@@ -54,18 +56,33 @@ public class InputRequestProcesser implements RequestProcesser {
                 }
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
             case "/key":
-                if (params.get("code") != null && mDataReceiver != null) {
-                    mDataReceiver.onKeyEventReceived(params.get("code"), IMEService.KEY_ACTION_PRESSED);
+                if (params.get("code") != null) {
+                    if (dispatchKeyToPlayer(params.get("code"), IMEService.KEY_ACTION_PRESSED)) {
+                        return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
+                    }
+                    if (mDataReceiver != null) {
+                        mDataReceiver.onKeyEventReceived(params.get("code"), IMEService.KEY_ACTION_PRESSED);
+                    }
                 }
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
             case "/keyup":
-                if (params.get("code") != null && mDataReceiver != null) {
-                    mDataReceiver.onKeyEventReceived(params.get("code"), IMEService.KEY_ACTION_UP);
+                if (params.get("code") != null) {
+                    if (dispatchKeyToPlayer(params.get("code"), IMEService.KEY_ACTION_UP)) {
+                        return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
+                    }
+                    if (mDataReceiver != null) {
+                        mDataReceiver.onKeyEventReceived(params.get("code"), IMEService.KEY_ACTION_UP);
+                    }
                 }
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
             case "/keydown":
-                if (params.get("code") != null && mDataReceiver != null) {
-                    mDataReceiver.onKeyEventReceived(params.get("code"), IMEService.KEY_ACTION_DOWN);
+                if (params.get("code") != null) {
+                    if (dispatchKeyToPlayer(params.get("code"), IMEService.KEY_ACTION_DOWN)) {
+                        return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
+                    }
+                    if (mDataReceiver != null) {
+                        mDataReceiver.onKeyEventReceived(params.get("code"), IMEService.KEY_ACTION_DOWN);
+                    }
                 }
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
             case "/mouseMove":
@@ -83,6 +100,24 @@ public class InputRequestProcesser implements RequestProcesser {
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
             default:
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.NOT_FOUND, "Error 404, file not found.");
+        }
+    }
+
+    private static boolean dispatchKeyToPlayer(String keyCode, int keyAction){
+        int code = KeyEvent.keyCodeFromString(keyCode);
+        if(code == KeyEvent.KEYCODE_UNKNOWN) return false;
+
+        switch (keyAction) {
+            case IMEService.KEY_ACTION_PRESSED:
+                if(!XLVideoPlayActivity.dispatchRemoteKeyEvent(code, KeyEvent.ACTION_DOWN)) return false;
+                XLVideoPlayActivity.dispatchRemoteKeyEvent(code, KeyEvent.ACTION_UP);
+                return true;
+            case IMEService.KEY_ACTION_DOWN:
+                return XLVideoPlayActivity.dispatchRemoteKeyEvent(code, KeyEvent.ACTION_DOWN);
+            case IMEService.KEY_ACTION_UP:
+                return XLVideoPlayActivity.dispatchRemoteKeyEvent(code, KeyEvent.ACTION_UP);
+            default:
+                return false;
         }
     }
 
