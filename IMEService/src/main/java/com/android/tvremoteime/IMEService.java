@@ -32,6 +32,8 @@ import com.android.tvremoteime.accessibility.ScreenAccessibilityService;
 
 import java.io.IOException;
 
+import player.XLVideoPlayActivity;
+
 
 public class IMEService extends InputMethodService implements View.OnClickListener{
 	public static String TAG = "TVRemoteIME";
@@ -288,6 +290,23 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		return keyCode == KeyEvent.KEYCODE_APP_SWITCH || !Environment.isDefaultIME(this);
 	}
 
+	private boolean dispatchKeyToRunningPlayer(int keyCode, int keyAction){
+		switch (keyAction) {
+			case KEY_ACTION_PRESSED:
+				if (!XLVideoPlayActivity.dispatchRemoteKeyEvent(keyCode, KeyEvent.ACTION_DOWN)) {
+					return false;
+				}
+				XLVideoPlayActivity.dispatchRemoteKeyEvent(keyCode, KeyEvent.ACTION_UP);
+				return true;
+			case KEY_ACTION_DOWN:
+				return XLVideoPlayActivity.dispatchRemoteKeyEvent(keyCode, KeyEvent.ACTION_DOWN);
+			case KEY_ACTION_UP:
+				return XLVideoPlayActivity.dispatchRemoteKeyEvent(keyCode, KeyEvent.ACTION_UP);
+			default:
+				return false;
+		}
+	}
+
 	//onKeyEventReceived的实际处理逻辑，统一在主线程Handler上执行(见
 	//onKeyEventReceived里handler.post的说明)，不用再各自单独post。
 	private void handleKeyEventOnMainThread(String keyCode, int keyAction){
@@ -326,6 +345,9 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		}else {
 			final int kc = KeyEvent.keyCodeFromString(keyCode);
 			if(kc != KeyEvent.KEYCODE_UNKNOWN){
+				// The internal player has no InputConnection, so web remote keys must be
+				// delivered to its Activity instead of the IME's text-input channel.
+				if(dispatchKeyToRunningPlayer(kc, keyAction)) return;
 				if(mInputView != null && KeyEventUtils.isKeyboardFocusEvent(kc) && mInputView.isShown()){
 					if((keyAction == KEY_ACTION_PRESSED || keyAction == KEY_ACTION_DOWN)
 							&& !handleKeyboardFocusEvent(kc, 0)){
