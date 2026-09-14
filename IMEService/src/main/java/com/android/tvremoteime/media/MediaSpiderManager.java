@@ -56,6 +56,12 @@ public class MediaSpiderManager {
             spider.init(context, MediaItem.safe(source.ext));
             spiders.put(spiderKey, spider);
             return spider;
+        } catch (ClassNotFoundException e) {
+            Log.w(IMEService.TAG, "media spider entry missing: " + className);
+            Spider spider = new SpiderNull();
+            spider.siteKey = source.key;
+            spiders.put(spiderKey, spider);
+            return spider;
         } finally {
             Thread.currentThread().setContextClassLoader(original);
         }
