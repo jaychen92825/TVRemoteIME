@@ -527,20 +527,97 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     }
 
     private boolean changeProgressByKey = false;
-    private int oldProgressValue = -1;
-    private int newProgressValue = -1;
+    private int seekStartPosition = -1;
     private int keyDownComboCount = 0;
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        boolean isKeyDown = event.getAction() == KeyEvent.ACTION_DOWN;
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+                if (isKeyDown) {
+                    previewKeySeek(-GlobalSettings.FastForwardInterval);
+                } else {
+                    finishKeySeek();
+                }
+                return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                if (isKeyDown) {
+                    previewKeySeek(GlobalSettings.FastForwardInterval);
+                } else {
+                    finishKeySeek();
+                }
+                return true;
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+                if (isKeyDown && event.getRepeatCount() == 0) {
+                    doPauseResume();
+                    show(defaultTimeout);
+                }
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+                if (isKeyDown && event.getRepeatCount() == 0 && !mVideoView.isPlaying()) {
+                    start();
+                    show(defaultTimeout);
+                }
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+                if (isKeyDown && event.getRepeatCount() == 0 && mVideoView.isPlaying()) {
+                    getCurrentPosition();
+                    statusChange(STATUS_PAUSE);
+                    pause();
+                    show(defaultTimeout);
+                }
+                return true;
+            default:
+                return super.dispatchKeyEvent(event);
+        }
+    }
+
+    private void previewKeySeek(int delta) {
+        if (isLive || mVideoView == null) {
+            return;
+        }
+
+        int videoDuration = mVideoView.getDuration();
+        if (videoDuration <= 0) {
+            return;
+        }
+
+        if (!changeProgressByKey) {
+            changeProgressByKey = true;
+            seekStartPosition = mVideoView.getCurrentPosition();
+            newPosition = seekStartPosition;
+        }
+
+        newPosition = Math.max(0, Math.min(videoDuration, newPosition + delta));
+        showSeekPreview(seekStartPosition, newPosition, videoDuration);
+
+        // Some remotes do not reliably deliver ACTION_UP. Commit after the final repeat too.
+        handler.removeMessages(MESSAGE_SEEK_NEW_POSITION);
+        handler.sendEmptyMessageDelayed(MESSAGE_SEEK_NEW_POSITION, 500);
+    }
+
+    private void finishKeySeek() {
+        if (!changeProgressByKey) {
+            return;
+        }
+        changeProgressByKey = false;
+        seekStartPosition = -1;
+        endGesture();
+    }
+
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         switch (keyCode) {
-            case KeyEvent.KEYCODE_DPAD_LEFT:
-            case KeyEvent.KEYCODE_DPAD_RIGHT:
-                if(changeProgressByKey){
-                    changeProgressByKey = false;
-                    oldProgressValue = -1;
-                    endGesture();
-                }
-                break;
             case KeyEvent.KEYCODE_DPAD_DOWN:
                 if(keyDownComboCount > 20){
                     resume();
@@ -561,21 +638,6 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                     return true;
                 }
                 break;
-            case KeyEvent.KEYCODE_DPAD_LEFT:
-            case KeyEvent.KEYCODE_DPAD_RIGHT:
-                if(!changeProgressByKey)changeProgressByKey = true;
-                if(oldProgressValue == -1){
-                    oldProgressValue = 0;
-                    newProgressValue = oldProgressValue;
-                }
-                newProgressValue += keyCode == KeyEvent.KEYCODE_DPAD_LEFT ? -GlobalSettings.FastForwardInterval : GlobalSettings.FastForwardInterval;
-                int max = mVideoView.getDuration();
-                //Log.d(TAG, "newProgressValue = " + newProgressValue);
-                if(newProgressValue < (0 - max))newProgressValue = (0 - max);
-                if(newProgressValue > max)newProgressValue = max;
-                float deltaP = oldProgressValue - newProgressValue;
-                onProgressSlide(-deltaP / max);
-                return true;
             case KeyEvent.KEYCODE_DPAD_DOWN:
             case KeyEvent.KEYCODE_DPAD_UP:
                 if(playListView.isShown()){
@@ -595,11 +657,6 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                     //Log.d(TAG, "keyDownComboCount = " + keyDownComboCount);
                 }
                 break;
-            case KeyEvent.KEYCODE_ENTER:
-            case KeyEvent.KEYCODE_DPAD_CENTER:
-                doPauseResume();
-                show(defaultTimeout);
-                return true;
         }
         return super.onKeyDown(keyCode, event);
     }
@@ -740,14 +797,17 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             newPosition = duration;
         } else if (newPosition <= 0) {
             newPosition = 0;
-            delta = -position;
         }
-        int showDelta = delta / 1000;
+        showSeekPreview(position, newPosition, duration);
+    }
+
+    private void showSeekPreview(int startPosition, int targetPosition, int duration) {
+        int showDelta = (targetPosition - startPosition) / 1000;
         if (showDelta != 0) {
             $.id(R.id.app_video_fastForward_box).visible();
             String text = showDelta > 0 ? ("+" + showDelta) : "" + showDelta;
             $.id(R.id.app_video_fastForward).text(text + "s");
-            $.id(R.id.app_video_fastForward_target).text(generateTime(newPosition) + "/");
+            $.id(R.id.app_video_fastForward_target).text(generateTime(targetPosition) + "/");
             $.id(R.id.app_video_fastForward_all).text(generateTime(duration));
         }
     }
@@ -850,6 +910,10 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                     if (!isLive && newPosition >= 0) {
                         seekTo(newPosition);
                         newPosition = -1;
+                        changeProgressByKey = false;
+                        seekStartPosition = -1;
+                        handler.removeMessages(MESSAGE_HIDE_CENTER_BOX);
+                        handler.sendEmptyMessageDelayed(MESSAGE_HIDE_CENTER_BOX, 500);
                         if (!mVideoView.isPlaying()) {
                             doPauseResume();
                         }
