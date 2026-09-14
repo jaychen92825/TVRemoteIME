@@ -65,8 +65,9 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     private static final int MESSAGE_RESTART_PLAY = 5;
     private static final int MESSAGE_LIVE_RESTART = 6;
 
-    private static boolean isRunning = false;
-    private static XLVideoPlayActivity runningInstance = null;
+    private static volatile boolean isRunning = false;
+    private static volatile boolean isForeground = false;
+    private static volatile XLVideoPlayActivity runningInstance = null;
 
     private String mVideoPath;
     private String mVideoTitle;
@@ -201,8 +202,10 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     }
 
     public static boolean dispatchRemoteKeyEvent(int keyCode, int action) {
-        XLVideoPlayActivity activity = runningInstance;
-        if (!isRunning || activity == null || activity.isFinishing() || !activity.hasWindowFocus()
+        final XLVideoPlayActivity activity = runningInstance;
+        final int remoteKeyCode = keyCode;
+        final int remoteAction = action;
+        if (!isRunning || !isForeground || activity == null || activity.isFinishing()
                 || (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP)) {
             return false;
         }
@@ -224,8 +227,16 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             case KeyEvent.KEYCODE_MEDIA_STOP:
             case KeyEvent.KEYCODE_MEDIA_REWIND:
             case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
-                long eventTime = android.os.SystemClock.uptimeMillis();
-                activity.dispatchKeyEvent(new KeyEvent(eventTime, eventTime, action, keyCode, 0));
+                activity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (activity != runningInstance || !isForeground || activity.isFinishing()) {
+                            return;
+                        }
+                        long eventTime = android.os.SystemClock.uptimeMillis();
+                        activity.dispatchKeyEvent(new KeyEvent(eventTime, eventTime, remoteAction, remoteKeyCode, 0));
+                    }
+                });
                 return true;
             default:
                 return false;
@@ -987,6 +998,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     @Override
     protected void onPause() {
         super.onPause();
+        isForeground = false;
         if (mVideoView.isPlaying()) {
             getCurrentPosition();
             pause();
@@ -996,6 +1008,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     @Override
     protected void onResume() {
         super.onResume();
+        isForeground = true;
         if (null != mWakeLock && (!mWakeLock.isHeld())) {
             mWakeLock.acquire();
         }
@@ -1024,6 +1037,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
         runningInstance = null;
         isRunning = false;
+        isForeground = false;
 
         if(mVideoView != null) stop();
         xlDownloadManager.taskInstance().stopTask();
