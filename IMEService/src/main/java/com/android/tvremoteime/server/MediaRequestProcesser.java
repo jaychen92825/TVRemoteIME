@@ -157,7 +157,10 @@ public class MediaRequestProcesser implements RequestProcesser {
         MediaSource source = requireSource(params.get("sourceKey"));
         String url = resolve(source, params.get("flag"), params.get("playId"));
         if (TextUtils.isEmpty(url)) throw new Exception("无法解析播放地址");
-        VideoPlayHelper.playUrl(context, url, 0, "true".equalsIgnoreCase(params.get("useSystem")));
+        // Media Browser is intentionally tied to TVRemoteIME's internal player so the
+        // web remote can control the same Activity after playback starts.  The general
+        // /play endpoint still keeps its existing "use system player" option.
+        VideoPlayHelper.playUrl(context, url, 0, false);
         JSONObject obj = new JSONObject();
         obj.put("success", true);
         obj.put("playUrl", url);

@@ -1061,7 +1061,9 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     @Override
     protected void onPause() {
         super.onPause();
-        isForeground = false;
+        if (runningInstance == this) {
+            isForeground = false;
+        }
         if (mVideoView.isPlaying()) {
             getCurrentPosition();
             pause();
@@ -1071,6 +1073,8 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     @Override
     protected void onResume() {
         super.onResume();
+        runningInstance = this;
+        isRunning = true;
         isForeground = true;
         if (null != mWakeLock && (!mWakeLock.isHeld())) {
             mWakeLock.acquire();
@@ -1098,9 +1102,14 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     protected void onDestroy() {
         super.onDestroy();
 
-        runningInstance = null;
-        isRunning = false;
-        isForeground = false;
+        // A replacement player Activity can already be running by the time an older
+        // instance reaches onDestroy().  Do not let the old instance clear the new
+        // instance's remote-control routing state.
+        if (runningInstance == this) {
+            runningInstance = null;
+            isRunning = false;
+            isForeground = false;
+        }
 
         if(mVideoView != null) stop();
         xlDownloadManager.taskInstance().stopTask();
