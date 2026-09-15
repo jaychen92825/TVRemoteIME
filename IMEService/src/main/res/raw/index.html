@@ -31,6 +31,10 @@
 			  <svg viewBox="0 0 24 24" width="14" height="14"><rect x="2" y="4" width="20" height="13" rx="1.5" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M10 8l6 3-6 3V8z" fill="currentColor"/><line x1="8" y1="21" x2="16" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
 			  视频直播
 		  </div>
+		  <div class="tab" data-rel="media">
+			  <svg viewBox="0 0 24 24" width="14" height="14"><rect x="4" y="5" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M9 9l7 3.5L9 16V9z" fill="currentColor"/></svg>
+			  媒体浏览
+		  </div>
 		</div>
 		</div>
 		<div class="main-wrapper" data-tab="controls">
@@ -163,6 +167,29 @@
 			  <div class="btn" id="btnTVCancel"><svg viewBox="0 0 24 24" width="14" height="14"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>取消</div>
 		  </div>
 	    </div>
+		<div class="media-panel hide" data-tab="media">
+			<div class="media-config card">
+				<div class="card-title">媒体配置</div>
+				<div class="media-config-row">
+					<input type="text" id="mediaConfigUrl" placeholder="TVBox-compatible 配置 URL" />
+					<div class="btn" id="btnMediaConnect"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M5 13l4 4 10-10" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>连接</div>
+				</div>
+				<div class="media-status" id="mediaStatus">未加载配置</div>
+			</div>
+			<div class="media-search card">
+				<div class="media-source-row">
+					<label for="mediaSourceSelect">当前源</label>
+					<select id="mediaSourceSelect"></select>
+				</div>
+				<div class="media-search-row">
+					<input type="text" id="mediaSearchInput" placeholder="搜索电影、电视剧" />
+					<div class="btn" id="btnMediaSearch"><svg viewBox="0 0 24 24" width="14" height="14"><circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="1.8" fill="none"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>搜索</div>
+				</div>
+			</div>
+			<div class="media-categories" id="mediaCategories"></div>
+			<div class="media-detail card hide" id="mediaDetail"></div>
+			<div class="media-grid" id="mediaGrid"></div>
+		</div>
 		<div class="file-panel hide" data-tab="file">
 		   <div class="file-un">
 			   <div class="file-upload">
