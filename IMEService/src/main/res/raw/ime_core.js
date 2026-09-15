@@ -78,9 +78,18 @@ function parseTVData(text){
 	return tv;
 }
 function postKeyCode(keyCode){
-	$.post("/key",{code:keyCode},function(data){
-		console.log(data);
-	});
+	var fallback = function(){
+		$.post("/key",{code:keyCode},function(data){
+			console.log(data);
+		});
+	};
+	if(keyCode === "21" || keyCode === "22" || keyCode === "23"){
+		$.post("/player/control", {code:keyCode, action:"press"}, function(data){
+			if($.trim(data) !== "handled") fallback();
+		}).fail(fallback);
+	}else{
+		fallback();
+	}
 }
 function postKeyActionCode(keyCode, keyAction){
 	curKeyCode = keyCode;
@@ -88,14 +97,28 @@ function postKeyActionCode(keyCode, keyAction){
 	var shouldRepeat = keyCode === "19" || keyCode === "20" || keyCode === "21" || keyCode === "22" || keyCode === "67";
 	var action = function(){
 		var path = keyAction == 1 ? "/keydown" : "/keyup";
-		$.post(path,{code:keyCode},function(data){
+		var onComplete = function(data){
 			console.log(data);
 			if(shouldRepeat && curKeyState == 1 && curKeyCode == keyCode){
 				keyActionTimer = setTimeout(action, 100);
 			}else{
 				keyActionTimer = null;
 			}
-		});
+		};
+		var fallback = function(){
+			$.post(path,{code:keyCode},onComplete);
+		};
+		if(keyCode === "21" || keyCode === "22" || keyCode === "23"){
+			$.post("/player/control", {code:keyCode, action:keyAction == 1 ? "down" : "up"}, function(data){
+				if($.trim(data) === "handled"){
+					onComplete(data);
+				}else{
+					fallback();
+				}
+			}).fail(fallback);
+		}else{
+			fallback();
+		}
 	}
 	if(keyAction == 2){
 		if(keyActionTimer){

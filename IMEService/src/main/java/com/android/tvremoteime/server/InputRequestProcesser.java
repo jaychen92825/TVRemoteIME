@@ -32,6 +32,7 @@ public class InputRequestProcesser implements RequestProcesser {
                 case "/key":
                 case "/keydown":
                 case "/keyup":
+                case "/player/control":
                 case "/mouseMove":
                 case "/mouseClick":
                     return true;
@@ -85,6 +86,14 @@ public class InputRequestProcesser implements RequestProcesser {
                     }
                 }
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
+            case "/player/control":
+                if (params.get("code") == null || params.get("action") == null) {
+                    return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.BAD_REQUEST, "invalid");
+                }
+                return RemoteServer.createPlainTextResponse(
+                        NanoHTTPD.Response.Status.OK,
+                        dispatchDirectPlayerControl(params.get("code"), params.get("action")) ? "handled" : "inactive"
+                );
             case "/mouseMove":
                 if (mDataReceiver != null) {
                     //单次触控板位移不可能很大，限制一下范围防止畸形/恶意参数导致虚拟光标坐标跳变
@@ -119,6 +128,24 @@ public class InputRequestProcesser implements RequestProcesser {
             default:
                 return false;
         }
+    }
+
+    private static boolean dispatchDirectPlayerControl(String keyCode, String action){
+        int code = parseKeyCode(keyCode);
+        if(code == KeyEvent.KEYCODE_UNKNOWN) return false;
+
+        if("press".equalsIgnoreCase(action)) {
+            if(!XLVideoPlayActivity.dispatchDirectPlayerControl(code, KeyEvent.ACTION_DOWN)) return false;
+            XLVideoPlayActivity.dispatchDirectPlayerControl(code, KeyEvent.ACTION_UP);
+            return true;
+        }
+        if("down".equalsIgnoreCase(action)) {
+            return XLVideoPlayActivity.dispatchDirectPlayerControl(code, KeyEvent.ACTION_DOWN);
+        }
+        if("up".equalsIgnoreCase(action)) {
+            return XLVideoPlayActivity.dispatchDirectPlayerControl(code, KeyEvent.ACTION_UP);
+        }
+        return false;
     }
 
     private static int parseKeyCode(String keyCode){
