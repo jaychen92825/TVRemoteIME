@@ -253,6 +253,44 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         }
     }
 
+    public static boolean dispatchDirectPlayerControl(int keyCode, int action) {
+        final XLVideoPlayActivity activity = runningInstance;
+        final int remoteKeyCode = keyCode;
+        final int remoteAction = action;
+        if (activity == null || activity.isFinishing()
+                || (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP)) {
+            return false;
+        }
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                activity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (activity != runningInstance || activity.isFinishing()) {
+                            return;
+                        }
+                        Log.d(activity.TAG, "direct web player control key=" + remoteKeyCode + " action=" + remoteAction);
+                        activity.handleRemotePlayerControl(remoteKeyCode, remoteAction);
+                    }
+                });
+                return true;
+            default:
+                return false;
+        }
+    }
+
     private void handleRemotePlayerControl(int keyCode, int action) {
         if (mVideoView == null) {
             return;
