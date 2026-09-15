@@ -460,7 +460,7 @@ function loadMediaDetail(sourceKey, id){
 }
 function playMediaEpisode(sourceKey, flag, playId){
 	mediaMessage('正在解析并发送到电视播放…');
-	$.ajax({url:'/media/play', type:'POST', data:{sourceKey:sourceKey, flag:flag, playId:playId, useSystem:$('#playUseSystem')[0] && $('#playUseSystem')[0].checked}, dataType:'json', timeout:30000, success:function(data){
+	$.ajax({url:'/media/play', type:'POST', data:{sourceKey:sourceKey, flag:flag, playId:playId}, dataType:'json', timeout:30000, success:function(data){
 		if(data && data.success === false){
 			mediaMessage(data.message || '播放失败');
 		}else{
