@@ -2,12 +2,16 @@ package com.android.tvremoteime;
 
 import android.content.Context;
 import android.net.wifi.WifiManager;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import com.android.tvremoteime.server.RemoteServer;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 import javax.jmdns.JmDNS;
 import javax.jmdns.ServiceInfo;
@@ -53,6 +57,38 @@ public class MDnsHelper {
     private static JmDNS jmdns = null;
     private static WifiManager.MulticastLock multicastLock = null;
 
+    //resolvedHostName是在start()自己开的后台线程里才最终确定的(等
+    //waitForAnnounced()跑完，可能要好几秒)，MainActivity/IMEService的
+    //帮助弹窗都只在各自的某个触发时机(onResume、弹窗打开一次)读一次
+    //getAddress()，谁都没有主动去"等"这个后台线程——如果读的时候正好
+    //赶在mDNS还没跑完，读到的就是还没生效的兜底值，而且没人会在resolvedHostName
+    //真正就绪后回头去刷新界面上已经显示出来的旧值。这里加一个简单的监听
+    //者集合，resolvedHostName真正确定的那一刻回调通知，界面侧只需要在
+    //自己活跃期间注册一下，收到回调就重新读一次getAddress()刷新显示，
+    //不需要各自猜一个"应该等多久再重试"的延时。
+    public interface ResolvedListener {
+        void onHostResolved();
+    }
+    private static final Set<ResolvedListener> listeners = new CopyOnWriteArraySet<>();
+    private static final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    public static void addListener(ResolvedListener listener){
+        listeners.add(listener);
+    }
+    public static void removeListener(ResolvedListener listener){
+        listeners.remove(listener);
+    }
+    private static void notifyResolved(){
+        mainHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                for(ResolvedListener listener : listeners){
+                    listener.onHostResolved();
+                }
+            }
+        });
+    }
+
     public static synchronized void start(final Context context){
         if(jmdns != null) return;
         final Context appContext = context.getApplicationContext();
@@ -84,6 +120,7 @@ public class MDnsHelper {
                         ((JmDNSImpl) instance).waitForAnnounced(ANNOUNCE_WAIT_TIMEOUT_MS);
                     }
                     resolvedHostName = stripTrailingDot(instance.getHostName());
+                    notifyResolved();
                     ServiceInfo serviceInfo = ServiceInfo.create("_http._tcp.local.",
                             appContext.getString(R.string.app_name), RemoteServer.serverPort, "path=/");
                     instance.registerService(serviceInfo);

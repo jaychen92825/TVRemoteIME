@@ -24,7 +24,7 @@ import java.io.File;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 
-public class MainActivity extends Activity implements View.OnClickListener {
+public class MainActivity extends Activity implements View.OnClickListener, MDnsHelper.ResolvedListener {
 
     private ImageView qrCodeImage;
     private TextView addressView;
@@ -96,6 +96,22 @@ public class MainActivity extends Activity implements View.OnClickListener {
         //启用输入法/设为默认输入法都是跳到系统设置或系统选择器里操作的，
         //用户实际点击生效是在离开这个Activity之后，onClick里那次刷新看到的
         //还是旧状态；真正应该刷新的时机是操作完、返回到这个页面的时候。
+        refreshStatus();
+        //mDNS域名探测是异步的，可能在这次refreshStatus()读到地址之后才
+        //真正确定下来(比如开机不久、服务刚启动)——注册一下监听，等真正
+        //确定的那一刻主动再刷新一次，不需要用户自己切出去再切回来才能
+        //看到正确地址。
+        MDnsHelper.addListener(this);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        MDnsHelper.removeListener(this);
+    }
+
+    @Override
+    public void onHostResolved() {
         refreshStatus();
     }
 

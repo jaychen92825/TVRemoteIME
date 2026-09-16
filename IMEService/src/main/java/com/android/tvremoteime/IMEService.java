@@ -33,7 +33,7 @@ import com.android.tvremoteime.accessibility.ScreenAccessibilityService;
 import java.io.IOException;
 
 
-public class IMEService extends InputMethodService implements View.OnClickListener{
+public class IMEService extends InputMethodService implements View.OnClickListener, MDnsHelper.ResolvedListener{
 	public static String TAG = "TVRemoteIME";
 	public static String ACTION = "com.android.tvremoteime";
 
@@ -150,6 +150,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		startRemoteServer();
 		DLNAUtils.startDLNAService(this.getApplicationContext());
 		MDnsHelper.start(this.getApplicationContext());
+		MDnsHelper.addListener(this);
 		handler.postDelayed(activeClientPoller, ACTIVE_CLIENT_POLL_INTERVAL_MS);
 		//xllib.DownloadManager.instance().init(this);
 
@@ -512,6 +513,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
     public void onDestroy() {
 		if(instance == this) instance = null;
 		handler.removeCallbacks(activeClientPoller);
+		MDnsHelper.removeListener(this);
 		if (mServer != null && mServer.isStarting()){
             Log.i(TAG, "远程输入服务已停止！");
 			mServer.stop();
@@ -835,6 +837,18 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		}
 	}
 
+	//mDNS域名探测完成的回调：如果帮助弹窗这时候正好开着，直接刷新一下
+	//地址文字——不然用户如果正好在服务刚启动那几秒就打开了这个弹窗，
+	//看到的会是还没探测完的兜底地址，且不重新开关一次弹窗就永远不会
+	//自己变成正确的域名。弹窗没开着的话什么都不用做，下次真正打开时
+	//showHelpDialog()本来就会重新读一次最新值。
+	@Override
+	public void onHostResolved(){
+		if(helpDialog != null && helpDialog.isShown() && mServer != null){
+			addressView.setText(Environment.forDisplay(MDnsHelper.getAddress())
+					+ "\n或者\n" + Environment.forDisplay(mServer.getServerAddress()));
+		}
+	}
 	private void showHelpDialog(){
 		if(mServer == null) return;
 
