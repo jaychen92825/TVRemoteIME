@@ -76,6 +76,15 @@ public class MainActivity extends Activity implements View.OnClickListener {
             }
         });
 
+        //打开App本身不代表服务一定在跑：之前只有开机广播(IMEServiceBroadCastReceiver)
+        //或者用户手动点"重启服务"才会启动这个Service，普通情况下(比如进程被系统
+        //杀后台回收、或者开机广播那边因为逻辑反了没触发)打开App看到的地址/二维码
+        //可能对应的是没在跑的服务，得手动点一次"重启服务"才能连上，表现就是"打开
+        //App要等好久才能连上"。这里直接跟"重启服务"按钮调用同一个startService()，
+        //保证只要打开App，服务就一定在尝试启动(已经在跑的话只是重新调一次
+        //onStartCommand()，不会重复初始化，无副作用)。
+        startService(new Intent(IMEService.ACTION));
+
         //打开App时静默检查一次，没有更新/查不到都不打扰用户；找到更新会自动下载，
         //下载完成后跳系统安装确认框（这一步谁都跳不过，参见installApk里的说明）。
         checkForUpdate(false);
