@@ -10,11 +10,17 @@ import com.github.catvod.crawler.Spider;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -22,8 +28,11 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import fi.iki.elonen.NanoHTTPD;
+
 public class Type3SourceAdapter {
     private static final ExecutorService SPIDER_EXECUTOR = Executors.newCachedThreadPool();
+    private static final int MAX_PROXY_IMAGE_BYTES = 10 * 1024 * 1024;
 
     private final Context context;
     private final MediaSource source;
@@ -78,6 +87,15 @@ public class Type3SourceAdapter {
             @Override
             public String call() throws Exception {
                 return doResolve(flag, playId);
+            }
+        }, operationTimeout());
+    }
+
+    public MediaBinary proxyImage(final String proxyUrl) throws Exception {
+        return callWithTimeout(new Callable<MediaBinary>() {
+            @Override
+            public MediaBinary call() throws Exception {
+                return doProxyImage(proxyUrl);
             }
         }, operationTimeout());
     }
@@ -185,6 +203,82 @@ public class Type3SourceAdapter {
         String url = extractUrl(obj.opt("url"));
         if (TextUtils.isEmpty(url)) url = obj.optString("playUrl");
         return TextUtils.isEmpty(url) ? "" : stripName(url);
+    }
+
+    private MediaBinary doProxyImage(String proxyUrl) throws Exception {
+        final Spider spider = spider();
+        final Map<String, String> params = parseProxyParams(proxyUrl);
+        params.put("siteKey", MediaItem.safe(source.key));
+        Object[] response = withSpiderLoader(spider, new Callable<Object[]>() {
+            @Override
+            public Object[] call() throws Exception {
+                return spider.proxy(params);
+            }
+        });
+        if (response == null || response.length == 0) throw new IOException("spider 图片代理返回无效");
+        if (response[0] instanceof NanoHTTPD.Response) {
+            NanoHTTPD.Response direct = (NanoHTTPD.Response) response[0];
+            try {
+                int status = direct.getStatus() == null ? 500 : direct.getStatus().getRequestStatus();
+                if (status < 200 || status >= 300) throw new IOException("spider 图片代理 HTTP " + status);
+                return readProxyImage(direct.getData(), direct.getMimeType());
+            } finally {
+                try {
+                    direct.close();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        if (response.length < 3) throw new IOException("spider 图片代理返回无效");
+        if (!(response[0] instanceof Number)) throw new IOException("spider 图片代理状态无效");
+        int status = ((Number) response[0]).intValue();
+        if (status < 200 || status >= 300) throw new IOException("spider 图片代理 HTTP " + status);
+        if (!(response[2] instanceof InputStream)) throw new IOException("spider 图片代理内容无效");
+        return readProxyImage((InputStream) response[2], response[1] instanceof String ? (String) response[1] : null);
+    }
+
+    private MediaBinary readProxyImage(InputStream input, String mimeType) throws Exception {
+        if (input == null) throw new IOException("spider 图片代理内容为空");
+        ByteArrayOutputStream output = new ByteArrayOutputStream(8192);
+        try {
+            byte[] buffer = new byte[16384];
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                if (read == 0) continue;
+                output.write(buffer, 0, read);
+                if (output.size() > MAX_PROXY_IMAGE_BYTES) throw new IOException("图片文件过大");
+            }
+        } finally {
+            try {
+                input.close();
+            } catch (Exception ignored) {
+            }
+        }
+
+        MediaBinary result = new MediaBinary();
+        result.data = output.toByteArray();
+        result.mimeType = MediaHttp.resolveImageMime(mimeType, result.data);
+        return result;
+    }
+
+    private Map<String, String> parseProxyParams(String proxyUrl) throws Exception {
+        if (TextUtils.isEmpty(proxyUrl) || !proxyUrl.regionMatches(true, 0, "proxy://", 0, 8)) {
+            throw new IOException("无效的 proxy 图片地址");
+        }
+        String query = proxyUrl.substring(8);
+        if (query.startsWith("?")) query = query.substring(1);
+        LinkedHashMap<String, String> params = new LinkedHashMap<String, String>();
+        if (query.length() == 0) return params;
+        for (String entry : query.split("&")) {
+            if (entry.length() == 0) continue;
+            int split = entry.indexOf('=');
+            String key = split < 0 ? entry : entry.substring(0, split);
+            String value = split < 0 ? "" : entry.substring(split + 1);
+            key = URLDecoder.decode(key, "UTF-8");
+            value = URLDecoder.decode(value, "UTF-8");
+            if (key.length() > 0) params.put(key, value);
+        }
+        return params;
     }
 
     private Spider spider() throws Exception {

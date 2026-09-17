@@ -292,7 +292,8 @@ function mediaMessage(text){
 }
 function mediaPoster(item){
 	if(item.pic){
-		return '<img src="/media/image?url='+escapeHtml(encodeURIComponent(item.pic))+'" class="media-poster" loading="lazy" />';
+		return '<img src="/media/image?url='+escapeHtml(encodeURIComponent(item.pic))+'&sourceKey='+escapeHtml(encodeURIComponent(item.sourceKey||''))+'" class="media-poster" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'" />' +
+			'<div class="media-poster media-poster-empty" style="display:none">▶</div>';
 	}
 	return '<div class="media-poster media-poster-empty">▶</div>';
 }

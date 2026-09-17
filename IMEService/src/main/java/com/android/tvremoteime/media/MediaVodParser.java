@@ -5,6 +5,7 @@ import android.text.TextUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -54,11 +55,28 @@ public class MediaVodParser {
         item.sourceName = source.name;
         item.id = id;
         item.name = name;
-        item.pic = pic;
+        item.pic = normalizePic(source, pic);
         item.remark = remark;
         item.year = year;
         item.type = type;
         item.desc = desc == null ? "" : desc.replaceAll("<[^>]+>", "").trim();
+    }
+
+    static String normalizePic(MediaSource source, String pic) {
+        if (TextUtils.isEmpty(pic)) return "";
+        String value = pic.trim().replace("&amp;", "&");
+        if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("data:")) return value;
+        if (value.startsWith("//")) {
+            String scheme = source != null && source.api != null && source.api.startsWith("http://") ? "http:" : "https:";
+            return scheme + value;
+        }
+        if (source != null && source.isType0()) {
+            try {
+                return new URL(new URL(source.api), value).toString();
+            } catch (Exception ignored) {
+            }
+        }
+        return value;
     }
 
     public static void parseEpisodes(MediaDetail item, String playFrom, String playUrl) {
