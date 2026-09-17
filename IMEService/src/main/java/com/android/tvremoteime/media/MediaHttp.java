@@ -24,6 +24,8 @@ import java.net.URI;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.UnknownHostException;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,6 +33,12 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 import okhttp3.Dns;
 import okhttp3.OkHttpClient;
@@ -43,10 +51,21 @@ public class MediaHttp {
     private static final Pattern IMAGE_HEADER_MARKER = Pattern.compile("@([A-Za-z0-9_-]+)=");
     private static final Pattern IMAGE_MIME = Pattern.compile("image/[a-z0-9.+-]+", Pattern.CASE_INSENSITIVE);
     private static final int MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-    private static final OkHttpClient BASE_IMAGE_CLIENT = new OkHttpClient.Builder()
-            .connectTimeout(12, TimeUnit.SECONDS)
-            .readTimeout(18, TimeUnit.SECONDS)
-            .build();
+    private static final X509TrustManager MEDIA_TRUST_MANAGER = new X509TrustManager() {
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String authType) {
+        }
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String authType) {
+        }
+
+        @Override
+        public X509Certificate[] getAcceptedIssuers() {
+            return new X509Certificate[0];
+        }
+    };
+    private static final OkHttpClient BASE_IMAGE_CLIENT = createImageClient();
     private static volatile String cachedHostsKey = "";
     private static volatile OkHttpClient cachedImageClient = BASE_IMAGE_CLIENT;
 
@@ -361,6 +380,29 @@ public class MediaHttp {
             cachedHostsKey = key;
             return cachedImageClient;
         }
+    }
+
+    private static OkHttpClient createImageClient() {
+        OkHttpClient.Builder builder = new OkHttpClient.Builder()
+                .connectTimeout(12, TimeUnit.SECONDS)
+                .readTimeout(18, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(true);
+        try {
+            // Match TVBox/FongMi's CatVod transport for user-configured artwork.
+            // Keep this relaxed TLS policy isolated to Media Browser image traffic.
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, new TrustManager[]{MEDIA_TRUST_MANAGER}, new SecureRandom());
+            builder.sslSocketFactory(sslContext.getSocketFactory(), MEDIA_TRUST_MANAGER);
+            builder.hostnameVerifier(new HostnameVerifier() {
+                @Override
+                public boolean verify(String hostname, SSLSession session) {
+                    return true;
+                }
+            });
+        } catch (Exception e) {
+            Log.w(IMEService.TAG, "media image TLS compatibility unavailable", e);
+        }
+        return builder.build();
     }
 
     private static Dns buildDns(final Map<String, String> hosts) {

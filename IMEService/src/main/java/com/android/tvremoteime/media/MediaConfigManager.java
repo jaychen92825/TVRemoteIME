@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.text.TextUtils;
 
+import com.github.catvod.crawler.Spider;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -23,6 +25,7 @@ public class MediaConfigManager {
 
     public MediaConfigManager(Context context) {
         this.context = context.getApplicationContext();
+        Spider.configureNetwork(getConfig());
     }
 
     public JSONObject loadFromUrl(String url) throws Exception {
@@ -32,6 +35,7 @@ public class MediaConfigManager {
         editor.putString(KEY_URL, result.url);
         editor.putString(KEY_CONFIG, result.config.toString());
         editor.apply();
+        Spider.configureNetwork(result.config);
         return result.config;
     }
 
