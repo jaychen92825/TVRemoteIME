@@ -129,6 +129,14 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                 seekTo(0);
                 start();
                 doPauseResume();
+            } else if (v.getId() == R.id.app_video_rewind) {
+                previewKeySeek(-GlobalSettings.FastForwardInterval);
+                finishKeySeek();
+                show(defaultTimeout);
+            } else if (v.getId() == R.id.app_video_fast_forward) {
+                previewKeySeek(GlobalSettings.FastForwardInterval);
+                finishKeySeek();
+                show(defaultTimeout);
             }else if(v.getId() == R.id.app_play_btn_play_list){
                 if(playListView != null){
                     if(playListView.isShown()){
@@ -487,7 +495,15 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         seekBar = (SeekBar) findViewById(R.id.app_video_seekBar);
         seekBar.setOnSeekBarChangeListener(mSeekListener);
 
+        String displayTitle = mVideoTitle;
+        if (TextUtils.isEmpty(displayTitle) || TextUtils.equals(displayTitle, mVideoPath)) {
+            displayTitle = "正在播放";
+        }
+        $.id(R.id.app_video_title).text(displayTitle);
+
         $.id(R.id.app_video_play).clicked(onClickListener);
+        $.id(R.id.app_video_rewind).clicked(onClickListener);
+        $.id(R.id.app_video_fast_forward).clicked(onClickListener);
         //$.id(R.id.app_video_fullscreen).clicked(onClickListener);
         $.id(R.id.app_video_replay_icon).clicked(onClickListener);
         $.id(R.id.app_play_btn_play_list).clicked(onClickListener);
@@ -679,6 +695,12 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         int keyCode = event.getKeyCode();
         boolean isKeyDown = event.getAction() == KeyEvent.ACTION_DOWN;
 
+        // While the episode list is open it owns D-pad focus and OK selection.
+        // Outside the list, left/right/OK keep their direct playback semantics.
+        if (playListView != null && playListView.isShown()) {
+            return super.dispatchKeyEvent(event);
+        }
+
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_LEFT:
             case KeyEvent.KEYCODE_MEDIA_REWIND:
@@ -744,6 +766,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
         newPosition = Math.max(0, Math.min(videoDuration, newPosition + delta));
         showSeekPreview(seekStartPosition, newPosition, videoDuration);
+        show(defaultTimeout);
 
         // Some remotes do not reliably deliver ACTION_UP. Commit after the final repeat too.
         handler.removeMessages(MESSAGE_SEEK_NEW_POSITION);
@@ -795,6 +818,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                     return true;
                 }else if(xlDownloadManager.taskInstance().getPlayList().size() > 1){
                     playListView.setVisibility(View.VISIBLE);
+                    playListView.requestFocus(View.FOCUS_DOWN);
                     return true;
                 }else if(keyCode == KeyEvent.KEYCODE_DPAD_DOWN){
                     keyDownComboCount ++;
@@ -825,12 +849,10 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     }
 
     private void showBottomControl(boolean show) {
+        $.id(R.id.app_video_bottom_box).visibility(show ? View.VISIBLE : View.GONE);
         $.id(R.id.app_play_btn_play_list).visibility(show && xlDownloadManager.taskInstance().getPlayList().size() > 1 ? View.VISIBLE : View.GONE);
-        $.id(R.id.app_video_play).visibility(show ? View.VISIBLE : View.GONE);
-        $.id(R.id.app_video_speed).visibility(show ? View.VISIBLE : View.GONE);
-        $.id(R.id.app_video_currentTime).visibility(show ? View.VISIBLE : View.GONE);
-        $.id(R.id.app_video_endTime).visibility(show ? View.VISIBLE : View.GONE);
-        $.id(R.id.app_video_seekBar).visibility(show ? View.VISIBLE : View.GONE);
+        $.id(R.id.app_video_rewind).visibility(show && !isLive ? View.VISIBLE : View.GONE);
+        $.id(R.id.app_video_fast_forward).visibility(show && !isLive ? View.VISIBLE : View.GONE);
         if(show && playListView.isShown())playListView.setVisibility(View.GONE);
     }
 
@@ -953,14 +975,18 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             $.id(R.id.app_video_fastForward).text(text + "s");
             $.id(R.id.app_video_fastForward_target).text(generateTime(targetPosition) + "/");
             $.id(R.id.app_video_fastForward_all).text(generateTime(duration));
+            $.id(R.id.app_video_currentTime).text(generateTime(targetPosition));
+            if (seekBar != null && duration > 0) {
+                seekBar.setProgress(targetPosition * 100 / duration);
+            }
         }
     }
 
     protected void updatePausePlay() {
         if (mVideoView.isPlaying()) {
-            $.id(R.id.app_video_play).image(R.drawable.ic_stop_white_24dp);
+            $.id(R.id.app_video_play).image(android.R.drawable.ic_media_pause);
         } else {
-            $.id(R.id.app_video_play).image(R.drawable.ic_play_arrow_white_24dp);
+            $.id(R.id.app_video_play).image(android.R.drawable.ic_media_play);
         }
     }
 
