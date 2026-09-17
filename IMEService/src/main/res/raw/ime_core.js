@@ -470,7 +470,7 @@ function loadMediaDetail(sourceKey, id){
 		html.push('<div class="media-episodes">');
 		for(var i=0;i<(item.episodes || []).length;i++){
 			var ep = item.episodes[i];
-			html.push('<div class="media-episode" data-source="'+escapeHtml(item.sourceKey)+'" data-playid="'+escapeHtml(ep.playId)+'" data-flag="'+escapeHtml(ep.flag || '')+'">'+escapeHtml((ep.flag ? ep.flag+' · ' : '')+ep.name)+'</div>');
+			html.push('<div class="media-episode" data-source="'+escapeHtml(item.sourceKey)+'" data-playid="'+escapeHtml(ep.playId)+'" data-flag="'+escapeHtml(ep.flag || '')+'" data-title="'+escapeHtml(item.name || '')+'" data-episode="'+escapeHtml(ep.name || '')+'">'+escapeHtml((ep.flag ? ep.flag+' · ' : '')+ep.name)+'</div>');
 		}
 		if(!(item.episodes || []).length) html.push('<div class="media-empty">这个 source 没有返回可播放剧集。</div>');
 		html.push('</div></div></div>');
@@ -481,9 +481,11 @@ function loadMediaDetail(sourceKey, id){
 		$('#mediaDetail').html('<div class="media-empty">'+message+'</div>');
 	}});
 }
-function playMediaEpisode(sourceKey, flag, playId){
+function playMediaEpisode(sourceKey, flag, playId, title, episode){
 	mediaMessage('正在解析并发送到电视播放…');
-	$.ajax({url:'/media/play', type:'POST', data:{sourceKey:sourceKey, flag:flag, playId:playId}, dataType:'json', timeout:30000, success:function(data){
+	var displayTitle = title || '';
+	if(episode) displayTitle += (displayTitle ? ' · ' : '') + episode;
+	$.ajax({url:'/media/play', type:'POST', data:{sourceKey:sourceKey, flag:flag, playId:playId, title:displayTitle}, dataType:'json', timeout:30000, success:function(data){
 		if(data && data.success === false){
 			mediaMessage(data.message || '播放失败');
 		}else{
@@ -532,7 +534,7 @@ $('#mediaGrid').on('click', '.media-card', function(){
 	loadMediaDetail(sourceKey, id);
 });
 $('#mediaDetail').on('click', '.media-episode', function(){
-	playMediaEpisode($(this).attr('data-source'), $(this).attr('data-flag'), $(this).attr('data-playid'));
+	playMediaEpisode($(this).attr('data-source'), $(this).attr('data-flag'), $(this).attr('data-playid'), $(this).attr('data-title'), $(this).attr('data-episode'));
 });
 $("#btnEnter").on("click", function(){
 	vibrateShort();

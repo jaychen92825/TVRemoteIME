@@ -160,7 +160,7 @@ public class MediaRequestProcesser implements RequestProcesser {
         // Media Browser is intentionally tied to TVRemoteIME's internal player so the
         // web remote can control the same Activity after playback starts.  The general
         // /play endpoint still keeps its existing "use system player" option.
-        VideoPlayHelper.playUrl(context, url, 0, false);
+        VideoPlayHelper.playUrl(context, url, 0, false, params.get("title"));
         JSONObject obj = new JSONObject();
         obj.put("success", true);
         obj.put("playUrl", url);
