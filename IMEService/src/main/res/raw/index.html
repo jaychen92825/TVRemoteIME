@@ -186,6 +186,35 @@
 					<div class="btn" id="btnMediaSearch"><svg viewBox="0 0 24 24" width="14" height="14"><circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="1.8" fill="none"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>搜索</div>
 				</div>
 			</div>
+			<div class="media-player-dock hide" id="mediaPlayerControls">
+				<div class="media-player-head">
+					<div class="media-player-copy">
+						<div class="media-player-eyebrow">正在电视播放</div>
+						<div class="media-player-title" id="mediaPlayerTitle">当前视频</div>
+					</div>
+					<div class="media-player-state" id="mediaPlayerState">可控制</div>
+				</div>
+				<div class="media-player-primary">
+					<button type="button" class="media-control-btn media-control-small" data-player-key="21" aria-label="快退 10 秒" title="快退 10 秒">
+						<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M11 7L5 12l6 5V7zm8 0l-6 5 6 5V7z" fill="currentColor"/></svg>
+						<span>快退 10 秒</span>
+					</button>
+					<button type="button" class="media-control-btn media-control-play" data-player-key="23" aria-label="播放或暂停" title="播放 / 暂停">
+						<svg viewBox="0 0 24 24" width="29" height="29" aria-hidden="true"><path d="M5 5.5v13l8-6.5-8-6.5z" fill="currentColor"/><rect x="15" y="5.5" width="3" height="13" rx="1" fill="currentColor"/></svg>
+					</button>
+					<button type="button" class="media-control-btn media-control-small" data-player-key="22" aria-label="快进 10 秒" title="快进 10 秒">
+						<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M13 7l6 5-6 5V7zM5 7l6 5-6 5V7z" fill="currentColor"/></svg>
+						<span>快进 10 秒</span>
+					</button>
+				</div>
+				<div class="media-player-secondary">
+					<button type="button" class="media-secondary-btn" data-player-key="4"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>返回</span></button>
+					<button type="button" class="media-secondary-btn" data-player-key="25" aria-label="音量减"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 9v6h4l5 5V4L8 9H4z" fill="currentColor"/><path d="M17 12h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>音量 -</span></button>
+					<button type="button" class="media-secondary-btn" data-player-key="164" aria-label="静音"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 9v6h4l5 5V4L8 9H4z" fill="currentColor"/><path d="M17 8l4 8M21 8l-4 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>静音</span></button>
+					<button type="button" class="media-secondary-btn" data-player-key="24" aria-label="音量加"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 9v6h4l5 5V4L8 9H4z" fill="currentColor"/><path d="M19.5 9v6M16.5 12h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>音量 +</span></button>
+					<button type="button" class="media-secondary-btn" id="mediaOpenRemote"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="3" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="12" cy="8" r="2.2" stroke="currentColor" stroke-width="1.6" fill="none"/><circle cx="12" cy="15.5" r="1.2" fill="currentColor"/></svg><span>完整遥控</span></button>
+				</div>
+			</div>
 			<div class="media-categories" id="mediaCategories"></div>
 			<div class="media-detail card hide" id="mediaDetail"></div>
 			<div class="media-grid" id="mediaGrid"></div>
