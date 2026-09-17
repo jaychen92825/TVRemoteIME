@@ -56,7 +56,7 @@ public class MediaRequestProcesser implements RequestProcesser {
                 if ("/media/category".equals(fileName)) return categoryResponse(params.get("sourceKey"), params.get("id"), params.get("page"));
                 if ("/media/search".equals(fileName)) return searchResponse(params.get("q"), params.get("sourceKey"));
                 if ("/media/detail".equals(fileName)) return detailResponse(params.get("sourceKey"), params.get("id"));
-                if ("/media/image".equals(fileName)) return imageResponse(params.get("url"));
+                if ("/media/image".equals(fileName)) return imageResponse(params.get("url"), params.get("sourceKey"));
             } else if (session.getMethod() == NanoHTTPD.Method.POST) {
                 if ("/media/config".equals(fileName)) return saveConfigResponse(params.get("url"));
                 if ("/media/play".equals(fileName)) return playResponse(params);
@@ -167,11 +167,20 @@ public class MediaRequestProcesser implements RequestProcesser {
         return ok(obj);
     }
 
-    private NanoHTTPD.Response imageResponse(String url) throws Exception {
+    private NanoHTTPD.Response imageResponse(String url, String sourceKey) throws Exception {
         if (TextUtils.isEmpty(url)) throw new Exception("未指定图片地址");
-        MediaBinary image = com.android.tvremoteime.media.MediaHttp.getBinary(url);
-        return NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, image.mimeType,
+        MediaBinary image;
+        if (url.regionMatches(true, 0, "proxy://", 0, 8)) {
+            MediaSource source = requireSource(sourceKey);
+            if (!source.isType3Csp()) throw new Exception("这个媒体源不支持 spider 图片代理");
+            image = new Type3SourceAdapter(context, source).proxyImage(url);
+        } else {
+            image = com.android.tvremoteime.media.MediaHttp.getBinary(url, configManager.getConfig());
+        }
+        NanoHTTPD.Response response = NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, image.mimeType,
                 new ByteArrayInputStream(image.data), image.data.length);
+        response.addHeader("Cache-Control", "public, max-age=86400");
+        return response;
     }
 
     private MediaBrowseResult home(MediaSource source) throws Exception {
