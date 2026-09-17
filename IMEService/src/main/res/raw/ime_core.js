@@ -490,11 +490,48 @@ function playMediaEpisode(sourceKey, flag, playId, title, episode){
 			mediaMessage(data.message || '播放失败');
 		}else{
 			mediaMessage('已发送到电视播放。');
+			showMediaPlayer(displayTitle || '当前视频');
 		}
 	}, error:function(){
 		mediaMessage('播放解析超时，请换一条线路或换一个源。');
 	}});
 }
+
+function showMediaPlayer(title){
+	$('#mediaPlayerTitle').text(title || '当前视频');
+	$('#mediaPlayerState').text('可控制');
+	$('#mediaPlayerControls').removeClass('hide');
+}
+
+function pulseMediaControl($button){
+	$button.addClass('pressed');
+	setTimeout(function(){ $button.removeClass('pressed'); }, 120);
+}
+
+$('#mediaPlayerControls').on('click', '[data-player-key]', function(){
+	var $button = $(this);
+	var key = String($button.attr('data-player-key') || '');
+	if(!key) return;
+	vibrateShort();
+	pulseMediaControl($button);
+	postKeyCode(key);
+	var label = key === '21' ? '已快退 10 秒' :
+		key === '22' ? '已快进 10 秒' :
+		key === '23' ? '已切换播放 / 暂停' :
+		key === '4' ? '已发送返回' :
+		key === '164' ? '已切换静音' : '已调整音量';
+	$('#mediaPlayerState').text(label);
+	setTimeout(function(){
+		if($('#mediaPlayerControls').hasClass('hide')) return;
+		$('#mediaPlayerState').text('可控制');
+	}, 1100);
+});
+
+$('#mediaOpenRemote').on('click', function(){
+	vibrateShort();
+	pulseMediaControl($(this));
+	$('div.tab[data-rel="controls"]').trigger('click');
+});
 $('#btnMediaConnect').on('click', function(){
 	var url = $('#mediaConfigUrl').val();
 	mediaMessage('正在连接配置…');
