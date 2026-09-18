@@ -290,13 +290,81 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                             return;
                         }
                         Log.d(activity.TAG, "direct web player control key=" + remoteKeyCode + " action=" + remoteAction);
-                        activity.handleRemotePlayerControl(remoteKeyCode, remoteAction);
+                        activity.handleDirectWebPlayerControl(remoteKeyCode, remoteAction);
                     }
                 });
                 return true;
             default:
                 return false;
         }
+    }
+
+    private void handleDirectWebPlayerControl(int keyCode, int action) {
+        if (mVideoView == null || action != KeyEvent.ACTION_DOWN) {
+            return;
+        }
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+                seekByForWeb(-GlobalSettings.FastForwardInterval);
+                break;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                seekByForWeb(GlobalSettings.FastForwardInterval);
+                break;
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+                doPauseResume();
+                show(defaultTimeout);
+                break;
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+                if (!mVideoView.isPlaying()) {
+                    start();
+                    updatePausePlay();
+                    show(defaultTimeout);
+                }
+                break;
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+                if (mVideoView.isPlaying()) {
+                    getCurrentPosition();
+                    statusChange(STATUS_PAUSE);
+                    pause();
+                    updatePausePlay();
+                    show(defaultTimeout);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void seekByForWeb(int delta) {
+        if (isLive || mVideoView == null) {
+            return;
+        }
+
+        int position = mVideoView.getCurrentPosition();
+        int duration = mVideoView.getDuration();
+        int target = Math.max(0, position + delta);
+        if (duration > 0) {
+            target = Math.min(duration, target);
+            showSeekPreview(position, target, duration);
+        }
+
+        seekTo(target);
+        currentPosition = target;
+        changeProgressByKey = false;
+        seekStartPosition = -1;
+        newPosition = -1;
+        handler.removeMessages(MESSAGE_SEEK_NEW_POSITION);
+        handler.removeMessages(MESSAGE_HIDE_CENTER_BOX);
+        handler.sendEmptyMessageDelayed(MESSAGE_HIDE_CENTER_BOX, 500);
+        show(defaultTimeout);
     }
 
     private void handleRemotePlayerControl(int keyCode, int action) {
