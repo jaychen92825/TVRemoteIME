@@ -20,6 +20,8 @@ var mediaSection = 'browse';
 var mediaBrowseScrollTop = 0;
 var currentMediaDetail = null;
 var renderedMediaItems = [];
+var mediaFolderStack = [];
+var currentMediaCategoryId = '';
 var mediaDisplayMode = 'grid';
 try {
 	mediaDisplayMode = localStorage.getItem('mediaDisplayMode') === 'list' ? 'list' : 'grid';
@@ -408,6 +410,8 @@ function showMediaReady(){
 	}
 }
 function loadMediaHome(){
+	mediaFolderStack = [];
+	currentMediaCategoryId = '';
 	selectMediaSection('browse');
 	showMediaBrowse(false);
 	$('#mediaDetail').empty();
@@ -447,6 +451,8 @@ function loadMediaCategory(id){
 		loadMediaHome();
 		return;
 	}
+	mediaFolderStack = [];
+	currentMediaCategoryId = id;
 	showMediaBrowse(false);
 	$('#mediaDetail').empty();
 	$('#mediaCategories .media-category').removeClass('active');
@@ -465,6 +471,38 @@ function loadMediaCategory(id){
 		$('#mediaGrid').html('<div class="media-empty">这个分类暂时没有响应。</div>');
 	}});
 }
+function loadMediaFolder(sourceKey, id, name, push){
+	if(!id) return;
+	selectMediaSection('browse');
+	showMediaBrowse(false);
+	currentMediaSourceKey = sourceKey || currentMediaSourceKey;
+	$('#mediaSourceSelect').val(currentMediaSourceKey);
+	if(push !== false) mediaFolderStack.push({sourceKey:currentMediaSourceKey, id:id, name:name || '文件夹'});
+	$('#mediaCategories').html('<div class="media-category media-folder-back">‹ 返回</div><div class="media-category active">'+escapeHtml(name || '文件夹')+'</div>');
+	$('#mediaGrid').html('<div class="media-empty">正在打开…</div>');
+	$.ajax({url:'/media/category', data:{sourceKey:currentMediaSourceKey,id:id,page:'1'}, dataType:'json', timeout:65000, success:function(data){
+		if(data && data.success === false){
+			mediaMessage('目录加载失败：'+(data.message || '未知错误'));
+			$('#mediaGrid').html('<div class="media-empty">这个目录暂时无法加载。</div>');
+			return;
+		}
+		mediaMessage((data.sourceName || '当前源')+' · '+escapeHtml(name || '目录')+' · '+(data.items || []).length+' 项');
+		renderMediaGrid(data.items || []);
+	}, error:function(){
+		mediaMessage('目录加载超时，请稍后重试。');
+		$('#mediaGrid').html('<div class="media-empty">这个目录暂时没有响应。</div>');
+	}});
+}
+function closeMediaFolder(){
+	if(mediaFolderStack.length) mediaFolderStack.pop();
+	if(!mediaFolderStack.length){
+		if(currentMediaCategoryId) loadMediaCategory(currentMediaCategoryId);
+		else loadMediaHome();
+		return;
+	}
+	var parent = mediaFolderStack[mediaFolderStack.length - 1];
+	loadMediaFolder(parent.sourceKey, parent.id, parent.name, false);
+}
 function cssAttributeValue(value){
 	return String(value == null ? '' : value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
@@ -476,8 +514,9 @@ function renderMediaGrid(items){
 	}else{
 		for(var i=0;i<items.length;i++){
 			var item = items[i];
-			html.push('<div class="media-card" data-source="'+escapeHtml(item.sourceKey)+'" data-id="'+escapeHtml(item.id)+'" data-name="'+escapeHtml(item.name)+'">');
+			html.push('<div class="media-card" data-index="'+i+'" data-source="'+escapeHtml(item.sourceKey)+'" data-id="'+escapeHtml(item.id)+'" data-name="'+escapeHtml(item.name)+'" data-folder="'+(item.folder ? '1' : '0')+'">');
 			html.push(mediaPoster(item, true));
+			if(mediaSection === 'favorites') html.push('<button type="button" class="media-card-unfavorite" aria-label="取消收藏" title="取消收藏">★</button>');
 			html.push('<div class="media-card-copy"><div class="media-card-title" title="'+escapeHtml(item.name)+'">'+escapeHtml(item.name)+'</div>');
 			var meta = [];
 			if(item.episode) meta.push(item.episode);
@@ -505,6 +544,8 @@ function selectMediaSection(section){
 	$('#mediaLibraryNav .media-library-tab[data-section="'+cssAttributeValue(mediaSection)+'"]').addClass('active');
 }
 function loadMediaLibrary(section){
+	mediaFolderStack = [];
+	currentMediaCategoryId = '';
 	selectMediaSection(section);
 	showMediaBrowse(false);
 	$('#mediaDetail').empty();
@@ -532,6 +573,8 @@ function searchMedia(){
 		return;
 	}
 	selectMediaSection('browse');
+	mediaFolderStack = [];
+	currentMediaCategoryId = '';
 	showMediaBrowse(false);
 	$('#mediaDetail').empty();
 	$('#mediaGrid').html('<div class="media-empty">正在搜索…</div>');
@@ -676,22 +719,53 @@ $('#mediaSourceSelect').on('change', function(){
 	loadMediaHome();
 });
 $('#mediaCategories').on('click', '.media-category', function(){
+	if($(this).hasClass('media-folder-back')){
+		closeMediaFolder();
+		return;
+	}
 	loadMediaCategory($(this).attr('data-id') || '');
 });
 $('#mediaSearchInput').on('keydown', function(e){
 	if(e.key === 'Enter' || e.keyCode === 13) searchMedia();
 });
-$('#mediaGrid').on('click', '.media-card', function(){
+$('#mediaGrid').on('click', '.media-card', function(e){
+	if($(e.target).closest('.media-card-unfavorite').length) return;
 	var sourceKey = $(this).attr('data-source') || '';
 	var id = $(this).attr('data-id') || '';
 	var name = $(this).attr('data-name') || '';
 	var source = sourceByKey(sourceKey);
+	if($(this).attr('data-folder') === '1' || /@folder$/.test(id)){
+		loadMediaFolder(sourceKey, id, name, true);
+		return;
+	}
 	if((source && Number(source.indexs) === 1) || !id || id.indexOf('msearch:') === 0){
 		$('#mediaSearchInput').val(name);
 		searchMedia();
 		return;
 	}
 	loadMediaDetail(sourceKey, id);
+});
+$('#mediaGrid').on('click', '.media-card-unfavorite', function(e){
+	e.preventDefault();
+	e.stopPropagation();
+	var $card = $(this).closest('.media-card');
+	var index = Number($card.attr('data-index'));
+	var item = renderedMediaItems[index];
+	if(!item) return;
+	var $button = $(this).prop('disabled', true);
+	$.post('/media/favorite', {sourceKey:item.sourceKey || '', sourceName:item.sourceName || '', mediaId:item.id || '', mediaName:item.name || '', pic:item.pic || '', score:item.score || '', remark:item.remark || ''}, function(data){
+		if(!data || data.success === false || data.favorite){
+			$button.prop('disabled', false);
+			mediaMessage(data && data.message ? data.message : '取消收藏失败');
+			return;
+		}
+		renderedMediaItems.splice(index, 1);
+		mediaMessage('已取消收藏 · '+renderedMediaItems.length+' 部内容');
+		renderMediaGrid(renderedMediaItems);
+	}, 'json').fail(function(){
+		$button.prop('disabled', false);
+		mediaMessage('取消收藏失败，请稍后重试。');
+	});
 });
 $('#mediaDetail').on('click', '.media-episode', function(){
 	$('#mediaDetail .media-episode').removeClass('playing');

@@ -205,11 +205,34 @@ body {
 }
 
 .media-card {
+	position: relative;
 	min-width: 0;
 	background: transparent;
 	border: 0;
 	padding: 0;
 	cursor: pointer;
+}
+
+.media-card-unfavorite {
+	position: absolute;
+	top: 6px;
+	left: 6px;
+	z-index: 2;
+	width: 30px;
+	height: 30px;
+	padding: 0;
+	border: 0;
+	border-radius: 50%;
+	background: rgba(18, 22, 27, .84);
+	color: #ffd54f;
+	font-size: 17px;
+	line-height: 30px;
+	text-align: center;
+	cursor: pointer;
+}
+
+.media-card-unfavorite:disabled {
+	opacity: .55;
 }
 
 .media-poster {

@@ -45,6 +45,11 @@ public class MediaVodParser {
                     obj.optString("vod_year"), obj.optString("type_name"),
                     obj.optString("vod_content", obj.optString("content")));
             item.score = obj.optString("vod_score", obj.optString("score"));
+            item.tag = obj.optString("vod_tag", obj.optString("tag"));
+            item.action = obj.optString("action");
+            item.folder = "folder".equalsIgnoreCase(item.tag)
+                    || (!obj.isNull("cate") && obj.has("cate"))
+                    || (item.id != null && item.id.endsWith("@folder"));
             parseEpisodes(item, obj.optString("vod_play_from"), obj.optString("vod_play_url"));
             result.add(item);
         }

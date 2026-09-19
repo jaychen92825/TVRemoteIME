@@ -18,9 +18,15 @@ import javax.xml.parsers.DocumentBuilderFactory;
 
 public class Type0SourceAdapter {
     private final MediaSource source;
+    private final JSONObject config;
 
     public Type0SourceAdapter(MediaSource source) {
+        this(source, null);
+    }
+
+    public Type0SourceAdapter(MediaSource source, JSONObject config) {
         this.source = source;
+        this.config = config;
     }
 
     public List<MediaItem> home() throws Exception {
@@ -61,7 +67,7 @@ public class Type0SourceAdapter {
     public String resolve(String playId) throws Exception {
         if (TextUtils.isEmpty(playId)) return "";
         if (playId.startsWith("http://") || playId.startsWith("https://") || playId.startsWith("magnet:")) return playId;
-        String body = MediaHttp.get(urlWith("ac", "play", "ids", playId));
+        String body = MediaHttp.get(urlWith("ac", "play", "ids", playId), source.headers, config);
         if (!TextUtils.isEmpty(body)) {
             try {
                 JSONObject obj = new JSONObject(body);
@@ -74,7 +80,7 @@ public class Type0SourceAdapter {
     }
 
     private List<MediaItem> requestList(String url) throws Exception {
-        String body = MediaHttp.get(url);
+        String body = MediaHttp.get(url, source.headers, config);
         if (TextUtils.isEmpty(body)) return new ArrayList<MediaItem>();
         String trimmed = body.trim();
         if (trimmed.startsWith("{") || trimmed.startsWith("[")) return MediaVodParser.parseJson(trimmed, source);

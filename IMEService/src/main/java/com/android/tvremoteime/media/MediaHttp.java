@@ -70,8 +70,21 @@ public class MediaHttp {
     private static volatile OkHttpClient cachedImageClient = BASE_IMAGE_CLIENT;
 
     public static String get(String uri) {
+        return get(uri, null);
+    }
+
+    public static String get(String uri, Map<String, String> headers) {
         try {
-            return getRequired(uri);
+            return getRequired(uri, headers);
+        } catch (Exception e) {
+            Log.e(IMEService.TAG, "media http get failed: " + uri, e);
+            return null;
+        }
+    }
+
+    public static String get(String uri, Map<String, String> headers, JSONObject config) {
+        try {
+            return getRequired(uri, headers, config);
         } catch (Exception e) {
             Log.e(IMEService.TAG, "media http get failed: " + uri, e);
             return null;
@@ -79,6 +92,10 @@ public class MediaHttp {
     }
 
     public static String getRequired(String uri) throws Exception {
+        return getRequired(uri, null);
+    }
+
+    public static String getRequired(String uri, Map<String, String> headers) throws Exception {
         HttpURLConnection conn = null;
         try {
             URL url = normalizeUrl(uri);
@@ -89,6 +106,7 @@ public class MediaHttp {
             conn.setRequestProperty("Accept", "application/json, text/xml, application/xml, text/plain, */*");
             conn.setRequestProperty("Accept-Encoding", "identity");
             conn.setRequestProperty("User-Agent", DEFAULT_USER_AGENT);
+            applyConnectionHeaders(conn, headers);
             int code = conn.getResponseCode();
             if (code < 200 || code >= 300) throw new IOException("HTTP " + code);
             BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
@@ -103,6 +121,51 @@ public class MediaHttp {
             }
         } finally {
             if (conn != null) conn.disconnect();
+        }
+    }
+
+    public static String getRequired(String uri, Map<String, String> headers, JSONObject config) throws Exception {
+        if (config == null) return getRequired(uri, headers);
+
+        URL url = normalizeUrl(uri);
+        Request.Builder request = new Request.Builder()
+                .url(url)
+                .get()
+                .header("Accept", "application/json, text/xml, application/xml, text/plain, */*")
+                .header("Accept-Encoding", "identity")
+                .header("User-Agent", DEFAULT_USER_AGENT);
+
+        if (headers != null) {
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                setHeaderIfValid(request, normalizeHeaderName(entry.getKey()), entry.getValue());
+            }
+        }
+        // FongMi applies config-level host header rules after SiteApi headers.
+        // Request.Builder.header() therefore gives matching global rules final precedence.
+        applyConfigHeaders(request, url.getHost(), config);
+
+        Response response = null;
+        try {
+            response = getImageClient(config).newCall(request.build()).execute();
+            if (!response.isSuccessful()) throw new IOException("HTTP " + response.code());
+            ResponseBody body = response.body();
+            if (body == null) throw new IOException("返回内容为空");
+            return body.string();
+        } finally {
+            if (response != null) response.close();
+        }
+    }
+
+    private static void applyConnectionHeaders(HttpURLConnection conn, Map<String, String> headers) {
+        if (headers == null || headers.isEmpty()) return;
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            String key = normalizeHeaderName(entry.getKey());
+            String value = entry.getValue();
+            if (!isSafeHeader(key, value)) continue;
+            try {
+                conn.setRequestProperty(key, value);
+            } catch (IllegalArgumentException ignored) {
+            }
         }
     }
 

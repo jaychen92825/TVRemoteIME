@@ -42,10 +42,6 @@ import com.afap.ijkplayer.R;
 import com.xunlei.downloadlib.parameter.XLConstant;
 import com.xunlei.downloadlib.parameter.XLTaskInfo;
 
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import player.settings.GlobalSettings;
 import player.widget.media.IjkVideoView;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
@@ -269,7 +265,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         final XLVideoPlayActivity activity = runningInstance;
         final int remoteKeyCode = keyCode;
         final int remoteAction = action;
-        if (activity == null || activity.isFinishing()
+        if (!isRunning || activity == null || activity.isFinishing()
                 || (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP)) {
             return false;
         }
@@ -290,28 +286,20 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                 if (Looper.myLooper() == Looper.getMainLooper()) {
                     return activity.handleDirectWebPlayerControl(remoteKeyCode, remoteAction);
                 }
-                final CountDownLatch completed = new CountDownLatch(1);
-                final AtomicBoolean handled = new AtomicBoolean(false);
                 activity.runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        try {
-                            if (activity != runningInstance || activity.isFinishing()) {
-                                return;
-                            }
-                            Log.d(activity.TAG, "direct web player control key=" + remoteKeyCode + " action=" + remoteAction);
-                            handled.set(activity.handleDirectWebPlayerControl(remoteKeyCode, remoteAction));
-                        } finally {
-                            completed.countDown();
+                        if (activity != runningInstance || activity.isFinishing()) {
+                            return;
                         }
+                        Log.d(activity.TAG, "direct web player control key=" + remoteKeyCode + " action=" + remoteAction);
+                        activity.handleDirectWebPlayerControl(remoteKeyCode, remoteAction);
                     }
                 });
-                try {
-                    return completed.await(750, TimeUnit.MILLISECONDS) && handled.get();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return false;
-                }
+                // The HTTP server runs off the player UI thread. Treat a successfully
+                // queued command as handled instead of timing out and falling back to
+                // a synthetic D-pad event, which can trigger unrelated player actions.
+                return true;
             default:
                 return false;
         }
@@ -340,9 +328,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             case KeyEvent.KEYCODE_SPACE:
             case KeyEvent.KEYCODE_HEADSETHOOK:
             case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
-                doPauseResume();
-                show(defaultTimeout);
-                return true;
+                return togglePlaybackForWeb();
             case KeyEvent.KEYCODE_MEDIA_PLAY:
                 if (!mVideoView.isPlaying()) {
                     start();
@@ -366,7 +352,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     }
 
     private boolean seekByForWeb(int delta) {
-        if (isLive || mVideoView == null) {
+        if (mVideoView == null) {
             return false;
         }
 
@@ -390,6 +376,26 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         return true;
     }
 
+    private boolean togglePlaybackForWeb() {
+        if (mVideoView == null) {
+            return false;
+        }
+        if (mVideoView.isPlaying()) {
+            currentPosition = mVideoView.getCurrentPosition();
+            statusChange(STATUS_PAUSE);
+            pause();
+        } else {
+            // Web remote pause/resume must never inherit the replay-from-zero branch
+            // from doPauseResume(). IjkVideoView.start() resumes a paused stream.
+            $.id(R.id.app_video_replay).gone();
+            start();
+            statusChange(STATUS_PLAYING);
+        }
+        updatePausePlay();
+        show(defaultTimeout);
+        return true;
+    }
+
     private void handleRemotePlayerControl(int keyCode, int action) {
         if (mVideoView == null) {
             return;
@@ -400,17 +406,13 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             case KeyEvent.KEYCODE_DPAD_LEFT:
             case KeyEvent.KEYCODE_MEDIA_REWIND:
                 if (isKeyDown) {
-                    previewKeySeek(-GlobalSettings.FastForwardInterval);
-                } else {
-                    finishKeySeek();
+                    seekByForWeb(-GlobalSettings.FastForwardInterval);
                 }
                 break;
             case KeyEvent.KEYCODE_DPAD_RIGHT:
             case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
                 if (isKeyDown) {
-                    previewKeySeek(GlobalSettings.FastForwardInterval);
-                } else {
-                    finishKeySeek();
+                    seekByForWeb(GlobalSettings.FastForwardInterval);
                 }
                 break;
             case KeyEvent.KEYCODE_ENTER:
@@ -419,8 +421,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             case KeyEvent.KEYCODE_HEADSETHOOK:
             case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
                 if (isKeyDown) {
-                    doPauseResume();
-                    show(defaultTimeout);
+                    togglePlaybackForWeb();
                 }
                 break;
             case KeyEvent.KEYCODE_MEDIA_PLAY:
