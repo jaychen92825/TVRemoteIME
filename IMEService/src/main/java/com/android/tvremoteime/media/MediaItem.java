@@ -14,6 +14,9 @@ public class MediaItem {
     public String year;
     public String type;
     public String desc;
+    public String tag;
+    public String action;
+    public boolean folder;
 
     public JSONObject toJson() throws JSONException {
         JSONObject obj = new JSONObject();
@@ -27,6 +30,9 @@ public class MediaItem {
         obj.put("year", safe(year));
         obj.put("type", safe(type));
         obj.put("desc", safe(desc));
+        obj.put("tag", safe(tag));
+        obj.put("action", safe(action));
+        obj.put("folder", folder);
         return obj;
     }
 

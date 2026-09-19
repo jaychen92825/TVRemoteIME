@@ -242,28 +242,28 @@ public class MediaRequestProcesser implements RequestProcesser {
     private MediaBrowseResult home(MediaSource source) throws Exception {
         if (source.isType3Csp()) return new Type3SourceAdapter(context, source).home();
         MediaBrowseResult result = new MediaBrowseResult();
-        result.items = new Type0SourceAdapter(source).home();
+        result.items = new Type0SourceAdapter(source, configManager.getConfig()).home();
         return result;
     }
 
     private List<MediaItem> search(MediaSource source, String keyword, boolean quick) throws Exception {
         if (source.isType3Csp()) return new Type3SourceAdapter(context, source).search(keyword, quick);
-        return new Type0SourceAdapter(source).search(keyword);
+        return new Type0SourceAdapter(source, configManager.getConfig()).search(keyword);
     }
 
     private List<MediaItem> category(MediaSource source, String id, String page) throws Exception {
         if (source.isType3Csp()) return new Type3SourceAdapter(context, source).category(id, page);
-        return new Type0SourceAdapter(source).category(id, page);
+        return new Type0SourceAdapter(source, configManager.getConfig()).category(id, page);
     }
 
     private MediaDetail detail(MediaSource source, String id) throws Exception {
         if (source.isType3Csp()) return new Type3SourceAdapter(context, source).detail(id);
-        return new Type0SourceAdapter(source).detail(id);
+        return new Type0SourceAdapter(source, configManager.getConfig()).detail(id);
     }
 
     private String resolve(MediaSource source, String flag, String playId) throws Exception {
         if (source.isType3Csp()) return new Type3SourceAdapter(context, source).resolve(flag, playId);
-        return new Type0SourceAdapter(source).resolve(playId);
+        return new Type0SourceAdapter(source, configManager.getConfig()).resolve(playId);
     }
 
     private MediaSource requestedSource(String sourceKey) {

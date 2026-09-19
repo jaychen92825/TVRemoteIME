@@ -184,6 +184,9 @@ public class Type3SourceAdapter {
         detail.year = item.year;
         detail.type = item.type;
         detail.desc = item.desc;
+        detail.tag = item.tag;
+        detail.action = item.action;
+        detail.folder = item.folder;
         return detail;
     }
 

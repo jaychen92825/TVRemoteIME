@@ -12,6 +12,7 @@ import org.json.JSONObject;
 
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -98,6 +99,15 @@ public class MediaConfigManager {
             source.timeout = item.optInt("timeout", 30);
             source.searchable = item.optInt("searchable", 1) != 0;
             source.quickSearch = item.optInt("quickSearch", 1) != 0;
+            JSONObject headers = item.optJSONObject("header");
+            if (headers != null) {
+                Iterator<String> keys = headers.keys();
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    String value = headers.optString(key, "");
+                    if (!TextUtils.isEmpty(key) && !TextUtils.isEmpty(value)) source.headers.put(key, value);
+                }
+            }
             result.add(source);
         }
         return result;

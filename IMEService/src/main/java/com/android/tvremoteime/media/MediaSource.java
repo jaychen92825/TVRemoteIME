@@ -3,6 +3,9 @@ package com.android.tvremoteime.media;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 public class MediaSource {
     public String key;
     public String name;
@@ -14,6 +17,7 @@ public class MediaSource {
     public int timeout;
     public boolean searchable;
     public boolean quickSearch;
+    public final Map<String, String> headers = new LinkedHashMap<String, String>();
 
     public boolean isSupported() {
         return isType0() || isType3Csp();
