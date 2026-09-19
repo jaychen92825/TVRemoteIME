@@ -12,6 +12,7 @@ import com.android.tvremoteime.media.MediaCategory;
 import com.android.tvremoteime.media.MediaConfigManager;
 import com.android.tvremoteime.media.MediaDetail;
 import com.android.tvremoteime.media.MediaItem;
+import com.android.tvremoteime.media.MediaLibraryStore;
 import com.android.tvremoteime.media.MediaSource;
 import com.android.tvremoteime.media.Type0SourceAdapter;
 import com.android.tvremoteime.media.Type3SourceAdapter;
@@ -36,10 +37,12 @@ import fi.iki.elonen.NanoHTTPD;
 public class MediaRequestProcesser implements RequestProcesser {
     private final Context context;
     private final MediaConfigManager configManager;
+    private final MediaLibraryStore libraryStore;
 
     public MediaRequestProcesser(Context context) {
         this.context = context;
         this.configManager = new MediaConfigManager(context);
+        this.libraryStore = new MediaLibraryStore(context);
     }
 
     @Override
@@ -57,9 +60,13 @@ public class MediaRequestProcesser implements RequestProcesser {
                 if ("/media/search".equals(fileName)) return searchResponse(params.get("q"), params.get("sourceKey"));
                 if ("/media/detail".equals(fileName)) return detailResponse(params.get("sourceKey"), params.get("id"));
                 if ("/media/image".equals(fileName)) return imageResponse(params.get("url"), params.get("sourceKey"));
+                if ("/media/history".equals(fileName)) return libraryResponse(libraryStore.getHistory());
+                if ("/media/favorites".equals(fileName)) return libraryResponse(libraryStore.getFavorites());
             } else if (session.getMethod() == NanoHTTPD.Method.POST) {
                 if ("/media/config".equals(fileName)) return saveConfigResponse(params.get("url"));
                 if ("/media/play".equals(fileName)) return playResponse(params);
+                if ("/media/favorite".equals(fileName)) return favoriteResponse(params);
+                if ("/media/history/clear".equals(fileName)) return clearHistoryResponse();
             }
             return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.NOT_FOUND, "Error 404, file not found.");
         } catch (Exception e) {
@@ -148,8 +155,11 @@ public class MediaRequestProcesser implements RequestProcesser {
             String displayId = id.length() > 64 ? id.substring(0, 64) + "..." : id;
             throw new Exception("源「" + source.name + "」未返回详情，ID=" + displayId);
         }
+        if (TextUtils.isEmpty(detail.id)) detail.id = id;
         JSONObject obj = new JSONObject();
-        obj.put("item", detail.toJson());
+        JSONObject item = detail.toJson();
+        item.put("favorite", libraryStore.isFavorite(source.key, detail.id));
+        obj.put("item", item);
         return ok(obj);
     }
 
@@ -161,10 +171,55 @@ public class MediaRequestProcesser implements RequestProcesser {
         // web remote can control the same Activity after playback starts.  The general
         // /play endpoint still keeps its existing "use system player" option.
         VideoPlayHelper.playUrl(context, url, 0, false, params.get("title"));
+        if (!TextUtils.isEmpty(params.get("mediaId"))) {
+            JSONObject history = libraryItem(params);
+            history.put("episode", safe(params.get("episode")));
+            history.put("flag", safe(params.get("flag")));
+            history.put("playId", safe(params.get("playId")));
+            history.put("updatedAt", System.currentTimeMillis());
+            libraryStore.addHistory(history);
+        }
         JSONObject obj = new JSONObject();
         obj.put("success", true);
         obj.put("playUrl", url);
         return ok(obj);
+    }
+
+    private NanoHTTPD.Response libraryResponse(JSONArray items) throws Exception {
+        JSONObject obj = new JSONObject();
+        obj.put("items", items);
+        return ok(obj);
+    }
+
+    private NanoHTTPD.Response favoriteResponse(Map<String, String> params) throws Exception {
+        if (TextUtils.isEmpty(params.get("sourceKey")) || TextUtils.isEmpty(params.get("mediaId"))) {
+            throw new Exception("缺少收藏所需的媒体信息");
+        }
+        JSONObject obj = new JSONObject();
+        obj.put("favorite", libraryStore.toggleFavorite(libraryItem(params)));
+        return ok(obj);
+    }
+
+    private NanoHTTPD.Response clearHistoryResponse() throws Exception {
+        libraryStore.clearHistory();
+        JSONObject obj = new JSONObject();
+        obj.put("success", true);
+        return ok(obj);
+    }
+
+    private JSONObject libraryItem(Map<String, String> params) throws Exception {
+        JSONObject item = new JSONObject();
+        item.put("sourceKey", safe(params.get("sourceKey")));
+        item.put("sourceName", safe(params.get("sourceName")));
+        item.put("id", safe(params.get("mediaId")));
+        item.put("name", safe(params.get("mediaName")));
+        item.put("pic", safe(params.get("pic")));
+        item.put("remark", safe(params.get("remark")));
+        return item;
+    }
+
+    private static String safe(String value) {
+        return value == null ? "" : value;
     }
 
     private NanoHTTPD.Response imageResponse(String url, String sourceKey) throws Exception {
