@@ -499,11 +499,6 @@ function updateMediaDisplayMode(mode){
 	$('#btnMediaViewMode .media-view-grid-icon').toggleClass('hide', listMode);
 	$('#btnMediaViewMode .media-view-list-icon').toggleClass('hide', !listMode);
 }
-function setMediaSearchOpen(open){
-	$('#mediaSearchControl').toggleClass('hide', !open);
-	$('#btnMediaSearchToggle').toggleClass('active', open).attr('aria-label', open ? '关闭搜索' : '打开搜索');
-	if(open) setTimeout(function(){ $('#mediaSearchInput').focus(); }, 0);
-}
 function selectMediaSection(section){
 	mediaSection = section || 'browse';
 	$('#mediaLibraryNav .media-library-tab').removeClass('active');
@@ -648,9 +643,6 @@ updateMediaDisplayMode(mediaDisplayMode);
 $('#btnMediaSettings').on('click', function(){
 	showMediaSettingsView();
 });
-$('#btnMediaSearchToggle').on('click', function(){
-	setMediaSearchOpen(!$('#mediaSearchControl').hasClass('hide'));
-});
 $('#btnMediaViewMode').on('click', function(){
 	updateMediaDisplayMode(mediaDisplayMode === 'grid' ? 'list' : 'grid');
 	renderMediaGrid(renderedMediaItems);
@@ -696,7 +688,6 @@ $('#mediaGrid').on('click', '.media-card', function(){
 	var source = sourceByKey(sourceKey);
 	if((source && Number(source.indexs) === 1) || !id || id.indexOf('msearch:') === 0){
 		$('#mediaSearchInput').val(name);
-		setMediaSearchOpen(true);
 		searchMedia();
 		return;
 	}
