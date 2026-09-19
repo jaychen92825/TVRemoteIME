@@ -23,6 +23,8 @@ var renderedMediaItems = [];
 var mediaFolderStack = [];
 var currentMediaCategoryId = '';
 var mediaDisplayMode = 'grid';
+var mediaPlaybackPollTimer = null;
+var mediaPlaybackDragging = false;
 try {
 	mediaDisplayMode = localStorage.getItem('mediaDisplayMode') === 'list' ? 'list' : 'grid';
 } catch(e) {}
@@ -676,10 +678,65 @@ function playMediaEpisode(sourceKey, flag, playId, title, episode){
 			mediaMessage(data.message || '播放失败');
 		}else{
 			mediaMessage('已发送到电视播放。');
+			refreshMediaPlaybackStatus();
+			updateMediaPlaybackPolling();
 		}
 	}, error:function(){
 		mediaMessage('播放解析超时，请换一条线路或换一个源。');
 	}});
+}
+
+function formatPlaybackTime(ms){
+	var total = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+	var hours = Math.floor(total / 3600);
+	var minutes = Math.floor((total % 3600) / 60);
+	var seconds = total % 60;
+	var mm = (hours > 0 && minutes < 10 ? '0' : '') + minutes;
+	var ss = (seconds < 10 ? '0' : '') + seconds;
+	return hours > 0 ? hours + ':' + mm + ':' + ss : minutes + ':' + ss;
+}
+
+function isMediaTabVisible(){
+	return $('.tab.cur').attr('data-rel') === 'media';
+}
+
+function renderMediaPlaybackStatus(data){
+	var active = !!(data && data.active);
+	$('#mediaPlaybackControls').toggleClass('hide', !active);
+	if(!active) return;
+
+	var duration = Math.max(0, Number(data.duration) || 0);
+	var position = Math.max(0, Number(data.position) || 0);
+	if(duration > 0) position = Math.min(duration, position);
+	var $seek = $('#mediaPlaybackSeek');
+	$seek.attr('max', duration).prop('disabled', duration <= 0);
+	if(!mediaPlaybackDragging) $seek.val(position);
+	$('#mediaPlaybackCurrent').text(formatPlaybackTime(mediaPlaybackDragging ? $seek.val() : position));
+	$('#mediaPlaybackDuration').text(duration > 0 ? formatPlaybackTime(duration) : '--:--');
+	$('#mediaPlaybackLabel').text(data.playing ? '电视播放中' : '电视已暂停');
+
+	var speed = Number(data.speed) || 1;
+	var $speed = $('#mediaPlaybackSpeed');
+	$speed.prop('disabled', !data.speedSupported);
+	if(!mediaPlaybackDragging) $speed.val(String(speed));
+}
+
+function refreshMediaPlaybackStatus(){
+	if(!isMediaTabVisible()) return;
+	$.ajax({url:'/player/status', type:'POST', dataType:'json', timeout:2500, success:renderMediaPlaybackStatus});
+}
+
+function updateMediaPlaybackPolling(){
+	if(mediaPlaybackPollTimer){
+		clearInterval(mediaPlaybackPollTimer);
+		mediaPlaybackPollTimer = null;
+	}
+	if(isMediaTabVisible()){
+		refreshMediaPlaybackStatus();
+		mediaPlaybackPollTimer = setInterval(refreshMediaPlaybackStatus, 1000);
+	}else{
+		$('#mediaPlaybackControls').addClass('hide');
+	}
 }
 
 updateMediaDisplayMode(mediaDisplayMode);
@@ -709,6 +766,28 @@ $('#btnMediaConnect').on('click', function(){
 	}});
 });
 $('#btnMediaSearch').on('click', searchMedia);
+$('#mediaPlaybackSeek').on('input', function(){
+	mediaPlaybackDragging = true;
+	$('#mediaPlaybackCurrent').text(formatPlaybackTime($(this).val()));
+}).on('change', function(){
+	var position = Math.max(0, Number($(this).val()) || 0);
+	mediaPlaybackDragging = false;
+	$.post('/player/seek', {position:Math.round(position)}, function(data){
+		if(!data || data.handled === false) mediaMessage('当前视频暂时不能调整进度。');
+		refreshMediaPlaybackStatus();
+	}, 'json').fail(function(){
+		mediaMessage('进度调整失败，请稍后重试。');
+	});
+});
+$('#mediaPlaybackSpeed').on('change', function(){
+	var speed = Number($(this).val()) || 1;
+	$.post('/player/speed', {speed:speed}, function(data){
+		if(!data || data.handled === false) mediaMessage('当前播放器暂不支持倍速。');
+		refreshMediaPlaybackStatus();
+	}, 'json').fail(function(){
+		mediaMessage('倍速切换失败，请稍后重试。');
+	});
+});
 $('#mediaLibraryNav').on('click', '.media-library-tab', function(){
 	var section = $(this).attr('data-section') || 'browse';
 	if(section === 'browse') loadMediaHome();
@@ -1024,6 +1103,7 @@ $("div.tab").on("click", function(){
 	o.addClass('cur');
 	updateContainerWidth();
 	updateElementsAutoRefresh();
+	updateMediaPlaybackPolling();
 })
 //方向键/操作列表这两个子Tab除了点标签切换，也支持在内容区左右滑动切换——
 //点两个小标签来回切总感觉要"精确瞄准"，直接在当前显示的面板上一划更顺手。

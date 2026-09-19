@@ -56,6 +56,7 @@ import tv.danmaku.ijk.media.player.AndroidMediaPlayer;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkTimedText;
+import tv.danmaku.ijk.media.player.MediaPlayerProxy;
 import tv.danmaku.ijk.media.player.TextureMediaPlayer;
 import tv.danmaku.ijk.media.player.misc.IMediaDataSource;
 import tv.danmaku.ijk.media.player.misc.IMediaFormat;
@@ -899,6 +900,34 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
     @Override
     public boolean isPlaying() {
         return isInPlaybackState() && mMediaPlayer.isPlaying();
+    }
+
+    private IMediaPlayer getBaseMediaPlayer() {
+        IMediaPlayer player = mMediaPlayer;
+        while (player instanceof MediaPlayerProxy) {
+            player = ((MediaPlayerProxy) player).getInternalMediaPlayer();
+        }
+        return player;
+    }
+
+    public boolean supportsPlaybackSpeed() {
+        IMediaPlayer player = getBaseMediaPlayer();
+        return player instanceof IjkMediaPlayer
+                || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && player instanceof AndroidMediaPlayer);
+    }
+
+    public boolean setPlaybackSpeed(float speed) {
+        IMediaPlayer player = getBaseMediaPlayer();
+        if (player instanceof IjkMediaPlayer) {
+            ((IjkMediaPlayer) player).setSpeed(speed);
+            return true;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && player instanceof AndroidMediaPlayer) {
+            android.media.MediaPlayer androidPlayer = ((AndroidMediaPlayer) player).getInternalMediaPlayer();
+            androidPlayer.setPlaybackParams(androidPlayer.getPlaybackParams().setSpeed(speed));
+            return true;
+        }
+        return false;
     }
 
     @Override

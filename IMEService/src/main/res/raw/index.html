@@ -184,6 +184,27 @@
 				</div>
 			</div>
 			<div class="media-status media-browse-status" id="mediaStatus">未加载配置</div>
+			<div class="media-playback-controls hide" id="mediaPlaybackControls">
+				<div class="media-playback-head">
+					<span class="media-playback-label" id="mediaPlaybackLabel">电视播放</span>
+					<label class="media-speed-control" for="mediaPlaybackSpeed"><span>倍速</span>
+						<select id="mediaPlaybackSpeed" aria-label="播放倍速">
+							<option value="0.5">0.5x</option>
+							<option value="1" selected>1x</option>
+							<option value="1.25">1.25x</option>
+							<option value="1.5">1.5x</option>
+							<option value="2">2x</option>
+							<option value="2.5">2.5x</option>
+							<option value="3">3x</option>
+						</select>
+					</label>
+				</div>
+				<div class="media-playback-progress">
+					<span id="mediaPlaybackCurrent">00:00</span>
+					<input type="range" id="mediaPlaybackSeek" min="0" max="0" step="1000" value="0" aria-label="播放进度" />
+					<span id="mediaPlaybackDuration">00:00</span>
+				</div>
+			</div>
 			<div class="media-settings-view hide" id="mediaSettingsView">
 				<div class="media-subview-head">
 					<button type="button" class="media-back-btn" id="btnMediaSettingsBack">返回浏览</button>
