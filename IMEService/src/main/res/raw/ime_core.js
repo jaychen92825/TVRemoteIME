@@ -19,6 +19,11 @@ var mediaView = 'browse';
 var mediaSection = 'browse';
 var mediaBrowseScrollTop = 0;
 var currentMediaDetail = null;
+var renderedMediaItems = [];
+var mediaDisplayMode = 'grid';
+try {
+	mediaDisplayMode = localStorage.getItem('mediaDisplayMode') === 'list' ? 'list' : 'grid';
+} catch(e) {}
 
 function escapeHtml(str){
 	return String(str == null ? "" : str).replace(/[&<>"']/g, function(c){
@@ -104,7 +109,8 @@ function postKeyActionCode(keyCode, keyAction){
 		var onComplete = function(data){
 			console.log(data);
 			if(shouldRepeat && curKeyState == 1 && curKeyCode == keyCode){
-				keyActionTimer = setTimeout(action, 100);
+				var delay = $.trim(data) === 'handled' && (keyCode === "21" || keyCode === "22") ? 350 : 100;
+				keyActionTimer = setTimeout(action, delay);
 			}else{
 				keyActionTimer = null;
 			}
@@ -326,12 +332,27 @@ function showMediaSettingsView(){
 	updateContainerWidth();
 	$('.container').scrollTop(0);
 }
-function mediaPoster(item){
-	if(item.pic){
-		return '<img src="/media/image?url='+escapeHtml(encodeURIComponent(item.pic))+'&sourceKey='+escapeHtml(encodeURIComponent(item.sourceKey||''))+'" class="media-poster" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'" />' +
-			'<div class="media-poster media-poster-empty" style="display:none">▶</div>';
+
+function mediaScore(item){
+	var score = String(item.score || '').trim();
+	if(!score){
+		var remark = String(item.remark || '').trim();
+		var match = remark.match(/(?:^|\s)(10(?:\.0)?|[0-9](?:\.[0-9])?)(?:分|$)/);
+		if(match) score = match[1];
 	}
-	return '<div class="media-poster media-poster-empty">▶</div>';
+	return score;
+}
+function mediaPoster(item, overlay){
+	var poster;
+	if(item.pic){
+		poster = '<img src="/media/image?url='+escapeHtml(encodeURIComponent(item.pic))+'&sourceKey='+escapeHtml(encodeURIComponent(item.sourceKey||''))+'" class="media-poster" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'" />' +
+			'<div class="media-poster media-poster-empty" style="display:none">▶</div>';
+	}else{
+		poster = '<div class="media-poster media-poster-empty">▶</div>';
+	}
+	if(!overlay) return poster;
+	var score = mediaScore(item);
+	return '<div class="media-poster-wrap">'+poster+(score ? '<span class="media-score">'+escapeHtml(score)+'</span>' : '')+'</div>';
 }
 function renderMediaSources(data){
 	mediaSources = data.sources || [];
@@ -448,6 +469,7 @@ function cssAttributeValue(value){
 	return String(value == null ? '' : value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 function renderMediaGrid(items){
+	renderedMediaItems = items || [];
 	var html = [];
 	if(!items.length){
 		html.push('<div class="media-empty">没有可展示内容。可以先搜索片名，或换一个支持的配置源。</div>');
@@ -455,13 +477,32 @@ function renderMediaGrid(items){
 		for(var i=0;i<items.length;i++){
 			var item = items[i];
 			html.push('<div class="media-card" data-source="'+escapeHtml(item.sourceKey)+'" data-id="'+escapeHtml(item.id)+'" data-name="'+escapeHtml(item.name)+'">');
-			html.push(mediaPoster(item));
-			html.push('<div class="media-card-title">'+escapeHtml(item.name)+'</div>');
-			html.push('<div class="media-card-meta">'+escapeHtml(item.sourceName || '')+(item.episode ? ' · '+escapeHtml(item.episode) : '')+(item.remark ? ' · '+escapeHtml(item.remark) : '')+'</div>');
+			html.push(mediaPoster(item, true));
+			html.push('<div class="media-card-copy"><div class="media-card-title" title="'+escapeHtml(item.name)+'">'+escapeHtml(item.name)+'</div>');
+			var meta = [];
+			if(item.episode) meta.push(item.episode);
+			var cardScore = mediaScore(item);
+			if(item.remark && (!cardScore || String(item.remark).indexOf(cardScore) < 0)) meta.push(item.remark);
+			if(!meta.length && item.sourceName) meta.push(item.sourceName);
+			html.push('<div class="media-card-meta">'+escapeHtml(meta.join(' · '))+'</div></div>');
 			html.push('</div>');
 		}
 	}
-	$('#mediaGrid').html(html.join(''));
+	$('#mediaGrid').toggleClass('media-list', mediaDisplayMode === 'list').html(html.join(''));
+}
+function updateMediaDisplayMode(mode){
+	mediaDisplayMode = mode === 'list' ? 'list' : 'grid';
+	try { localStorage.setItem('mediaDisplayMode', mediaDisplayMode); } catch(e) {}
+	var listMode = mediaDisplayMode === 'list';
+	$('#mediaGrid').toggleClass('media-list', listMode);
+	$('#btnMediaViewMode').attr('aria-label', listMode ? '切换为九宫格' : '切换为列表').attr('title', listMode ? '切换为九宫格' : '切换为列表');
+	$('#btnMediaViewMode .media-view-grid-icon').toggleClass('hide', listMode);
+	$('#btnMediaViewMode .media-view-list-icon').toggleClass('hide', !listMode);
+}
+function setMediaSearchOpen(open){
+	$('#mediaSearchControl').toggleClass('hide', !open);
+	$('#btnMediaSearchToggle').toggleClass('active', open).attr('aria-label', open ? '关闭搜索' : '打开搜索');
+	if(open) setTimeout(function(){ $('#mediaSearchInput').focus(); }, 0);
 }
 function selectMediaSection(section){
 	mediaSection = section || 'browse';
@@ -592,7 +633,7 @@ function playMediaEpisode(sourceKey, flag, playId, title, episode){
 	var displayTitle = title || '';
 	if(episode) displayTitle += (displayTitle ? ' · ' : '') + episode;
 	var item = currentMediaDetail || {};
-	$.ajax({url:'/media/play', type:'POST', data:{sourceKey:sourceKey, sourceName:item.sourceName || '', mediaId:item.id || '', mediaName:item.name || title || '', pic:item.pic || '', remark:item.remark || '', flag:flag, playId:playId, episode:episode || '', title:displayTitle}, dataType:'json', timeout:30000, success:function(data){
+	$.ajax({url:'/media/play', type:'POST', data:{sourceKey:sourceKey, sourceName:item.sourceName || '', mediaId:item.id || '', mediaName:item.name || title || '', pic:item.pic || '', score:item.score || '', remark:item.remark || '', flag:flag, playId:playId, episode:episode || '', title:displayTitle}, dataType:'json', timeout:30000, success:function(data){
 		if(data && data.success === false){
 			mediaMessage(data.message || '播放失败');
 		}else{
@@ -603,8 +644,16 @@ function playMediaEpisode(sourceKey, flag, playId, title, episode){
 	}});
 }
 
+updateMediaDisplayMode(mediaDisplayMode);
 $('#btnMediaSettings').on('click', function(){
 	showMediaSettingsView();
+});
+$('#btnMediaSearchToggle').on('click', function(){
+	setMediaSearchOpen(!$('#mediaSearchControl').hasClass('hide'));
+});
+$('#btnMediaViewMode').on('click', function(){
+	updateMediaDisplayMode(mediaDisplayMode === 'grid' ? 'list' : 'grid');
+	renderMediaGrid(renderedMediaItems);
 });
 $('#btnMediaSettingsBack').on('click', function(){
 	showMediaBrowse(true);
@@ -647,18 +696,21 @@ $('#mediaGrid').on('click', '.media-card', function(){
 	var source = sourceByKey(sourceKey);
 	if((source && Number(source.indexs) === 1) || !id || id.indexOf('msearch:') === 0){
 		$('#mediaSearchInput').val(name);
+		setMediaSearchOpen(true);
 		searchMedia();
 		return;
 	}
 	loadMediaDetail(sourceKey, id);
 });
 $('#mediaDetail').on('click', '.media-episode', function(){
+	$('#mediaDetail .media-episode').removeClass('playing');
+	$(this).addClass('playing');
 	playMediaEpisode($(this).attr('data-source'), $(this).attr('data-flag'), $(this).attr('data-playid'), $(this).attr('data-title'), $(this).attr('data-episode'));
 });
 $('#mediaDetail').on('click', '#btnMediaFavorite', function(){
 	if(!currentMediaDetail) return;
 	var item = currentMediaDetail;
-	$.post('/media/favorite', {sourceKey:item.sourceKey || '', sourceName:item.sourceName || '', mediaId:item.id || '', mediaName:item.name || '', pic:item.pic || '', remark:item.remark || ''}, function(data){
+	$.post('/media/favorite', {sourceKey:item.sourceKey || '', sourceName:item.sourceName || '', mediaId:item.id || '', mediaName:item.name || '', pic:item.pic || '', score:item.score || '', remark:item.remark || ''}, function(data){
 		if(!data || data.success === false){
 			mediaMessage(data && data.message ? data.message : '收藏操作失败');
 			return;
@@ -672,8 +724,8 @@ $('#mediaDetail').on('click', '#btnMediaFavorite', function(){
 	}, 'json');
 });
 $('#mediaDetail').on('click', '#btnMediaDetailBack', function(){
-	if(mediaSection === 'browse') showMediaBrowse(true);
-	else loadMediaLibrary(mediaSection);
+	if(mediaSection === 'favorites' && currentMediaDetail && !currentMediaDetail.favorite) loadMediaLibrary(mediaSection);
+	else showMediaBrowse(true);
 });
 $('#mediaDetail').on('click', '.media-route', function(){
 	var route = String($(this).attr('data-route') || '0');

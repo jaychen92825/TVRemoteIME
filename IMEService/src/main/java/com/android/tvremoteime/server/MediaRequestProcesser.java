@@ -214,6 +214,7 @@ public class MediaRequestProcesser implements RequestProcesser {
         item.put("id", safe(params.get("mediaId")));
         item.put("name", safe(params.get("mediaName")));
         item.put("pic", safe(params.get("pic")));
+        item.put("score", safe(params.get("score")));
         item.put("remark", safe(params.get("remark")));
         return item;
     }

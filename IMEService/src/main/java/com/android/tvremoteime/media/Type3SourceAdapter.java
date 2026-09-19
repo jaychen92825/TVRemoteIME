@@ -179,6 +179,7 @@ public class Type3SourceAdapter {
         detail.id = item.id;
         detail.name = item.name;
         detail.pic = item.pic;
+        detail.score = item.score;
         detail.remark = item.remark;
         detail.year = item.year;
         detail.type = item.type;

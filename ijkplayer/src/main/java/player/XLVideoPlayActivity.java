@@ -42,6 +42,10 @@ import com.afap.ijkplayer.R;
 import com.xunlei.downloadlib.parameter.XLConstant;
 import com.xunlei.downloadlib.parameter.XLTaskInfo;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import player.settings.GlobalSettings;
 import player.widget.media.IjkVideoView;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
@@ -283,36 +287,54 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             case KeyEvent.KEYCODE_MEDIA_STOP:
             case KeyEvent.KEYCODE_MEDIA_REWIND:
             case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                if (Looper.myLooper() == Looper.getMainLooper()) {
+                    return activity.handleDirectWebPlayerControl(remoteKeyCode, remoteAction);
+                }
+                final CountDownLatch completed = new CountDownLatch(1);
+                final AtomicBoolean handled = new AtomicBoolean(false);
                 activity.runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        if (activity != runningInstance || activity.isFinishing()) {
-                            return;
+                        try {
+                            if (activity != runningInstance || activity.isFinishing()) {
+                                return;
+                            }
+                            Log.d(activity.TAG, "direct web player control key=" + remoteKeyCode + " action=" + remoteAction);
+                            handled.set(activity.handleDirectWebPlayerControl(remoteKeyCode, remoteAction));
+                        } finally {
+                            completed.countDown();
                         }
-                        Log.d(activity.TAG, "direct web player control key=" + remoteKeyCode + " action=" + remoteAction);
-                        activity.handleDirectWebPlayerControl(remoteKeyCode, remoteAction);
                     }
                 });
-                return true;
+                try {
+                    return completed.await(750, TimeUnit.MILLISECONDS) && handled.get();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                }
             default:
                 return false;
         }
     }
 
-    private void handleDirectWebPlayerControl(int keyCode, int action) {
-        if (mVideoView == null || action != KeyEvent.ACTION_DOWN) {
-            return;
+    private boolean handleDirectWebPlayerControl(int keyCode, int action) {
+        if (mVideoView == null) {
+            return false;
+        }
+        if (action == KeyEvent.ACTION_UP) {
+            return true;
+        }
+        if (action != KeyEvent.ACTION_DOWN) {
+            return false;
         }
 
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_LEFT:
             case KeyEvent.KEYCODE_MEDIA_REWIND:
-                seekByForWeb(-GlobalSettings.FastForwardInterval);
-                break;
+                return seekByForWeb(-GlobalSettings.FastForwardInterval);
             case KeyEvent.KEYCODE_DPAD_RIGHT:
             case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
-                seekByForWeb(GlobalSettings.FastForwardInterval);
-                break;
+                return seekByForWeb(GlobalSettings.FastForwardInterval);
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_SPACE:
@@ -320,14 +342,14 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
                 doPauseResume();
                 show(defaultTimeout);
-                break;
+                return true;
             case KeyEvent.KEYCODE_MEDIA_PLAY:
                 if (!mVideoView.isPlaying()) {
                     start();
                     updatePausePlay();
                     show(defaultTimeout);
                 }
-                break;
+                return true;
             case KeyEvent.KEYCODE_MEDIA_PAUSE:
             case KeyEvent.KEYCODE_MEDIA_STOP:
                 if (mVideoView.isPlaying()) {
@@ -337,15 +359,15 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                     updatePausePlay();
                     show(defaultTimeout);
                 }
-                break;
+                return true;
             default:
-                break;
+                return false;
         }
     }
 
-    private void seekByForWeb(int delta) {
+    private boolean seekByForWeb(int delta) {
         if (isLive || mVideoView == null) {
-            return;
+            return false;
         }
 
         int position = mVideoView.getCurrentPosition();
@@ -365,6 +387,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         handler.removeMessages(MESSAGE_HIDE_CENTER_BOX);
         handler.sendEmptyMessageDelayed(MESSAGE_HIDE_CENTER_BOX, 500);
         show(defaultTimeout);
+        return true;
     }
 
     private void handleRemotePlayerControl(int keyCode, int action) {

@@ -44,6 +44,7 @@ public class MediaVodParser {
                     obj.optString("vod_remarks", obj.optString("remarks")),
                     obj.optString("vod_year"), obj.optString("type_name"),
                     obj.optString("vod_content", obj.optString("content")));
+            item.score = obj.optString("vod_score", obj.optString("score"));
             parseEpisodes(item, obj.optString("vod_play_from"), obj.optString("vod_play_url"));
             result.add(item);
         }

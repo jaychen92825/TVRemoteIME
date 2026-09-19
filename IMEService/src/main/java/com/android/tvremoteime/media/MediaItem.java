@@ -9,6 +9,7 @@ public class MediaItem {
     public String id;
     public String name;
     public String pic;
+    public String score;
     public String remark;
     public String year;
     public String type;
@@ -21,6 +22,7 @@ public class MediaItem {
         obj.put("id", safe(id));
         obj.put("name", safe(name));
         obj.put("pic", safe(pic));
+        obj.put("score", safe(score));
         obj.put("remark", safe(remark));
         obj.put("year", safe(year));
         obj.put("type", safe(type));
