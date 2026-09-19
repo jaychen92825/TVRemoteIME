@@ -198,6 +198,9 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 			Environment.debug(TAG, "onStartCommand.");
 		}
 
+		// 开机时网络可能比应用服务晚几十秒才就绪。广播接收器会重试启动，
+		// 每次重试都让 mDNS 再检查一次；HTTP 服务本身仍只在 onCreate 创建。
+		MDnsHelper.start(this.getApplicationContext());
 		onStart(intent, startId);
 		return START_STICKY;
 	}
