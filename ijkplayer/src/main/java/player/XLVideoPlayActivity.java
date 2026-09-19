@@ -309,27 +309,40 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         if (mVideoView == null) {
             return false;
         }
-        if (action == KeyEvent.ACTION_UP) {
-            return true;
-        }
-        if (action != KeyEvent.ACTION_DOWN) {
+        if (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP) {
             return false;
         }
 
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_LEFT:
             case KeyEvent.KEYCODE_MEDIA_REWIND:
-                return seekByForWeb(-GlobalSettings.FastForwardInterval);
+                if (action == KeyEvent.ACTION_DOWN) {
+                    previewKeySeek(-GlobalSettings.FastForwardInterval);
+                } else {
+                    finishKeySeek();
+                }
+                return true;
             case KeyEvent.KEYCODE_DPAD_RIGHT:
             case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
-                return seekByForWeb(GlobalSettings.FastForwardInterval);
+                if (action == KeyEvent.ACTION_DOWN) {
+                    previewKeySeek(GlobalSettings.FastForwardInterval);
+                } else {
+                    finishKeySeek();
+                }
+                return true;
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_SPACE:
             case KeyEvent.KEYCODE_HEADSETHOOK:
             case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+                if (action == KeyEvent.ACTION_UP) {
+                    return true;
+                }
                 return togglePlaybackForWeb();
             case KeyEvent.KEYCODE_MEDIA_PLAY:
+                if (action == KeyEvent.ACTION_UP) {
+                    return true;
+                }
                 if (!mVideoView.isPlaying()) {
                     start();
                     updatePausePlay();
@@ -338,6 +351,9 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                 return true;
             case KeyEvent.KEYCODE_MEDIA_PAUSE:
             case KeyEvent.KEYCODE_MEDIA_STOP:
+                if (action == KeyEvent.ACTION_UP) {
+                    return true;
+                }
                 if (mVideoView.isPlaying()) {
                     getCurrentPosition();
                     statusChange(STATUS_PAUSE);
@@ -351,12 +367,28 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         }
     }
 
+    private int getReliableSeekPosition() {
+        int playerPosition = mVideoView.getCurrentPosition();
+        if (playerPosition > 0) {
+            currentPosition = playerPosition;
+            return playerPosition;
+        }
+
+        // IjkVideoView returns 0 while it is temporarily outside playback state
+        // (for example while buffering/seeking). Do not turn that transient value
+        // into a seek back to the start when we already have a valid position.
+        if (currentPosition > 0 && status != STATUS_COMPLETED) {
+            return currentPosition;
+        }
+        return Math.max(0, playerPosition);
+    }
+
     private boolean seekByForWeb(int delta) {
         if (mVideoView == null) {
             return false;
         }
 
-        int position = mVideoView.getCurrentPosition();
+        int position = getReliableSeekPosition();
         int duration = mVideoView.getDuration();
         int target = Math.max(0, position + delta);
         if (duration > 0) {
@@ -852,7 +884,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
         if (!changeProgressByKey) {
             changeProgressByKey = true;
-            seekStartPosition = mVideoView.getCurrentPosition();
+            seekStartPosition = getReliableSeekPosition();
             newPosition = seekStartPosition;
         }
 
@@ -1018,6 +1050,9 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
         int position = mVideoView.getCurrentPosition();
         int duration = mVideoView.getDuration();
+        if (!isLive && position > 0) {
+            currentPosition = position;
+        }
         if (seekBar != null) {
             if (duration > 0) {
                 seekBar.setProgress((position * 100 / duration));
@@ -1170,7 +1205,9 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                     break;
                 case MESSAGE_SEEK_NEW_POSITION:
                     if (!isLive && newPosition >= 0) {
-                        seekTo(newPosition);
+                        int targetPosition = newPosition;
+                        seekTo(targetPosition);
+                        currentPosition = targetPosition;
                         newPosition = -1;
                         changeProgressByKey = false;
                         seekStartPosition = -1;
