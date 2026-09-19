@@ -95,6 +95,14 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     private boolean instantSeeking = false;
     private boolean portrait;
     private int currentPosition;
+    private volatile int webPlaybackPosition;
+    private volatile int webPlaybackDuration;
+    private volatile boolean webPlaybackPlaying;
+    private volatile float webPlaybackSpeed = 1.0f;
+    private volatile boolean webPlaybackSpeedSupported;
+    private volatile long webPlaybackPositionTimestamp;
+    private int webSeekTarget = -1;
+    private long webSeekTargetTimestamp;
 
     private WakeLock mWakeLock = null;
 
@@ -305,6 +313,83 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         }
     }
 
+    public static final class WebPlaybackStatus {
+        public final boolean active;
+        public final int position;
+        public final int duration;
+        public final boolean playing;
+        public final float speed;
+        public final boolean speedSupported;
+
+        private WebPlaybackStatus(boolean active, int position, int duration,
+                                  boolean playing, float speed, boolean speedSupported) {
+            this.active = active;
+            this.position = position;
+            this.duration = duration;
+            this.playing = playing;
+            this.speed = speed;
+            this.speedSupported = speedSupported;
+        }
+    }
+
+    public static WebPlaybackStatus getWebPlaybackStatus() {
+        XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing()) {
+            return new WebPlaybackStatus(false, 0, 0, false, 1.0f, false);
+        }
+        int position = activity.webPlaybackPosition;
+        int duration = activity.webPlaybackDuration;
+        if (activity.webPlaybackPlaying && position >= 0) {
+            long elapsed = android.os.SystemClock.elapsedRealtime() - activity.webPlaybackPositionTimestamp;
+            if (elapsed > 0) {
+                position += (int) (elapsed * activity.webPlaybackSpeed);
+            }
+        }
+        if (duration > 0) {
+            position = Math.min(duration, position);
+        }
+        return new WebPlaybackStatus(true, Math.max(0, position), Math.max(0, duration),
+                activity.webPlaybackPlaying, activity.webPlaybackSpeed, activity.webPlaybackSpeedSupported);
+    }
+
+    public static boolean dispatchAbsoluteSeek(final int positionMs) {
+        final XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing()) {
+            return false;
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return activity.seekAbsoluteForWeb(positionMs);
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity == runningInstance && !activity.isFinishing()) {
+                    activity.seekAbsoluteForWeb(positionMs);
+                }
+            }
+        });
+        return true;
+    }
+
+    public static boolean dispatchPlaybackSpeed(final float speed) {
+        final XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing() || speed < 0.5f || speed > 3.0f) {
+            return false;
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return activity.setPlaybackSpeedForWeb(speed);
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity == runningInstance && !activity.isFinishing()) {
+                    activity.setPlaybackSpeedForWeb(speed);
+                }
+            }
+        });
+        return true;
+    }
+
     private boolean handleDirectWebPlayerControl(int keyCode, int action) {
         if (mVideoView == null) {
             return false;
@@ -317,17 +402,13 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             case KeyEvent.KEYCODE_DPAD_LEFT:
             case KeyEvent.KEYCODE_MEDIA_REWIND:
                 if (action == KeyEvent.ACTION_DOWN) {
-                    previewKeySeek(-GlobalSettings.FastForwardInterval);
-                } else {
-                    finishKeySeek();
+                    seekByForWeb(-GlobalSettings.FastForwardInterval);
                 }
                 return true;
             case KeyEvent.KEYCODE_DPAD_RIGHT:
             case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
                 if (action == KeyEvent.ACTION_DOWN) {
-                    previewKeySeek(GlobalSettings.FastForwardInterval);
-                } else {
-                    finishKeySeek();
+                    seekByForWeb(GlobalSettings.FastForwardInterval);
                 }
                 return true;
             case KeyEvent.KEYCODE_ENTER:
@@ -368,6 +449,10 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     }
 
     private int getReliableSeekPosition() {
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (webSeekTarget >= 0 && now - webSeekTargetTimestamp < 1200) {
+            return webSeekTarget;
+        }
         int playerPosition = mVideoView.getCurrentPosition();
         if (playerPosition > 0) {
             currentPosition = playerPosition;
@@ -390,12 +475,17 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
         int position = getReliableSeekPosition();
         int duration = mVideoView.getDuration();
+        if (duration <= 0) {
+            duration = webPlaybackDuration;
+        }
         int target = Math.max(0, position + delta);
         if (duration > 0) {
             target = Math.min(duration, target);
             showSeekPreview(position, target, duration);
         }
 
+        webSeekTarget = target;
+        webSeekTargetTimestamp = android.os.SystemClock.elapsedRealtime();
         seekTo(target);
         currentPosition = target;
         changeProgressByKey = false;
@@ -406,6 +496,65 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         handler.sendEmptyMessageDelayed(MESSAGE_HIDE_CENTER_BOX, 500);
         show(defaultTimeout);
         return true;
+    }
+
+    private boolean seekAbsoluteForWeb(int positionMs) {
+        if (mVideoView == null) {
+            return false;
+        }
+        int duration = mVideoView.getDuration();
+        if (duration <= 0) {
+            duration = webPlaybackDuration;
+        }
+        // This legacy player labels every http/https URL as "live". TVBox VOD
+        // streams are also HTTP, so seekability must be based on a real duration
+        // instead of the URL classification.
+        if (duration <= 0) {
+            return false;
+        }
+        int target = Math.max(0, positionMs);
+        target = Math.min(duration, target);
+        webSeekTarget = target;
+        webSeekTargetTimestamp = android.os.SystemClock.elapsedRealtime();
+        seekTo(target);
+        currentPosition = target;
+        show(defaultTimeout);
+        return true;
+    }
+
+    private boolean setPlaybackSpeedForWeb(float speed) {
+        if (mVideoView == null) {
+            return false;
+        }
+        boolean supported;
+        try {
+            supported = mVideoView.setPlaybackSpeed(speed);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "unable to set web playback speed", e);
+            supported = false;
+        }
+        webPlaybackSpeedSupported = supported;
+        if (supported) {
+            webPlaybackSpeed = speed;
+            refreshWebPlaybackSnapshot();
+        }
+        return supported;
+    }
+
+    private void refreshWebPlaybackSnapshot() {
+        if (mVideoView == null) {
+            return;
+        }
+        int position = mVideoView.getCurrentPosition();
+        int videoDuration = mVideoView.getDuration();
+        if (position >= 0) {
+            webPlaybackPosition = position;
+        }
+        if (videoDuration > 0) {
+            webPlaybackDuration = videoDuration;
+        }
+        webPlaybackPlaying = mVideoView.isPlaying();
+        webPlaybackPositionTimestamp = android.os.SystemClock.elapsedRealtime();
     }
 
     private boolean togglePlaybackForWeb() {
@@ -687,6 +836,12 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     @Override
     public void onPrepared(IMediaPlayer iMediaPlayer) {
         duration = mVideoView.getDuration();
+        webPlaybackDuration = Math.max(0, duration);
+        webPlaybackSpeedSupported = mVideoView.supportsPlaybackSpeed();
+        webPlaybackPositionTimestamp = android.os.SystemClock.elapsedRealtime();
+        if (webPlaybackSpeedSupported && webPlaybackSpeed != 1.0f) {
+            mVideoView.setPlaybackSpeed(webPlaybackSpeed);
+        }
 
         final GestureDetector gestureDetector = new GestureDetector(this, new PlayerGestureListener());
         mRoot = findViewById(R.id.touch_area);
@@ -725,9 +880,13 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
     protected void seekTo(int position){
         mVideoView.seekTo(position);
+        currentPosition = Math.max(0, position);
+        webPlaybackPosition = currentPosition;
+        webPlaybackPositionTimestamp = android.os.SystemClock.elapsedRealtime();
     }
     protected void start(){
         mVideoView.start();
+        refreshWebPlaybackSnapshot();
     }
     protected void resume(){
         mVideoView.resume();
@@ -742,6 +901,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     }
     protected void pause(){
         mVideoView.pause();
+        refreshWebPlaybackSnapshot();
     }
     protected void stop(){
         mVideoView.stopPlayback();
@@ -1053,6 +1213,14 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         if (!isLive && position > 0) {
             currentPosition = position;
         }
+        if (position >= 0) {
+            webPlaybackPosition = position;
+        }
+        if (duration > 0) {
+            webPlaybackDuration = duration;
+        }
+        webPlaybackPlaying = mVideoView.isPlaying();
+        webPlaybackPositionTimestamp = android.os.SystemClock.elapsedRealtime();
         if (seekBar != null) {
             if (duration > 0) {
                 seekBar.setProgress((position * 100 / duration));
