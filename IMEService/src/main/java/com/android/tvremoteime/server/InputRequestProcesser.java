@@ -1,12 +1,17 @@
 package com.android.tvremoteime.server;
 
 import android.content.Context;
+import android.view.KeyEvent;
 
 import com.android.tvremoteime.IMEService;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.util.Map;
 
 import fi.iki.elonen.NanoHTTPD;
+import player.XLVideoPlayActivity;
 
 /**
  * Created by kingt on 2018/1/7.
@@ -30,6 +35,10 @@ public class InputRequestProcesser implements RequestProcesser {
                 case "/key":
                 case "/keydown":
                 case "/keyup":
+                case "/player/control":
+                case "/player/status":
+                case "/player/seek":
+                case "/player/speed":
                 case "/mouseMove":
                 case "/mouseClick":
                     return true;
@@ -54,20 +63,49 @@ public class InputRequestProcesser implements RequestProcesser {
                 }
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
             case "/key":
-                if (params.get("code") != null && mDataReceiver != null) {
-                    mDataReceiver.onKeyEventReceived(params.get("code"), IMEService.KEY_ACTION_PRESSED);
+                if (params.get("code") != null) {
+                    if (dispatchKeyToPlayer(params.get("code"), IMEService.KEY_ACTION_PRESSED)) {
+                        return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
+                    }
+                    if (mDataReceiver != null) {
+                        mDataReceiver.onKeyEventReceived(params.get("code"), IMEService.KEY_ACTION_PRESSED);
+                    }
                 }
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
             case "/keyup":
-                if (params.get("code") != null && mDataReceiver != null) {
-                    mDataReceiver.onKeyEventReceived(params.get("code"), IMEService.KEY_ACTION_UP);
+                if (params.get("code") != null) {
+                    if (dispatchKeyToPlayer(params.get("code"), IMEService.KEY_ACTION_UP)) {
+                        return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
+                    }
+                    if (mDataReceiver != null) {
+                        mDataReceiver.onKeyEventReceived(params.get("code"), IMEService.KEY_ACTION_UP);
+                    }
                 }
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
             case "/keydown":
-                if (params.get("code") != null && mDataReceiver != null) {
-                    mDataReceiver.onKeyEventReceived(params.get("code"), IMEService.KEY_ACTION_DOWN);
+                if (params.get("code") != null) {
+                    if (dispatchKeyToPlayer(params.get("code"), IMEService.KEY_ACTION_DOWN)) {
+                        return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
+                    }
+                    if (mDataReceiver != null) {
+                        mDataReceiver.onKeyEventReceived(params.get("code"), IMEService.KEY_ACTION_DOWN);
+                    }
                 }
                 return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK,"ok");
+            case "/player/control":
+                if (params.get("code") == null || params.get("action") == null) {
+                    return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.BAD_REQUEST, "invalid");
+                }
+                return RemoteServer.createPlainTextResponse(
+                        NanoHTTPD.Response.Status.OK,
+                        dispatchDirectPlayerControl(params.get("code"), params.get("action")) ? "handled" : "inactive"
+                );
+            case "/player/status":
+                return playerStatusResponse();
+            case "/player/seek":
+                return playerSeekResponse(params.get("position"));
+            case "/player/speed":
+                return playerSpeedResponse(params.get("speed"));
             case "/mouseMove":
                 if (mDataReceiver != null) {
                     //单次触控板位移不可能很大，限制一下范围防止畸形/恶意参数导致虚拟光标坐标跳变
@@ -86,11 +124,106 @@ public class InputRequestProcesser implements RequestProcesser {
         }
     }
 
+    private static boolean dispatchKeyToPlayer(String keyCode, int keyAction){
+        int code = parseKeyCode(keyCode);
+        if(code == KeyEvent.KEYCODE_UNKNOWN) return false;
+
+        switch (keyAction) {
+            case IMEService.KEY_ACTION_PRESSED:
+                if(!XLVideoPlayActivity.dispatchRemoteKeyEvent(code, KeyEvent.ACTION_DOWN)) return false;
+                XLVideoPlayActivity.dispatchRemoteKeyEvent(code, KeyEvent.ACTION_UP);
+                return true;
+            case IMEService.KEY_ACTION_DOWN:
+                return XLVideoPlayActivity.dispatchRemoteKeyEvent(code, KeyEvent.ACTION_DOWN);
+            case IMEService.KEY_ACTION_UP:
+                return XLVideoPlayActivity.dispatchRemoteKeyEvent(code, KeyEvent.ACTION_UP);
+            default:
+                return false;
+        }
+    }
+
+    private static boolean dispatchDirectPlayerControl(String keyCode, String action){
+        int code = parseKeyCode(keyCode);
+        if(code == KeyEvent.KEYCODE_UNKNOWN) return false;
+
+        if("press".equalsIgnoreCase(action)) {
+            if(!XLVideoPlayActivity.dispatchDirectPlayerControl(code, KeyEvent.ACTION_DOWN)) return false;
+            XLVideoPlayActivity.dispatchDirectPlayerControl(code, KeyEvent.ACTION_UP);
+            return true;
+        }
+        if("down".equalsIgnoreCase(action)) {
+            return XLVideoPlayActivity.dispatchDirectPlayerControl(code, KeyEvent.ACTION_DOWN);
+        }
+        if("up".equalsIgnoreCase(action)) {
+            return XLVideoPlayActivity.dispatchDirectPlayerControl(code, KeyEvent.ACTION_UP);
+        }
+        return false;
+    }
+
+    private static NanoHTTPD.Response playerStatusResponse(){
+        XLVideoPlayActivity.WebPlaybackStatus status = XLVideoPlayActivity.getWebPlaybackStatus();
+        JSONObject result = new JSONObject();
+        try {
+            result.put("active", status.active);
+            result.put("position", status.position);
+            result.put("duration", status.duration);
+            result.put("playing", status.playing);
+            result.put("speed", status.speed);
+            result.put("speedSupported", status.speedSupported);
+        } catch (JSONException ignored) {
+        }
+        return RemoteServer.createJSONResponse(NanoHTTPD.Response.Status.OK, result.toString());
+    }
+
+    private static NanoHTTPD.Response playerSeekResponse(String value){
+        int position = parseIntSafely(value);
+        if (value == null || position < 0) {
+            return playerActionResponse(false, "invalid position");
+        }
+        return playerActionResponse(XLVideoPlayActivity.dispatchAbsoluteSeek(position), null);
+    }
+
+    private static NanoHTTPD.Response playerSpeedResponse(String value){
+        float speed = parseFloatSafely(value);
+        if (Float.isNaN(speed) || speed < 0.5f || speed > 3.0f) {
+            return playerActionResponse(false, "invalid speed");
+        }
+        return playerActionResponse(XLVideoPlayActivity.dispatchPlaybackSpeed(speed), null);
+    }
+
+    private static NanoHTTPD.Response playerActionResponse(boolean handled, String message){
+        JSONObject result = new JSONObject();
+        try {
+            result.put("handled", handled);
+            if (message != null) result.put("message", message);
+        } catch (JSONException ignored) {
+        }
+        return RemoteServer.createJSONResponse(NanoHTTPD.Response.Status.OK, result.toString());
+    }
+
+    private static int parseKeyCode(String keyCode){
+        if(keyCode == null) return KeyEvent.KEYCODE_UNKNOWN;
+        String value = keyCode.trim();
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            return KeyEvent.keyCodeFromString(value);
+        }
+    }
+
     private static int parseIntSafely(String value){
         try {
             return value == null ? 0 : Integer.parseInt(value);
         } catch (NumberFormatException e) {
             return 0;
+        }
+    }
+
+    private static float parseFloatSafely(String value){
+        try {
+            return value == null ? Float.NaN : Float.parseFloat(value);
+        } catch (NumberFormatException e) {
+            return Float.NaN;
         }
     }
 

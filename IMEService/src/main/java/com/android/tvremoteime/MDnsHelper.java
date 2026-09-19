@@ -55,6 +55,7 @@ public class MDnsHelper {
     private static volatile String resolvedHostName = null;
 
     private static JmDNS jmdns = null;
+    private static boolean starting = false;
     private static WifiManager.MulticastLock multicastLock = null;
 
     //resolvedHostName是在start()自己开的后台线程里才最终确定的(等
@@ -90,27 +91,31 @@ public class MDnsHelper {
     }
 
     public static synchronized void start(final Context context){
-        if(jmdns != null) return;
+        if(jmdns != null || starting) return;
+        starting = true;
         final Context appContext = context.getApplicationContext();
         new Thread(new Runnable() {
             @Override
             public void run() {
+                JmDNS instance = null;
+                WifiManager.MulticastLock acquiredLock = null;
                 try {
+                    String ip = RemoteServer.getLocalIPAddress(appContext);
+                    if(ip == null || "0.0.0.0".equals(ip)){
+                        Log.i(TAG, "未获取到有效局域网IP，跳过mDNS注册。");
+                        return;
+                    }
                     WifiManager wifiManager = (WifiManager) appContext.getSystemService(Context.WIFI_SERVICE);
                     if(wifiManager != null){
                         //Android默认会过滤Wi-Fi上的组播包，不拿这个锁mDNS请求收不到
                         WifiManager.MulticastLock lock = wifiManager.createMulticastLock("tvremoteime-mdns");
                         lock.setReferenceCounted(true);
                         lock.acquire();
+                        acquiredLock = lock;
                         multicastLock = lock;
                     }
-                    String ip = RemoteServer.getLocalIPAddress(appContext);
-                    if(ip == null || "0.0.0.0".equals(ip)){
-                        Log.i(TAG, "未获取到有效局域网IP，跳过mDNS注册。");
-                        return;
-                    }
                     String hostLabel = buildHostLabel(appContext);
-                    JmDNS instance = JmDNS.create(InetAddress.getByName(ip), hostLabel);
+                    instance = JmDNS.create(InetAddress.getByName(ip), hostLabel);
                     //waitForAnnounced()只在具体实现类JmDNSImpl上，公开的抽象类
                     //JmDNS并没有声明这个方法——create()工厂方法目前固定返回
                     //JmDNSImpl实例，做一次instanceof保底，万一以后库版本换了
@@ -128,6 +133,20 @@ public class MDnsHelper {
                     Log.i(TAG, "mDNS已启动：" + getAddress());
                 } catch (Exception e) {
                     Log.e(TAG, "启动mDNS服务失败", e);
+                } finally {
+                    synchronized (MDnsHelper.class) {
+                        starting = false;
+                        if (jmdns == null) {
+                            if (instance != null) {
+                                try {
+                                    instance.close();
+                                } catch (IOException ignored) {
+                                }
+                            }
+                            if (acquiredLock != null && acquiredLock.isHeld()) acquiredLock.release();
+                            if (multicastLock == acquiredLock) multicastLock = null;
+                        }
+                    }
                 }
             }
         }).start();
@@ -178,6 +197,7 @@ public class MDnsHelper {
         final JmDNS instance = jmdns;
         final WifiManager.MulticastLock lock = multicastLock;
         jmdns = null;
+        starting = false;
         multicastLock = null;
         resolvedHostName = null;
         if(instance == null && lock == null) return;

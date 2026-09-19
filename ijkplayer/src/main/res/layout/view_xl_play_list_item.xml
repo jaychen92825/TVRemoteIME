@@ -1,47 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="horizontal"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:paddingTop="10dp"
-    android:paddingLeft="15dp"
-    android:paddingRight="15dp"
-    android:paddingBottom="10dp"
-    android:focusable="true"
-    android:clickable="true"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="56dp"
     android:background="@drawable/play_list_item_bg"
-    >
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingLeft="14dp"
+    android:paddingRight="14dp">
+
     <LinearLayout
         android:id="@+id/iv_playing_state_img"
-        android:layout_width="30dp"
-        android:layout_height="30dp"
-        android:layout_alignParentLeft="true">
+        android:layout_width="24dp"
+        android:layout_height="24dp">
+
         <ImageView
             android:id="@+id/iv_playing_state"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
             android:src="@drawable/ic_playing_state"/>
     </LinearLayout>
+
     <TextView
         android:id="@+id/tv_playing_name"
         android:layout_width="0dp"
-        android:layout_height="30dp"
-        android:paddingLeft="10dp"
-        android:layout_toRightOf="@+id/iv_playing_state_img"
-        android:layout_toLeftOf="@+id/tv_playing_size"
+        android:layout_height="wrap_content"
         android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:paddingLeft="12dp"
         android:text="this is a name..."
-        android:textSize="20sp"
-        android:textColor="#000000"
-        />
+        android:textColor="@android:color/white"
+        android:textSize="16sp" />
+
     <TextView
         android:id="@+id/tv_playing_size"
         android:layout_width="wrap_content"
-        android:layout_height="30dp"
-        android:paddingLeft="10dp"
-        android:layout_alignParentRight="true"
+        android:layout_height="wrap_content"
+        android:paddingLeft="12dp"
         android:text="20M"
-        android:textSize="20sp"
-        android:textColor="#000000"
-        />
-</RelativeLayout>
+        android:textColor="@color/Grey_400"
+        android:textSize="13sp" />
+</LinearLayout>

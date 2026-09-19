@@ -13,6 +13,21 @@ var curPath = "";
 var selectedPaths = [];
 var selectedPathId = 0;
 var fileOperItems = $('.file-oper-items');
+var mediaSources = [];
+var currentMediaSourceKey = '';
+var mediaView = 'browse';
+var mediaSection = 'browse';
+var mediaBrowseScrollTop = 0;
+var currentMediaDetail = null;
+var renderedMediaItems = [];
+var mediaFolderStack = [];
+var currentMediaCategoryId = '';
+var mediaDisplayMode = 'grid';
+var mediaPlaybackPollTimer = null;
+var mediaPlaybackDragging = false;
+try {
+	mediaDisplayMode = localStorage.getItem('mediaDisplayMode') === 'list' ? 'list' : 'grid';
+} catch(e) {}
 
 function escapeHtml(str){
 	return String(str == null ? "" : str).replace(/[&<>"']/g, function(c){
@@ -76,23 +91,48 @@ function parseTVData(text){
 	return tv;
 }
 function postKeyCode(keyCode){
-	$.post("/key",{code:keyCode},function(data){
-		console.log(data);
-	});
+	var fallback = function(){
+		$.post("/key",{code:keyCode},function(data){
+			console.log(data);
+		});
+	};
+	if(keyCode === "21" || keyCode === "22" || keyCode === "23"){
+		$.post("/player/control", {code:keyCode, action:"press"}, function(data){
+			if($.trim(data) !== "handled") fallback();
+		}).fail(fallback);
+	}else{
+		fallback();
+	}
 }
 function postKeyActionCode(keyCode, keyAction){
 	curKeyCode = keyCode;
 	curKeyState = keyAction;
+	var shouldRepeat = keyCode === "19" || keyCode === "20" || keyCode === "21" || keyCode === "22" || keyCode === "67";
 	var action = function(){
 		var path = keyAction == 1 ? "/keydown" : "/keyup";
-		$.post(path,{code:keyCode},function(data){
+		var onComplete = function(data){
 			console.log(data);
-			if(curKeyState == 1 && curKeyCode == keyCode){
-				keyActionTimer = setTimeout(action, 100);
+			if(shouldRepeat && curKeyState == 1 && curKeyCode == keyCode){
+				var delay = $.trim(data) === 'handled' && (keyCode === "21" || keyCode === "22") ? 350 : 100;
+				keyActionTimer = setTimeout(action, delay);
 			}else{
 				keyActionTimer = null;
 			}
-		});
+		};
+		var fallback = function(){
+			$.post(path,{code:keyCode},onComplete);
+		};
+		if(keyCode === "21" || keyCode === "22" || keyCode === "23"){
+			$.post("/player/control", {code:keyCode, action:keyAction == 1 ? "down" : "up"}, function(data){
+				if($.trim(data) === "handled"){
+					onComplete(data);
+				}else{
+					fallback();
+				}
+			}).fail(fallback);
+		}else{
+			fallback();
+		}
 	}
 	if(keyAction == 2){
 		if(keyActionTimer){
@@ -261,6 +301,583 @@ function loadTVList(){
 		tvItems.html(html.join("\r\n"));
 	}, "text");
 }
+function mediaMessage(text){
+	$('#mediaStatus,#mediaConfigStatus').text(text);
+}
+function rememberMediaBrowsePosition(){
+	if(mediaView === 'browse') mediaBrowseScrollTop = $('.container').scrollTop() || 0;
+}
+function showMediaBrowse(restorePosition){
+	mediaView = 'browse';
+	$('.media-panel').removeClass('media-detail-active media-settings-active');
+	$('#mediaToolbar,#mediaLibraryNav,#mediaStatus,#mediaCategories,#mediaGrid').removeClass('hide');
+	$('#mediaCategories').toggleClass('hide', mediaSection !== 'browse');
+	$('#mediaDetail,#mediaSettingsView').addClass('hide');
+	updateContainerWidth();
+	setTimeout(function(){
+		$('.container').scrollTop(restorePosition ? mediaBrowseScrollTop : 0);
+	}, 0);
+}
+function showMediaDetailView(){
+	rememberMediaBrowsePosition();
+	mediaView = 'detail';
+	$('.media-panel').removeClass('media-settings-active').addClass('media-detail-active');
+	$('#mediaToolbar,#mediaLibraryNav,#mediaCategories,#mediaGrid,#mediaSettingsView').addClass('hide');
+	$('#mediaStatus,#mediaDetail').removeClass('hide');
+	updateContainerWidth();
+	$('.container').scrollTop(0);
+}
+function showMediaSettingsView(){
+	rememberMediaBrowsePosition();
+	mediaView = 'settings';
+	$('.media-panel').removeClass('media-detail-active').addClass('media-settings-active');
+	$('#mediaToolbar,#mediaLibraryNav,#mediaStatus,#mediaCategories,#mediaGrid,#mediaDetail').addClass('hide');
+	$('#mediaSettingsView').removeClass('hide');
+	updateContainerWidth();
+	$('.container').scrollTop(0);
+}
+
+function mediaScore(item){
+	var score = String(item.score || '').trim();
+	if(!score){
+		var remark = String(item.remark || '').trim();
+		var match = remark.match(/(?:^|\s)(10(?:\.0)?|[0-9](?:\.[0-9])?)(?:分|$)/);
+		if(match) score = match[1];
+	}
+	return score;
+}
+function mediaPoster(item, overlay){
+	var poster;
+	if(item.pic){
+		poster = '<img src="/media/image?url='+escapeHtml(encodeURIComponent(item.pic))+'&sourceKey='+escapeHtml(encodeURIComponent(item.sourceKey||''))+'" class="media-poster" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'" />' +
+			'<div class="media-poster media-poster-empty" style="display:none">▶</div>';
+	}else{
+		poster = '<div class="media-poster media-poster-empty">▶</div>';
+	}
+	if(!overlay) return poster;
+	var score = mediaScore(item);
+	return '<div class="media-poster-wrap">'+poster+(score ? '<span class="media-score">'+escapeHtml(score)+'</span>' : '')+'</div>';
+}
+function renderMediaSources(data){
+	mediaSources = data.sources || [];
+	$('#mediaConfigUrl').val(data.url || '');
+	var previous = currentMediaSourceKey;
+	var html = [];
+	for(var i=0;i<mediaSources.length;i++){
+		var source = mediaSources[i];
+		if(!source.supported) continue;
+		html.push('<option value="'+escapeHtml(source.key)+'">'+escapeHtml(source.name || source.key)+'</option>');
+	}
+	$('#mediaSourceSelect').html(html.join(''));
+	currentMediaSourceKey = sourceByKey(previous) ? previous : (data.defaultSourceKey || firstSupportedSourceKey());
+	$('#mediaSourceSelect').val(currentMediaSourceKey);
+	if(!data.url){
+		mediaMessage('输入配置 URL 后连接。支持 type-0 API 和 type-3 csp jar 源。');
+	}else{
+		mediaMessage('已加载 '+(data.totalSources || 0)+' 个源，支持 '+(data.supportedSources || 0)+' 个，暂未支持 '+(data.unsupportedSources || 0)+' 个。');
+	}
+}
+function sourceByKey(key){
+	for(var i=0;i<mediaSources.length;i++){
+		if(mediaSources[i].key === key && mediaSources[i].supported) return mediaSources[i];
+	}
+	return null;
+}
+function firstSupportedSourceKey(){
+	for(var i=0;i<mediaSources.length;i++){
+		if(mediaSources[i].supported) return mediaSources[i].key;
+	}
+	return '';
+}
+function loadMediaConfig(){
+	$.get('/media/config', null, function(data){
+		renderMediaSources(data);
+		if(data.supportedSources > 0) loadMediaHome();
+		else showMediaReady();
+	}, 'json');
+}
+function hasHomeSource(){
+	return !!sourceByKey(currentMediaSourceKey || firstSupportedSourceKey());
+}
+function showMediaReady(){
+	selectMediaSection('browse');
+	showMediaBrowse(false);
+	$('#mediaDetail').empty();
+	if(hasHomeSource()){
+		loadMediaHome();
+	}else if(mediaSources.length){
+		$('#mediaGrid').html('<div class="media-empty">这个配置暂时没有可用点播源。</div>');
+	}else{
+		$('#mediaGrid').html('<div class="media-empty">输入配置 URL 后连接。</div>');
+	}
+}
+function loadMediaHome(){
+	mediaFolderStack = [];
+	currentMediaCategoryId = '';
+	selectMediaSection('browse');
+	showMediaBrowse(false);
+	$('#mediaDetail').empty();
+	$('#mediaCategories').empty();
+	if(!hasHomeSource()){
+		$('#mediaGrid').html('<div class="media-empty">这个配置暂时没有可用点播源。</div>');
+		return;
+	}
+	currentMediaSourceKey = $('#mediaSourceSelect').val() || currentMediaSourceKey || firstSupportedSourceKey();
+	$('#mediaGrid').html('<div class="media-empty">正在加载首页…</div>');
+	$.ajax({url:'/media/home', data:{sourceKey:currentMediaSourceKey}, dataType:'json', timeout:65000, success:function(data){
+		if(data && data.success === false){
+			mediaMessage('源加载失败：'+(data.message || '未知错误'));
+			$('#mediaGrid').html('<div class="media-empty">这个源加载失败，请切换其他源重试。</div>');
+			return;
+		}
+		currentMediaSourceKey = data.sourceKey || currentMediaSourceKey;
+		$('#mediaSourceSelect').val(currentMediaSourceKey);
+		renderMediaCategories(data.categories || [], '');
+		mediaMessage((data.sourceName || '当前源')+' · '+(data.categories || []).length+' 个分类 · '+(data.items || []).length+' 部内容');
+		renderMediaGrid(data.items || []);
+	}, error:function(){
+		mediaMessage('源加载超时，请切换其他源重试。');
+		$('#mediaGrid').html('<div class="media-empty">这个源暂时没有响应。</div>');
+	}});
+}
+function renderMediaCategories(categories, activeId){
+	var html = ['<div class="media-category'+(!activeId ? ' active' : '')+'" data-id="">首页</div>'];
+	for(var i=0;i<categories.length;i++){
+		var category = categories[i];
+		html.push('<div class="media-category'+(category.id === activeId ? ' active' : '')+'" data-id="'+escapeHtml(category.id)+'">'+escapeHtml(category.name)+'</div>');
+	}
+	$('#mediaCategories').html(html.join(''));
+}
+function loadMediaCategory(id){
+	if(!id){
+		loadMediaHome();
+		return;
+	}
+	mediaFolderStack = [];
+	currentMediaCategoryId = id;
+	showMediaBrowse(false);
+	$('#mediaDetail').empty();
+	$('#mediaCategories .media-category').removeClass('active');
+	$('#mediaCategories .media-category[data-id="'+cssAttributeValue(id)+'"]').addClass('active');
+	$('#mediaGrid').html('<div class="media-empty">正在加载分类…</div>');
+	$.ajax({url:'/media/category', data:{sourceKey:currentMediaSourceKey,id:id,page:'1'}, dataType:'json', timeout:65000, success:function(data){
+		if(data && data.success === false){
+			mediaMessage('分类加载失败：'+(data.message || '未知错误'));
+			$('#mediaGrid').html('<div class="media-empty">这个分类暂时无法加载。</div>');
+			return;
+		}
+		mediaMessage((data.sourceName || '当前源')+' · '+(data.items || []).length+' 部内容');
+		renderMediaGrid(data.items || []);
+	}, error:function(){
+		mediaMessage('分类加载超时，请稍后重试。');
+		$('#mediaGrid').html('<div class="media-empty">这个分类暂时没有响应。</div>');
+	}});
+}
+function loadMediaFolder(sourceKey, id, name, push){
+	if(!id) return;
+	selectMediaSection('browse');
+	showMediaBrowse(false);
+	currentMediaSourceKey = sourceKey || currentMediaSourceKey;
+	$('#mediaSourceSelect').val(currentMediaSourceKey);
+	if(push !== false) mediaFolderStack.push({sourceKey:currentMediaSourceKey, id:id, name:name || '文件夹'});
+	$('#mediaCategories').html('<div class="media-category media-folder-back">‹ 返回</div><div class="media-category active">'+escapeHtml(name || '文件夹')+'</div>');
+	$('#mediaGrid').html('<div class="media-empty">正在打开…</div>');
+	$.ajax({url:'/media/category', data:{sourceKey:currentMediaSourceKey,id:id,page:'1'}, dataType:'json', timeout:65000, success:function(data){
+		if(data && data.success === false){
+			mediaMessage('目录加载失败：'+(data.message || '未知错误'));
+			$('#mediaGrid').html('<div class="media-empty">这个目录暂时无法加载。</div>');
+			return;
+		}
+		mediaMessage((data.sourceName || '当前源')+' · '+escapeHtml(name || '目录')+' · '+(data.items || []).length+' 项');
+		renderMediaGrid(data.items || []);
+	}, error:function(){
+		mediaMessage('目录加载超时，请稍后重试。');
+		$('#mediaGrid').html('<div class="media-empty">这个目录暂时没有响应。</div>');
+	}});
+}
+function closeMediaFolder(){
+	if(mediaFolderStack.length) mediaFolderStack.pop();
+	if(!mediaFolderStack.length){
+		if(currentMediaCategoryId) loadMediaCategory(currentMediaCategoryId);
+		else loadMediaHome();
+		return;
+	}
+	var parent = mediaFolderStack[mediaFolderStack.length - 1];
+	loadMediaFolder(parent.sourceKey, parent.id, parent.name, false);
+}
+function cssAttributeValue(value){
+	return String(value == null ? '' : value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+function renderMediaGrid(items){
+	renderedMediaItems = items || [];
+	var html = [];
+	if(!items.length){
+		html.push('<div class="media-empty">没有可展示内容。可以先搜索片名，或换一个支持的配置源。</div>');
+	}else{
+		for(var i=0;i<items.length;i++){
+			var item = items[i];
+			html.push('<div class="media-card" data-index="'+i+'" data-source="'+escapeHtml(item.sourceKey)+'" data-id="'+escapeHtml(item.id)+'" data-name="'+escapeHtml(item.name)+'" data-folder="'+(item.folder ? '1' : '0')+'">');
+			html.push(mediaPoster(item, true));
+			if(mediaSection === 'favorites') html.push('<button type="button" class="media-card-unfavorite" aria-label="取消收藏" title="取消收藏">★</button>');
+			html.push('<div class="media-card-copy"><div class="media-card-title" title="'+escapeHtml(item.name)+'">'+escapeHtml(item.name)+'</div>');
+			var meta = [];
+			if(item.episode) meta.push(item.episode);
+			var cardScore = mediaScore(item);
+			if(item.remark && (!cardScore || String(item.remark).indexOf(cardScore) < 0)) meta.push(item.remark);
+			if(!meta.length && item.sourceName) meta.push(item.sourceName);
+			html.push('<div class="media-card-meta">'+escapeHtml(meta.join(' · '))+'</div></div>');
+			html.push('</div>');
+		}
+	}
+	$('#mediaGrid').toggleClass('media-list', mediaDisplayMode === 'list').html(html.join(''));
+}
+function updateMediaDisplayMode(mode){
+	mediaDisplayMode = mode === 'list' ? 'list' : 'grid';
+	try { localStorage.setItem('mediaDisplayMode', mediaDisplayMode); } catch(e) {}
+	var listMode = mediaDisplayMode === 'list';
+	$('#mediaGrid').toggleClass('media-list', listMode);
+	$('#btnMediaViewMode').attr('aria-label', listMode ? '切换为九宫格' : '切换为列表').attr('title', listMode ? '切换为九宫格' : '切换为列表');
+	$('#btnMediaViewMode .media-view-grid-icon').toggleClass('hide', listMode);
+	$('#btnMediaViewMode .media-view-list-icon').toggleClass('hide', !listMode);
+}
+function selectMediaSection(section){
+	mediaSection = section || 'browse';
+	$('#mediaLibraryNav .media-library-tab').removeClass('active');
+	$('#mediaLibraryNav .media-library-tab[data-section="'+cssAttributeValue(mediaSection)+'"]').addClass('active');
+}
+function loadMediaLibrary(section){
+	mediaFolderStack = [];
+	currentMediaCategoryId = '';
+	selectMediaSection(section);
+	showMediaBrowse(false);
+	$('#mediaDetail').empty();
+	$('#mediaCategories').addClass('hide');
+	var isHistory = section === 'history';
+	var label = isHistory ? '播放历史' : '收藏';
+	$('#mediaGrid').html('<div class="media-empty">正在加载'+label+'…</div>');
+	$.get(isHistory ? '/media/history' : '/media/favorites', null, function(data){
+		var items = data && data.items ? data.items : [];
+		mediaMessage(label+' · '+items.length+' 部内容');
+		if(!items.length){
+			$('#mediaGrid').html('<div class="media-empty">'+(isHistory ? '播放过的内容会出现在这里。' : '在影片详情中点击收藏，之后可以从这里快速找到。')+'</div>');
+			return;
+		}
+		renderMediaGrid(items);
+	}, 'json').fail(function(){
+		mediaMessage(label+'加载失败，请稍后重试。');
+		$('#mediaGrid').html('<div class="media-empty">'+label+'暂时无法加载。</div>');
+	});
+}
+function searchMedia(){
+	var q = $('#mediaSearchInput').val();
+	if(!q){
+		showMediaReady();
+		return;
+	}
+	selectMediaSection('browse');
+	mediaFolderStack = [];
+	currentMediaCategoryId = '';
+	showMediaBrowse(false);
+	$('#mediaDetail').empty();
+	$('#mediaGrid').html('<div class="media-empty">正在搜索…</div>');
+	var selected = sourceByKey(currentMediaSourceKey);
+	var sourceKey = selected && selected.searchable ? currentMediaSourceKey : '';
+	$.ajax({url:'/media/search', data:{q:q,sourceKey:sourceKey}, dataType:'json', timeout:45000, success:function(data){
+		if(data && data.success === false){
+			mediaMessage('搜索失败：'+(data.message || '未知错误'));
+			renderMediaGrid([]);
+			return;
+		}
+		if(data.message) mediaMessage(data.message);
+		else if(data.global) mediaMessage('已从 '+(data.searchedSources || 0)+' 个快速搜索源返回 '+(data.items || []).length+' 条结果。');
+		else mediaMessage((data.sourceName || '当前源')+' · '+(data.items || []).length+' 条搜索结果');
+		renderMediaGrid(data.items || []);
+	}, error:function(){
+		mediaMessage('搜索超时，可以换个关键词或稍后重试。');
+		$('#mediaGrid').html('<div class="media-empty">搜索超时，可以换个关键词或稍后重试。</div>');
+	}});
+}
+function mediaEpisodeGroups(episodes){
+	var groups = [];
+	var indexes = {};
+	for(var i=0;i<episodes.length;i++){
+		var episode = episodes[i];
+		var flag = episode.flag || '默认线路';
+		var flagKey = '$' + flag;
+		if(indexes[flagKey] == null){
+			indexes[flagKey] = groups.length;
+			groups.push({name:flag, episodes:[]});
+		}
+		groups[indexes[flagKey]].episodes.push(episode);
+	}
+	return groups;
+}
+function mediaDetailHeader(){
+	return '<div class="media-subview-head"><button type="button" class="media-back-btn" id="btnMediaDetailBack">返回浏览</button></div>';
+}
+function loadMediaDetail(sourceKey, id){
+	currentMediaDetail = null;
+	showMediaDetailView();
+	mediaMessage('正在加载详情…');
+	$('#mediaDetail').html(mediaDetailHeader()+'<div class="media-empty">正在加载详情…</div>');
+	$.ajax({url:'/media/detail', data:{sourceKey:sourceKey, id:id}, dataType:'json', timeout:65000, success:function(data){
+		if(data && data.success === false){
+			var message = data.message || '详情加载失败';
+			mediaMessage('详情加载失败：'+message);
+			$('#mediaDetail').html(mediaDetailHeader()+'<div class="media-empty">详情加载失败：'+escapeHtml(message)+'</div>');
+			return;
+		}
+		var item = data.item;
+		if(!item){
+			mediaMessage('详情加载失败：未找到详情');
+			$('#mediaDetail').html(mediaDetailHeader()+'<div class="media-empty">详情加载失败。</div>');
+			return;
+		}
+		currentMediaDetail = item;
+		mediaMessage((item.sourceName || '当前源')+' · 选择剧集播放');
+		var html = [];
+		html.push(mediaDetailHeader());
+		html.push('<div class="media-detail-layout">');
+		html.push(mediaPoster(item));
+		html.push('<div class="media-detail-main">');
+		html.push('<div class="media-detail-title">'+escapeHtml(item.name)+'</div>');
+		html.push('<div class="media-card-meta">'+escapeHtml(item.sourceName || '')+(item.year ? ' · '+escapeHtml(item.year) : '')+(item.remark ? ' · '+escapeHtml(item.remark) : '')+'</div>');
+		html.push('<button type="button" class="media-favorite-btn'+(item.favorite ? ' active' : '')+'" id="btnMediaFavorite" aria-label="'+(item.favorite ? '取消收藏' : '收藏')+'"><span class="media-favorite-icon">'+(item.favorite ? '★' : '☆')+'</span><span>'+(item.favorite ? '已收藏' : '收藏')+'</span></button>');
+		if(item.desc) html.push('<div class="media-desc">'+escapeHtml(item.desc)+'</div>');
+		html.push('</div></div>');
+		var groups = mediaEpisodeGroups(item.episodes || []);
+		html.push('<div class="media-play-section"><div class="media-section-title">播放</div>');
+		if(groups.length > 1){
+			html.push('<div class="media-routes">');
+			for(var g=0;g<groups.length;g++) html.push('<button type="button" class="media-route'+(g === 0 ? ' active' : '')+'" data-route="'+g+'">'+escapeHtml(groups[g].name)+'</button>');
+			html.push('</div>');
+		}
+		html.push('<div class="media-episodes">');
+		for(var groupIndex=0;groupIndex<groups.length;groupIndex++){
+			for(var i=0;i<groups[groupIndex].episodes.length;i++){
+				var ep = groups[groupIndex].episodes[i];
+				html.push('<button type="button" class="media-episode'+(groupIndex === 0 ? '' : ' hide')+'" data-route="'+groupIndex+'" data-source="'+escapeHtml(item.sourceKey)+'" data-playid="'+escapeHtml(ep.playId)+'" data-flag="'+escapeHtml(ep.flag || '')+'" data-title="'+escapeHtml(item.name || '')+'" data-episode="'+escapeHtml(ep.name || '')+'">'+escapeHtml(ep.name || '播放')+'</button>');
+			}
+		}
+		if(!groups.length) html.push('<div class="media-empty">这个 source 没有返回可播放剧集。</div>');
+		html.push('</div></div>');
+		$('#mediaDetail').html(html.join(''));
+	}, error:function(xhr, status){
+		var message = status === 'timeout' ? '详情加载超时，请稍后重试。' : '详情请求失败，请稍后重试。';
+		mediaMessage(message);
+		$('#mediaDetail').html(mediaDetailHeader()+'<div class="media-empty">'+message+'</div>');
+	}});
+}
+function playMediaEpisode(sourceKey, flag, playId, title, episode){
+	mediaMessage('正在解析并发送到电视播放…');
+	var displayTitle = title || '';
+	if(episode) displayTitle += (displayTitle ? ' · ' : '') + episode;
+	var item = currentMediaDetail || {};
+	$.ajax({url:'/media/play', type:'POST', data:{sourceKey:sourceKey, sourceName:item.sourceName || '', mediaId:item.id || '', mediaName:item.name || title || '', pic:item.pic || '', score:item.score || '', remark:item.remark || '', flag:flag, playId:playId, episode:episode || '', title:displayTitle}, dataType:'json', timeout:30000, success:function(data){
+		if(data && data.success === false){
+			mediaMessage(data.message || '播放失败');
+		}else{
+			mediaMessage('已发送到电视播放。');
+			refreshMediaPlaybackStatus();
+			updateMediaPlaybackPolling();
+		}
+	}, error:function(){
+		mediaMessage('播放解析超时，请换一条线路或换一个源。');
+	}});
+}
+
+function formatPlaybackTime(ms){
+	var total = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+	var hours = Math.floor(total / 3600);
+	var minutes = Math.floor((total % 3600) / 60);
+	var seconds = total % 60;
+	var mm = (hours > 0 && minutes < 10 ? '0' : '') + minutes;
+	var ss = (seconds < 10 ? '0' : '') + seconds;
+	return hours > 0 ? hours + ':' + mm + ':' + ss : minutes + ':' + ss;
+}
+
+function isMediaTabVisible(){
+	return $('.tab.cur').attr('data-rel') === 'media';
+}
+
+function renderMediaPlaybackStatus(data){
+	var active = !!(data && data.active);
+	$('#mediaPlaybackControls').toggleClass('hide', !active);
+	if(!active) return;
+
+	var duration = Math.max(0, Number(data.duration) || 0);
+	var position = Math.max(0, Number(data.position) || 0);
+	if(duration > 0) position = Math.min(duration, position);
+	var $seek = $('#mediaPlaybackSeek');
+	$seek.attr('max', duration).prop('disabled', duration <= 0);
+	if(!mediaPlaybackDragging) $seek.val(position);
+	$('#mediaPlaybackCurrent').text(formatPlaybackTime(mediaPlaybackDragging ? $seek.val() : position));
+	$('#mediaPlaybackDuration').text(duration > 0 ? formatPlaybackTime(duration) : '--:--');
+	$('#mediaPlaybackLabel').text(data.playing ? '电视播放中' : '电视已暂停');
+
+	var speed = Number(data.speed) || 1;
+	var $speed = $('#mediaPlaybackSpeed');
+	$speed.prop('disabled', !data.speedSupported);
+	if(!mediaPlaybackDragging) $speed.val(String(speed));
+}
+
+function refreshMediaPlaybackStatus(){
+	if(!isMediaTabVisible()) return;
+	$.ajax({url:'/player/status', type:'POST', dataType:'json', timeout:2500, success:renderMediaPlaybackStatus});
+}
+
+function updateMediaPlaybackPolling(){
+	if(mediaPlaybackPollTimer){
+		clearInterval(mediaPlaybackPollTimer);
+		mediaPlaybackPollTimer = null;
+	}
+	if(isMediaTabVisible()){
+		refreshMediaPlaybackStatus();
+		mediaPlaybackPollTimer = setInterval(refreshMediaPlaybackStatus, 1000);
+	}else{
+		$('#mediaPlaybackControls').addClass('hide');
+	}
+}
+
+updateMediaDisplayMode(mediaDisplayMode);
+$('#btnMediaSettings').on('click', function(){
+	showMediaSettingsView();
+});
+$('#btnMediaViewMode').on('click', function(){
+	updateMediaDisplayMode(mediaDisplayMode === 'grid' ? 'list' : 'grid');
+	renderMediaGrid(renderedMediaItems);
+});
+$('#btnMediaSettingsBack').on('click', function(){
+	showMediaBrowse(true);
+});
+$('#btnMediaConnect').on('click', function(){
+	var url = $('#mediaConfigUrl').val();
+	mediaMessage('正在连接配置…');
+	$.ajax({url:'/media/config', type:'POST', data:{url:url}, dataType:'json', timeout:30000, success:function(data){
+		if(data && data.success === false){
+			mediaMessage(data.message || '配置加载失败');
+		}else{
+			renderMediaSources(data);
+			if(data.supportedSources > 0) loadMediaHome();
+			else showMediaReady();
+		}
+	}, error:function(){
+		mediaMessage('配置连接超时，请检查地址或稍后重试。');
+	}});
+});
+$('#btnMediaSearch').on('click', searchMedia);
+$('#mediaPlaybackSeek').on('input', function(){
+	mediaPlaybackDragging = true;
+	$('#mediaPlaybackCurrent').text(formatPlaybackTime($(this).val()));
+}).on('change', function(){
+	var position = Math.max(0, Number($(this).val()) || 0);
+	mediaPlaybackDragging = false;
+	$.post('/player/seek', {position:Math.round(position)}, function(data){
+		if(!data || data.handled === false) mediaMessage('当前视频暂时不能调整进度。');
+		refreshMediaPlaybackStatus();
+	}, 'json').fail(function(){
+		mediaMessage('进度调整失败，请稍后重试。');
+	});
+});
+$('#mediaPlaybackSpeed').on('change', function(){
+	var speed = Number($(this).val()) || 1;
+	$.post('/player/speed', {speed:speed}, function(data){
+		if(!data || data.handled === false) mediaMessage('当前播放器暂不支持倍速。');
+		refreshMediaPlaybackStatus();
+	}, 'json').fail(function(){
+		mediaMessage('倍速切换失败，请稍后重试。');
+	});
+});
+$('#mediaLibraryNav').on('click', '.media-library-tab', function(){
+	var section = $(this).attr('data-section') || 'browse';
+	if(section === 'browse') loadMediaHome();
+	else loadMediaLibrary(section);
+});
+$('#mediaSourceSelect').on('change', function(){
+	currentMediaSourceKey = $(this).val() || '';
+	loadMediaHome();
+});
+$('#mediaCategories').on('click', '.media-category', function(){
+	if($(this).hasClass('media-folder-back')){
+		closeMediaFolder();
+		return;
+	}
+	loadMediaCategory($(this).attr('data-id') || '');
+});
+$('#mediaSearchInput').on('keydown', function(e){
+	if(e.key === 'Enter' || e.keyCode === 13) searchMedia();
+});
+$('#mediaGrid').on('click', '.media-card', function(e){
+	if($(e.target).closest('.media-card-unfavorite').length) return;
+	var sourceKey = $(this).attr('data-source') || '';
+	var id = $(this).attr('data-id') || '';
+	var name = $(this).attr('data-name') || '';
+	var source = sourceByKey(sourceKey);
+	if($(this).attr('data-folder') === '1' || /@folder$/.test(id)){
+		loadMediaFolder(sourceKey, id, name, true);
+		return;
+	}
+	if((source && Number(source.indexs) === 1) || !id || id.indexOf('msearch:') === 0){
+		$('#mediaSearchInput').val(name);
+		searchMedia();
+		return;
+	}
+	loadMediaDetail(sourceKey, id);
+});
+$('#mediaGrid').on('click', '.media-card-unfavorite', function(e){
+	e.preventDefault();
+	e.stopPropagation();
+	var $card = $(this).closest('.media-card');
+	var index = Number($card.attr('data-index'));
+	var item = renderedMediaItems[index];
+	if(!item) return;
+	var $button = $(this).prop('disabled', true);
+	$.post('/media/favorite', {sourceKey:item.sourceKey || '', sourceName:item.sourceName || '', mediaId:item.id || '', mediaName:item.name || '', pic:item.pic || '', score:item.score || '', remark:item.remark || ''}, function(data){
+		if(!data || data.success === false || data.favorite){
+			$button.prop('disabled', false);
+			mediaMessage(data && data.message ? data.message : '取消收藏失败');
+			return;
+		}
+		renderedMediaItems.splice(index, 1);
+		mediaMessage('已取消收藏 · '+renderedMediaItems.length+' 部内容');
+		renderMediaGrid(renderedMediaItems);
+	}, 'json').fail(function(){
+		$button.prop('disabled', false);
+		mediaMessage('取消收藏失败，请稍后重试。');
+	});
+});
+$('#mediaDetail').on('click', '.media-episode', function(){
+	$('#mediaDetail .media-episode').removeClass('playing');
+	$(this).addClass('playing');
+	playMediaEpisode($(this).attr('data-source'), $(this).attr('data-flag'), $(this).attr('data-playid'), $(this).attr('data-title'), $(this).attr('data-episode'));
+});
+$('#mediaDetail').on('click', '#btnMediaFavorite', function(){
+	if(!currentMediaDetail) return;
+	var item = currentMediaDetail;
+	$.post('/media/favorite', {sourceKey:item.sourceKey || '', sourceName:item.sourceName || '', mediaId:item.id || '', mediaName:item.name || '', pic:item.pic || '', score:item.score || '', remark:item.remark || ''}, function(data){
+		if(!data || data.success === false){
+			mediaMessage(data && data.message ? data.message : '收藏操作失败');
+			return;
+		}
+		item.favorite = !!data.favorite;
+		var $button = $('#btnMediaFavorite');
+		$button.toggleClass('active', item.favorite).attr('aria-label', item.favorite ? '取消收藏' : '收藏');
+		$button.find('.media-favorite-icon').text(item.favorite ? '★' : '☆');
+		$button.find('span:last').text(item.favorite ? '已收藏' : '收藏');
+		mediaMessage(item.favorite ? '已加入收藏。' : '已取消收藏。');
+	}, 'json');
+});
+$('#mediaDetail').on('click', '#btnMediaDetailBack', function(){
+	if(mediaSection === 'favorites' && currentMediaDetail && !currentMediaDetail.favorite) loadMediaLibrary(mediaSection);
+	else showMediaBrowse(true);
+});
+$('#mediaDetail').on('click', '.media-route', function(){
+	var route = String($(this).attr('data-route') || '0');
+	$('#mediaDetail .media-route').removeClass('active');
+	$(this).addClass('active');
+	$('#mediaDetail .media-episode').addClass('hide');
+	$('#mediaDetail .media-episode[data-route="'+cssAttributeValue(route)+'"]').removeClass('hide');
+});
 $("#btnEnter").on("click", function(){
 	vibrateShort();
 	//同"清空"按键：取消排队中的/textLive防抖请求，避免它带着提交前的旧文字
@@ -486,6 +1103,7 @@ $("div.tab").on("click", function(){
 	o.addClass('cur');
 	updateContainerWidth();
 	updateElementsAutoRefresh();
+	updateMediaPlaybackPolling();
 })
 //方向键/操作列表这两个子Tab除了点标签切换，也支持在内容区左右滑动切换——
 //点两个小标签来回切总感觉要"精确瞄准"，直接在当前显示的面板上一划更顺手。
@@ -499,7 +1117,10 @@ function isElementsViewVisible(){
 	return $('.tab.cur').attr('data-rel') === 'controls' && $('.mode-tab.active').attr('data-mode') === 'elements';
 }
 function updateContainerWidth(){
-	$('.container').toggleClass('wide-mode', isElementsViewVisible());
+	var activeTab = $('.tab.cur').attr('data-rel');
+	$('.container')
+		.toggleClass('wide-mode', isElementsViewVisible())
+		.toggleClass('media-wide-mode', activeTab === 'media');
 }
 //操作列表之前只在"进入这个子Tab/点刷新/点了某个操作之后"这几个时机才会
 //重新拉取一次，电视画面如果是被别的方式(比如遥控器/自动播放/弹窗)改变的，
@@ -969,6 +1590,7 @@ reloadAppList();
 loadFileList("");
 getDiskSpace();
 loadTVList();
+loadMediaConfig();
 loadTorrentItems();
 
 //PWA分享目标(manifest.json里的share_target)：手机其它App"分享"一个视频链接过来时，

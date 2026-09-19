@@ -32,6 +32,8 @@ import com.android.tvremoteime.accessibility.ScreenAccessibilityService;
 
 import java.io.IOException;
 
+import player.XLVideoPlayActivity;
+
 
 public class IMEService extends InputMethodService implements View.OnClickListener, MDnsHelper.ResolvedListener{
 	public static String TAG = "TVRemoteIME";
@@ -196,6 +198,9 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 			Environment.debug(TAG, "onStartCommand.");
 		}
 
+		// 开机时网络可能比应用服务晚几十秒才就绪。广播接收器会重试启动，
+		// 每次重试都让 mDNS 再检查一次；HTTP 服务本身仍只在 onCreate 创建。
+		MDnsHelper.start(this.getApplicationContext());
 		onStart(intent, startId);
 		return START_STICKY;
 	}
@@ -289,6 +294,23 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		return keyCode == KeyEvent.KEYCODE_APP_SWITCH || !Environment.isDefaultIME(this);
 	}
 
+	private boolean dispatchKeyToRunningPlayer(int keyCode, int keyAction){
+		switch (keyAction) {
+			case KEY_ACTION_PRESSED:
+				if (!XLVideoPlayActivity.dispatchRemoteKeyEvent(keyCode, KeyEvent.ACTION_DOWN)) {
+					return false;
+				}
+				XLVideoPlayActivity.dispatchRemoteKeyEvent(keyCode, KeyEvent.ACTION_UP);
+				return true;
+			case KEY_ACTION_DOWN:
+				return XLVideoPlayActivity.dispatchRemoteKeyEvent(keyCode, KeyEvent.ACTION_DOWN);
+			case KEY_ACTION_UP:
+				return XLVideoPlayActivity.dispatchRemoteKeyEvent(keyCode, KeyEvent.ACTION_UP);
+			default:
+				return false;
+		}
+	}
+
 	//onKeyEventReceived的实际处理逻辑，统一在主线程Handler上执行(见
 	//onKeyEventReceived里handler.post的说明)，不用再各自单独post。
 	private void handleKeyEventOnMainThread(String keyCode, int keyAction){
@@ -325,8 +347,11 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 			//没必要为了这一个特判去依赖它。无障碍服务没开启、或触发失败时，
 			//直接落到下面的通用分支，走已有的ADB/原生注入兜底逻辑。
 		}else {
-			final int kc = KeyEvent.keyCodeFromString(keyCode);
+			final int kc = parseKeyCode(keyCode);
 			if(kc != KeyEvent.KEYCODE_UNKNOWN){
+				// The internal player has no InputConnection, so web remote keys must be
+				// delivered to its Activity instead of the IME's text-input channel.
+				if(dispatchKeyToRunningPlayer(kc, keyAction)) return;
 				if(mInputView != null && KeyEventUtils.isKeyboardFocusEvent(kc) && mInputView.isShown()){
 					if((keyAction == KEY_ACTION_PRESSED || keyAction == KEY_ACTION_DOWN)
 							&& !handleKeyboardFocusEvent(kc, 0)){
@@ -366,6 +391,16 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 					}
 				}
 			}
+		}
+	}
+
+	private int parseKeyCode(String keyCode){
+		if(keyCode == null) return KeyEvent.KEYCODE_UNKNOWN;
+		String value = keyCode.trim();
+		try {
+			return Integer.parseInt(value);
+		} catch (NumberFormatException ignored) {
+			return KeyEvent.keyCodeFromString(value);
 		}
 	}
 

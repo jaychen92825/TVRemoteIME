@@ -16,6 +16,10 @@ import xllib.FileUtils;
 
 public class VideoPlayHelper {
     public static void playUrl(Context context, String url, int videoIndex, boolean useSystem){
+        playUrl(context, url, videoIndex, useSystem, null);
+    }
+
+    public static void playUrl(Context context, String url, int videoIndex, boolean useSystem, String title){
         if(useSystem) {
             //外部播放
             DownloadManager downloadManager = DownloadManager.instance();
@@ -36,7 +40,8 @@ public class VideoPlayHelper {
             }
         }else {
             //内部播放
-            XLVideoPlayActivity.intentTo(XLVideoPlayActivity.class, context, url, url, videoIndex);
+            XLVideoPlayActivity.intentTo(XLVideoPlayActivity.class, context, url,
+                    TextUtils.isEmpty(title) ? url : title, videoIndex);
         }
     }
 }

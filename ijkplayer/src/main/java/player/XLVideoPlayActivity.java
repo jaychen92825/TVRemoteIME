@@ -65,8 +65,9 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     private static final int MESSAGE_RESTART_PLAY = 5;
     private static final int MESSAGE_LIVE_RESTART = 6;
 
-    private static boolean isRunning = false;
-    private static XLVideoPlayActivity runningInstance = null;
+    private static volatile boolean isRunning = false;
+    private static volatile boolean isForeground = false;
+    private static volatile XLVideoPlayActivity runningInstance = null;
 
     private String mVideoPath;
     private String mVideoTitle;
@@ -94,6 +95,14 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     private boolean instantSeeking = false;
     private boolean portrait;
     private int currentPosition;
+    private volatile int webPlaybackPosition;
+    private volatile int webPlaybackDuration;
+    private volatile boolean webPlaybackPlaying;
+    private volatile float webPlaybackSpeed = 1.0f;
+    private volatile boolean webPlaybackSpeedSupported;
+    private volatile long webPlaybackPositionTimestamp;
+    private int webSeekTarget = -1;
+    private long webSeekTargetTimestamp;
 
     private WakeLock mWakeLock = null;
 
@@ -128,6 +137,14 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                 seekTo(0);
                 start();
                 doPauseResume();
+            } else if (v.getId() == R.id.app_video_rewind) {
+                previewKeySeek(-GlobalSettings.FastForwardInterval);
+                finishKeySeek();
+                show(defaultTimeout);
+            } else if (v.getId() == R.id.app_video_fast_forward) {
+                previewKeySeek(GlobalSettings.FastForwardInterval);
+                finishKeySeek();
+                show(defaultTimeout);
             }else if(v.getId() == R.id.app_play_btn_play_list){
                 if(playListView != null){
                     if(playListView.isShown()){
@@ -197,6 +214,414 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         }
         else {
             context.startActivity(newIntent(cls, context, videoPath, videoTitle, videoIndex));
+        }
+    }
+
+    public static boolean dispatchRemoteKeyEvent(int keyCode, int action) {
+        final XLVideoPlayActivity activity = runningInstance;
+        final int remoteKeyCode = keyCode;
+        final int remoteAction = action;
+        if (!isRunning || !isForeground || activity == null || activity.isFinishing()
+                || (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP)) {
+            return false;
+        }
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_BACK:
+            case KeyEvent.KEYCODE_ESCAPE:
+                activity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (activity != runningInstance || !isForeground || activity.isFinishing()) {
+                            return;
+                        }
+                        long eventTime = android.os.SystemClock.uptimeMillis();
+                        activity.dispatchKeyEvent(new KeyEvent(eventTime, eventTime, remoteAction, remoteKeyCode, 0));
+                    }
+                });
+                return true;
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                activity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (activity != runningInstance || !isForeground || activity.isFinishing()) {
+                            return;
+                        }
+                        activity.handleRemotePlayerControl(remoteKeyCode, remoteAction);
+                    }
+                });
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public static boolean dispatchDirectPlayerControl(int keyCode, int action) {
+        final XLVideoPlayActivity activity = runningInstance;
+        final int remoteKeyCode = keyCode;
+        final int remoteAction = action;
+        if (!isRunning || activity == null || activity.isFinishing()
+                || (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP)) {
+            return false;
+        }
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                if (Looper.myLooper() == Looper.getMainLooper()) {
+                    return activity.handleDirectWebPlayerControl(remoteKeyCode, remoteAction);
+                }
+                activity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (activity != runningInstance || activity.isFinishing()) {
+                            return;
+                        }
+                        Log.d(activity.TAG, "direct web player control key=" + remoteKeyCode + " action=" + remoteAction);
+                        activity.handleDirectWebPlayerControl(remoteKeyCode, remoteAction);
+                    }
+                });
+                // The HTTP server runs off the player UI thread. Treat a successfully
+                // queued command as handled instead of timing out and falling back to
+                // a synthetic D-pad event, which can trigger unrelated player actions.
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public static final class WebPlaybackStatus {
+        public final boolean active;
+        public final int position;
+        public final int duration;
+        public final boolean playing;
+        public final float speed;
+        public final boolean speedSupported;
+
+        private WebPlaybackStatus(boolean active, int position, int duration,
+                                  boolean playing, float speed, boolean speedSupported) {
+            this.active = active;
+            this.position = position;
+            this.duration = duration;
+            this.playing = playing;
+            this.speed = speed;
+            this.speedSupported = speedSupported;
+        }
+    }
+
+    public static WebPlaybackStatus getWebPlaybackStatus() {
+        XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing()) {
+            return new WebPlaybackStatus(false, 0, 0, false, 1.0f, false);
+        }
+        int position = activity.webPlaybackPosition;
+        int duration = activity.webPlaybackDuration;
+        if (activity.webPlaybackPlaying && position >= 0) {
+            long elapsed = android.os.SystemClock.elapsedRealtime() - activity.webPlaybackPositionTimestamp;
+            if (elapsed > 0) {
+                position += (int) (elapsed * activity.webPlaybackSpeed);
+            }
+        }
+        if (duration > 0) {
+            position = Math.min(duration, position);
+        }
+        return new WebPlaybackStatus(true, Math.max(0, position), Math.max(0, duration),
+                activity.webPlaybackPlaying, activity.webPlaybackSpeed, activity.webPlaybackSpeedSupported);
+    }
+
+    public static boolean dispatchAbsoluteSeek(final int positionMs) {
+        final XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing()) {
+            return false;
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return activity.seekAbsoluteForWeb(positionMs);
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity == runningInstance && !activity.isFinishing()) {
+                    activity.seekAbsoluteForWeb(positionMs);
+                }
+            }
+        });
+        return true;
+    }
+
+    public static boolean dispatchPlaybackSpeed(final float speed) {
+        final XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing() || speed < 0.5f || speed > 3.0f) {
+            return false;
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return activity.setPlaybackSpeedForWeb(speed);
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity == runningInstance && !activity.isFinishing()) {
+                    activity.setPlaybackSpeedForWeb(speed);
+                }
+            }
+        });
+        return true;
+    }
+
+    private boolean handleDirectWebPlayerControl(int keyCode, int action) {
+        if (mVideoView == null) {
+            return false;
+        }
+        if (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP) {
+            return false;
+        }
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+                if (action == KeyEvent.ACTION_DOWN) {
+                    seekByForWeb(-GlobalSettings.FastForwardInterval);
+                }
+                return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                if (action == KeyEvent.ACTION_DOWN) {
+                    seekByForWeb(GlobalSettings.FastForwardInterval);
+                }
+                return true;
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+                if (action == KeyEvent.ACTION_UP) {
+                    return true;
+                }
+                return togglePlaybackForWeb();
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+                if (action == KeyEvent.ACTION_UP) {
+                    return true;
+                }
+                if (!mVideoView.isPlaying()) {
+                    start();
+                    updatePausePlay();
+                    show(defaultTimeout);
+                }
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+                if (action == KeyEvent.ACTION_UP) {
+                    return true;
+                }
+                if (mVideoView.isPlaying()) {
+                    getCurrentPosition();
+                    statusChange(STATUS_PAUSE);
+                    pause();
+                    updatePausePlay();
+                    show(defaultTimeout);
+                }
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private int getReliableSeekPosition() {
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (webSeekTarget >= 0 && now - webSeekTargetTimestamp < 1200) {
+            return webSeekTarget;
+        }
+        int playerPosition = mVideoView.getCurrentPosition();
+        if (playerPosition > 0) {
+            currentPosition = playerPosition;
+            return playerPosition;
+        }
+
+        // IjkVideoView returns 0 while it is temporarily outside playback state
+        // (for example while buffering/seeking). Do not turn that transient value
+        // into a seek back to the start when we already have a valid position.
+        if (currentPosition > 0 && status != STATUS_COMPLETED) {
+            return currentPosition;
+        }
+        return Math.max(0, playerPosition);
+    }
+
+    private boolean seekByForWeb(int delta) {
+        if (mVideoView == null) {
+            return false;
+        }
+
+        int position = getReliableSeekPosition();
+        int duration = mVideoView.getDuration();
+        if (duration <= 0) {
+            duration = webPlaybackDuration;
+        }
+        int target = Math.max(0, position + delta);
+        if (duration > 0) {
+            target = Math.min(duration, target);
+            showSeekPreview(position, target, duration);
+        }
+
+        webSeekTarget = target;
+        webSeekTargetTimestamp = android.os.SystemClock.elapsedRealtime();
+        seekTo(target);
+        currentPosition = target;
+        changeProgressByKey = false;
+        seekStartPosition = -1;
+        newPosition = -1;
+        handler.removeMessages(MESSAGE_SEEK_NEW_POSITION);
+        handler.removeMessages(MESSAGE_HIDE_CENTER_BOX);
+        handler.sendEmptyMessageDelayed(MESSAGE_HIDE_CENTER_BOX, 500);
+        show(defaultTimeout);
+        return true;
+    }
+
+    private boolean seekAbsoluteForWeb(int positionMs) {
+        if (mVideoView == null) {
+            return false;
+        }
+        int duration = mVideoView.getDuration();
+        if (duration <= 0) {
+            duration = webPlaybackDuration;
+        }
+        // This legacy player labels every http/https URL as "live". TVBox VOD
+        // streams are also HTTP, so seekability must be based on a real duration
+        // instead of the URL classification.
+        if (duration <= 0) {
+            return false;
+        }
+        int target = Math.max(0, positionMs);
+        target = Math.min(duration, target);
+        webSeekTarget = target;
+        webSeekTargetTimestamp = android.os.SystemClock.elapsedRealtime();
+        seekTo(target);
+        currentPosition = target;
+        show(defaultTimeout);
+        return true;
+    }
+
+    private boolean setPlaybackSpeedForWeb(float speed) {
+        if (mVideoView == null) {
+            return false;
+        }
+        boolean supported;
+        try {
+            supported = mVideoView.setPlaybackSpeed(speed);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "unable to set web playback speed", e);
+            supported = false;
+        }
+        webPlaybackSpeedSupported = supported;
+        if (supported) {
+            webPlaybackSpeed = speed;
+            refreshWebPlaybackSnapshot();
+        }
+        return supported;
+    }
+
+    private void refreshWebPlaybackSnapshot() {
+        if (mVideoView == null) {
+            return;
+        }
+        int position = mVideoView.getCurrentPosition();
+        int videoDuration = mVideoView.getDuration();
+        if (position >= 0) {
+            webPlaybackPosition = position;
+        }
+        if (videoDuration > 0) {
+            webPlaybackDuration = videoDuration;
+        }
+        webPlaybackPlaying = mVideoView.isPlaying();
+        webPlaybackPositionTimestamp = android.os.SystemClock.elapsedRealtime();
+    }
+
+    private boolean togglePlaybackForWeb() {
+        if (mVideoView == null) {
+            return false;
+        }
+        if (mVideoView.isPlaying()) {
+            currentPosition = mVideoView.getCurrentPosition();
+            statusChange(STATUS_PAUSE);
+            pause();
+        } else {
+            // Web remote pause/resume must never inherit the replay-from-zero branch
+            // from doPauseResume(). IjkVideoView.start() resumes a paused stream.
+            $.id(R.id.app_video_replay).gone();
+            start();
+            statusChange(STATUS_PLAYING);
+        }
+        updatePausePlay();
+        show(defaultTimeout);
+        return true;
+    }
+
+    private void handleRemotePlayerControl(int keyCode, int action) {
+        if (mVideoView == null) {
+            return;
+        }
+        boolean isKeyDown = action == KeyEvent.ACTION_DOWN;
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+                if (isKeyDown) {
+                    seekByForWeb(-GlobalSettings.FastForwardInterval);
+                }
+                break;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                if (isKeyDown) {
+                    seekByForWeb(GlobalSettings.FastForwardInterval);
+                }
+                break;
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+                if (isKeyDown) {
+                    togglePlaybackForWeb();
+                }
+                break;
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+                if (isKeyDown && !mVideoView.isPlaying()) {
+                    start();
+                    show(defaultTimeout);
+                }
+                break;
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+                if (isKeyDown && mVideoView.isPlaying()) {
+                    getCurrentPosition();
+                    statusChange(STATUS_PAUSE);
+                    pause();
+                    show(defaultTimeout);
+                }
+                break;
+            default:
+                break;
         }
     }
 
@@ -343,7 +768,15 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         seekBar = (SeekBar) findViewById(R.id.app_video_seekBar);
         seekBar.setOnSeekBarChangeListener(mSeekListener);
 
+        String displayTitle = mVideoTitle;
+        if (TextUtils.isEmpty(displayTitle) || TextUtils.equals(displayTitle, mVideoPath)) {
+            displayTitle = "正在播放";
+        }
+        $.id(R.id.app_video_title).text(displayTitle);
+
         $.id(R.id.app_video_play).clicked(onClickListener);
+        $.id(R.id.app_video_rewind).clicked(onClickListener);
+        $.id(R.id.app_video_fast_forward).clicked(onClickListener);
         //$.id(R.id.app_video_fullscreen).clicked(onClickListener);
         $.id(R.id.app_video_replay_icon).clicked(onClickListener);
         $.id(R.id.app_play_btn_play_list).clicked(onClickListener);
@@ -403,6 +836,12 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     @Override
     public void onPrepared(IMediaPlayer iMediaPlayer) {
         duration = mVideoView.getDuration();
+        webPlaybackDuration = Math.max(0, duration);
+        webPlaybackSpeedSupported = mVideoView.supportsPlaybackSpeed();
+        webPlaybackPositionTimestamp = android.os.SystemClock.elapsedRealtime();
+        if (webPlaybackSpeedSupported && webPlaybackSpeed != 1.0f) {
+            mVideoView.setPlaybackSpeed(webPlaybackSpeed);
+        }
 
         final GestureDetector gestureDetector = new GestureDetector(this, new PlayerGestureListener());
         mRoot = findViewById(R.id.touch_area);
@@ -441,9 +880,13 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
     protected void seekTo(int position){
         mVideoView.seekTo(position);
+        currentPosition = Math.max(0, position);
+        webPlaybackPosition = currentPosition;
+        webPlaybackPositionTimestamp = android.os.SystemClock.elapsedRealtime();
     }
     protected void start(){
         mVideoView.start();
+        refreshWebPlaybackSnapshot();
     }
     protected void resume(){
         mVideoView.resume();
@@ -458,6 +901,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     }
     protected void pause(){
         mVideoView.pause();
+        refreshWebPlaybackSnapshot();
     }
     protected void stop(){
         mVideoView.stopPlayback();
@@ -527,20 +971,104 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     }
 
     private boolean changeProgressByKey = false;
-    private int oldProgressValue = -1;
-    private int newProgressValue = -1;
+    private int seekStartPosition = -1;
     private int keyDownComboCount = 0;
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        boolean isKeyDown = event.getAction() == KeyEvent.ACTION_DOWN;
+
+        // While the episode list is open it owns D-pad focus and OK selection.
+        // Outside the list, left/right/OK keep their direct playback semantics.
+        if (playListView != null && playListView.isShown()) {
+            return super.dispatchKeyEvent(event);
+        }
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+                if (isKeyDown) {
+                    previewKeySeek(-GlobalSettings.FastForwardInterval);
+                } else {
+                    finishKeySeek();
+                }
+                return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                if (isKeyDown) {
+                    previewKeySeek(GlobalSettings.FastForwardInterval);
+                } else {
+                    finishKeySeek();
+                }
+                return true;
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+                if (isKeyDown && event.getRepeatCount() == 0) {
+                    doPauseResume();
+                    show(defaultTimeout);
+                }
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+                if (isKeyDown && event.getRepeatCount() == 0 && !mVideoView.isPlaying()) {
+                    start();
+                    show(defaultTimeout);
+                }
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+                if (isKeyDown && event.getRepeatCount() == 0 && mVideoView.isPlaying()) {
+                    getCurrentPosition();
+                    statusChange(STATUS_PAUSE);
+                    pause();
+                    show(defaultTimeout);
+                }
+                return true;
+            default:
+                return super.dispatchKeyEvent(event);
+        }
+    }
+
+    private void previewKeySeek(int delta) {
+        if (isLive || mVideoView == null) {
+            return;
+        }
+
+        int videoDuration = mVideoView.getDuration();
+        if (videoDuration <= 0) {
+            return;
+        }
+
+        if (!changeProgressByKey) {
+            changeProgressByKey = true;
+            seekStartPosition = getReliableSeekPosition();
+            newPosition = seekStartPosition;
+        }
+
+        newPosition = Math.max(0, Math.min(videoDuration, newPosition + delta));
+        showSeekPreview(seekStartPosition, newPosition, videoDuration);
+        show(defaultTimeout);
+
+        // Some remotes do not reliably deliver ACTION_UP. Commit after the final repeat too.
+        handler.removeMessages(MESSAGE_SEEK_NEW_POSITION);
+        handler.sendEmptyMessageDelayed(MESSAGE_SEEK_NEW_POSITION, 500);
+    }
+
+    private void finishKeySeek() {
+        if (!changeProgressByKey) {
+            return;
+        }
+        changeProgressByKey = false;
+        seekStartPosition = -1;
+        endGesture();
+    }
+
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         switch (keyCode) {
-            case KeyEvent.KEYCODE_DPAD_LEFT:
-            case KeyEvent.KEYCODE_DPAD_RIGHT:
-                if(changeProgressByKey){
-                    changeProgressByKey = false;
-                    oldProgressValue = -1;
-                    endGesture();
-                }
-                break;
             case KeyEvent.KEYCODE_DPAD_DOWN:
                 if(keyDownComboCount > 20){
                     resume();
@@ -561,21 +1089,6 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                     return true;
                 }
                 break;
-            case KeyEvent.KEYCODE_DPAD_LEFT:
-            case KeyEvent.KEYCODE_DPAD_RIGHT:
-                if(!changeProgressByKey)changeProgressByKey = true;
-                if(oldProgressValue == -1){
-                    oldProgressValue = 0;
-                    newProgressValue = oldProgressValue;
-                }
-                newProgressValue += keyCode == KeyEvent.KEYCODE_DPAD_LEFT ? -GlobalSettings.FastForwardInterval : GlobalSettings.FastForwardInterval;
-                int max = mVideoView.getDuration();
-                //Log.d(TAG, "newProgressValue = " + newProgressValue);
-                if(newProgressValue < (0 - max))newProgressValue = (0 - max);
-                if(newProgressValue > max)newProgressValue = max;
-                float deltaP = oldProgressValue - newProgressValue;
-                onProgressSlide(-deltaP / max);
-                return true;
             case KeyEvent.KEYCODE_DPAD_DOWN:
             case KeyEvent.KEYCODE_DPAD_UP:
                 if(playListView.isShown()){
@@ -589,17 +1102,13 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                     return true;
                 }else if(xlDownloadManager.taskInstance().getPlayList().size() > 1){
                     playListView.setVisibility(View.VISIBLE);
+                    playListView.requestFocus(View.FOCUS_DOWN);
                     return true;
                 }else if(keyCode == KeyEvent.KEYCODE_DPAD_DOWN){
                     keyDownComboCount ++;
                     //Log.d(TAG, "keyDownComboCount = " + keyDownComboCount);
                 }
                 break;
-            case KeyEvent.KEYCODE_ENTER:
-            case KeyEvent.KEYCODE_DPAD_CENTER:
-                doPauseResume();
-                show(defaultTimeout);
-                return true;
         }
         return super.onKeyDown(keyCode, event);
     }
@@ -624,12 +1133,10 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     }
 
     private void showBottomControl(boolean show) {
+        $.id(R.id.app_video_bottom_box).visibility(show ? View.VISIBLE : View.GONE);
         $.id(R.id.app_play_btn_play_list).visibility(show && xlDownloadManager.taskInstance().getPlayList().size() > 1 ? View.VISIBLE : View.GONE);
-        $.id(R.id.app_video_play).visibility(show ? View.VISIBLE : View.GONE);
-        $.id(R.id.app_video_speed).visibility(show ? View.VISIBLE : View.GONE);
-        $.id(R.id.app_video_currentTime).visibility(show ? View.VISIBLE : View.GONE);
-        $.id(R.id.app_video_endTime).visibility(show ? View.VISIBLE : View.GONE);
-        $.id(R.id.app_video_seekBar).visibility(show ? View.VISIBLE : View.GONE);
+        $.id(R.id.app_video_rewind).visibility(show && !isLive ? View.VISIBLE : View.GONE);
+        $.id(R.id.app_video_fast_forward).visibility(show && !isLive ? View.VISIBLE : View.GONE);
         if(show && playListView.isShown())playListView.setVisibility(View.GONE);
     }
 
@@ -703,6 +1210,17 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
         int position = mVideoView.getCurrentPosition();
         int duration = mVideoView.getDuration();
+        if (!isLive && position > 0) {
+            currentPosition = position;
+        }
+        if (position >= 0) {
+            webPlaybackPosition = position;
+        }
+        if (duration > 0) {
+            webPlaybackDuration = duration;
+        }
+        webPlaybackPlaying = mVideoView.isPlaying();
+        webPlaybackPositionTimestamp = android.os.SystemClock.elapsedRealtime();
         if (seekBar != null) {
             if (duration > 0) {
                 seekBar.setProgress((position * 100 / duration));
@@ -740,23 +1258,30 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             newPosition = duration;
         } else if (newPosition <= 0) {
             newPosition = 0;
-            delta = -position;
         }
-        int showDelta = delta / 1000;
+        showSeekPreview(position, newPosition, duration);
+    }
+
+    private void showSeekPreview(int startPosition, int targetPosition, int duration) {
+        int showDelta = (targetPosition - startPosition) / 1000;
         if (showDelta != 0) {
             $.id(R.id.app_video_fastForward_box).visible();
             String text = showDelta > 0 ? ("+" + showDelta) : "" + showDelta;
             $.id(R.id.app_video_fastForward).text(text + "s");
-            $.id(R.id.app_video_fastForward_target).text(generateTime(newPosition) + "/");
+            $.id(R.id.app_video_fastForward_target).text(generateTime(targetPosition) + "/");
             $.id(R.id.app_video_fastForward_all).text(generateTime(duration));
+            $.id(R.id.app_video_currentTime).text(generateTime(targetPosition));
+            if (seekBar != null && duration > 0) {
+                seekBar.setProgress(targetPosition * 100 / duration);
+            }
         }
     }
 
     protected void updatePausePlay() {
         if (mVideoView.isPlaying()) {
-            $.id(R.id.app_video_play).image(R.drawable.ic_stop_white_24dp);
+            $.id(R.id.app_video_play).image(android.R.drawable.ic_media_pause);
         } else {
-            $.id(R.id.app_video_play).image(R.drawable.ic_play_arrow_white_24dp);
+            $.id(R.id.app_video_play).image(android.R.drawable.ic_media_play);
         }
     }
 
@@ -848,8 +1373,14 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                     break;
                 case MESSAGE_SEEK_NEW_POSITION:
                     if (!isLive && newPosition >= 0) {
-                        seekTo(newPosition);
+                        int targetPosition = newPosition;
+                        seekTo(targetPosition);
+                        currentPosition = targetPosition;
                         newPosition = -1;
+                        changeProgressByKey = false;
+                        seekStartPosition = -1;
+                        handler.removeMessages(MESSAGE_HIDE_CENTER_BOX);
+                        handler.sendEmptyMessageDelayed(MESSAGE_HIDE_CENTER_BOX, 500);
                         if (!mVideoView.isPlaying()) {
                             doPauseResume();
                         }
@@ -891,6 +1422,9 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     @Override
     protected void onPause() {
         super.onPause();
+        if (runningInstance == this) {
+            isForeground = false;
+        }
         if (mVideoView.isPlaying()) {
             getCurrentPosition();
             pause();
@@ -900,6 +1434,9 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     @Override
     protected void onResume() {
         super.onResume();
+        runningInstance = this;
+        isRunning = true;
+        isForeground = true;
         if (null != mWakeLock && (!mWakeLock.isHeld())) {
             mWakeLock.acquire();
         }
@@ -926,8 +1463,14 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     protected void onDestroy() {
         super.onDestroy();
 
-        runningInstance = null;
-        isRunning = false;
+        // A replacement player Activity can already be running by the time an older
+        // instance reaches onDestroy().  Do not let the old instance clear the new
+        // instance's remote-control routing state.
+        if (runningInstance == this) {
+            runningInstance = null;
+            isRunning = false;
+            isForeground = false;
+        }
 
         if(mVideoView != null) stop();
         xlDownloadManager.taskInstance().stopTask();
