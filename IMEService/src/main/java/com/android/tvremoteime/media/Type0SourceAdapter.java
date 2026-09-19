@@ -49,6 +49,7 @@ public class Type0SourceAdapter {
         detail.id = item.id;
         detail.name = item.name;
         detail.pic = item.pic;
+        detail.score = item.score;
         detail.remark = item.remark;
         detail.year = item.year;
         detail.type = item.type;
@@ -91,6 +92,7 @@ public class Type0SourceAdapter {
             MediaDetail item = new MediaDetail();
             MediaVodParser.fillCommon(source, item, text(video, "id"), text(video, "name"), text(video, "pic"),
                     text(video, "note"), text(video, "year"), text(video, "type"), text(video, "des"));
+            item.score = text(video, "score");
             parseXmlEpisodes(item, video);
             result.add(item);
         }
