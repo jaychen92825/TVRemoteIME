@@ -2,7 +2,7 @@
 <html lang="zh-cmn-Hans">
 <head>
 	<meta charset="utf-8">
-	<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+	<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 	<title>TapTV</title>
 	<meta name="layoutmode" content="standard">
 	<meta name="theme-color" content="#3ea6ff">
@@ -169,20 +169,18 @@
 	    </div>
 		<div class="media-panel hide" data-tab="media">
 			<div class="media-toolbar" id="mediaToolbar">
-				<div class="media-source-control"><span>源</span><select id="mediaSourceSelect" aria-label="当前媒体源"></select></div>
 				<div class="media-library-nav" id="mediaLibraryNav">
 					<button type="button" class="media-library-tab active" data-section="browse">浏览</button>
 					<button type="button" class="media-library-tab" data-section="history">历史</button>
 					<button type="button" class="media-library-tab" data-section="favorites">收藏</button>
 				</div>
-				<div class="media-toolbar-actions">
-					<button type="button" class="media-icon-btn" id="btnMediaSearchToggle" aria-label="打开搜索" title="搜索"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2" fill="none"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-					<button type="button" class="media-icon-btn" id="btnMediaViewMode" aria-label="切换为列表" title="切换为列表"><svg class="media-view-grid-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><svg class="media-view-list-icon hide" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="4" cy="6" r="1.2" fill="currentColor"/><circle cx="4" cy="12" r="1.2" fill="currentColor"/><circle cx="4" cy="18" r="1.2" fill="currentColor"/></svg></button>
-					<button type="button" class="media-icon-btn" id="btnMediaSettings" aria-label="媒体配置" title="媒体配置"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.1A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.1A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.5 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.15.38.37.72.66 1 .3.28.7.43 1.1.4h.1v4h-.1a1.7 1.7 0 0 0-1.76.6Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-				</div>
-				<div class="media-search-control hide" id="mediaSearchControl">
+				<div class="media-search-control" id="mediaSearchControl">
 					<input type="text" id="mediaSearchInput" placeholder="搜索电影、电视剧" />
 					<button type="button" class="media-icon-btn" id="btnMediaSearch" aria-label="搜索" title="搜索"><svg viewBox="0 0 24 24" width="18" height="18"><circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="1.8" fill="none"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+				</div>
+				<div class="media-toolbar-actions">
+					<button type="button" class="media-icon-btn" id="btnMediaViewMode" aria-label="切换为列表" title="切换为列表"><svg class="media-view-grid-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><svg class="media-view-list-icon hide" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="4" cy="6" r="1.2" fill="currentColor"/><circle cx="4" cy="12" r="1.2" fill="currentColor"/><circle cx="4" cy="18" r="1.2" fill="currentColor"/></svg></button>
+					<button type="button" class="media-icon-btn" id="btnMediaSettings" aria-label="媒体配置" title="媒体配置"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.1A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.1A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.5 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.15.38.37.72.66 1 .3.28.7.43 1.1.4h.1v4h-.1a1.7 1.7 0 0 0-1.76.6Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 				</div>
 			</div>
 			<div class="media-status media-browse-status" id="mediaStatus">未加载配置</div>
@@ -192,6 +190,8 @@
 					<div class="media-subview-title">媒体配置</div>
 				</div>
 				<div class="media-settings-card">
+					<label for="mediaSourceSelect">当前媒体源</label>
+					<div class="media-settings-source"><select id="mediaSourceSelect" aria-label="当前媒体源"></select></div>
 					<label for="mediaConfigUrl">TVBox 配置 URL</label>
 					<div class="media-config-row">
 						<input type="text" id="mediaConfigUrl" placeholder="https://example.com/config.json" />
