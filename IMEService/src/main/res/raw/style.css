@@ -262,12 +262,48 @@ body {
 	gap: 6px;
 	margin-top: 7px;
 	min-width: 0;
+	flex-wrap: wrap;
 }
 
-.media-skip-btn {
+.media-skip-btn,
+.media-skip-adjust {
 	height: 27px;
 	padding: 0 8px;
 	font-size: 11px;
+}
+
+.media-skip-group {
+	display: inline-flex;
+	align-items: center;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-sm);
+	overflow: hidden;
+}
+
+.media-skip-group .media-skip-btn,
+.media-skip-group .media-skip-adjust {
+	border: 0;
+	border-radius: 0;
+}
+
+.media-skip-group .media-skip-adjust {
+	width: 28px;
+	padding: 0;
+	background: var(--color-card-bg);
+	color: var(--color-text-secondary);
+	font: inherit;
+	font-size: 15px;
+	cursor: pointer;
+}
+
+.media-skip-group .media-skip-adjust + .media-skip-btn,
+.media-skip-group .media-skip-btn + .media-skip-adjust {
+	border-left: 1px solid var(--color-border);
+}
+
+.media-skip-adjust:disabled {
+	opacity: .4;
+	cursor: default;
 }
 
 .media-skip-summary {

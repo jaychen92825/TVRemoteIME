@@ -215,8 +215,16 @@
 					<button type="button" class="media-control-btn media-control-primary hide" id="btnMediaResume">继续播放</button>
 				</div>
 				<div class="media-skip-actions">
-					<button type="button" class="media-skip-btn" id="btnMediaMarkOpening">设片头结束</button>
-					<button type="button" class="media-skip-btn" id="btnMediaMarkEnding">设片尾开始</button>
+					<div class="media-skip-group">
+						<button type="button" class="media-skip-adjust" data-marker="opening" data-delta="-1000" aria-label="片头减少 1 秒">−</button>
+						<button type="button" class="media-skip-btn" id="btnMediaMarkOpening">设片头</button>
+						<button type="button" class="media-skip-adjust" data-marker="opening" data-delta="1000" aria-label="片头增加 1 秒">+</button>
+					</div>
+					<div class="media-skip-group">
+						<button type="button" class="media-skip-adjust" data-marker="ending" data-delta="-1000" aria-label="片尾减少 1 秒">−</button>
+						<button type="button" class="media-skip-btn" id="btnMediaMarkEnding">设片尾</button>
+						<button type="button" class="media-skip-adjust" data-marker="ending" data-delta="1000" aria-label="片尾增加 1 秒">+</button>
+					</div>
 					<button type="button" class="media-skip-btn" id="btnMediaClearMarkers">清除跳过</button>
 					<span class="media-skip-summary" id="mediaSkipSummary"></span>
 				</div>

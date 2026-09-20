@@ -816,11 +816,11 @@ function renderMediaPlaybackStatus(data){
 	$('#btnMediaResume').toggleClass('hide', active);
 	$('#btnMediaPrevEpisode').prop('disabled', !data.canPrev);
 	$('#btnMediaNextEpisode').prop('disabled', !data.canNext);
-	$('#btnMediaMarkOpening,#btnMediaMarkEnding').prop('disabled', !active || duration <= 0);
+	$('#btnMediaMarkOpening,#btnMediaMarkEnding,.media-skip-adjust').prop('disabled', !active || duration <= 0);
 	var skip = [];
-	if(Number(data.opening) > 0) skip.push('片头 '+formatPlaybackTime(data.opening));
-	if(Number(data.ending) > 0) skip.push('片尾前 '+formatPlaybackTime(data.ending));
-	$('#mediaSkipSummary').text(skip.join(' · '));
+	if(Number(data.opening) > 0) skip.push('片头跳过 '+formatPlaybackTime(data.opening));
+	if(Number(data.ending) > 0) skip.push('片尾提前 '+formatPlaybackTime(data.ending));
+	$('#mediaSkipSummary').text(skip.length ? skip.join(' · ') : '未设置跳过');
 }
 
 function mediaEpisodeAction(direction){
@@ -832,13 +832,16 @@ function mediaEpisodeAction(direction){
 	}, error:function(){ mediaMessage('切换剧集超时，请稍后重试。'); }});
 }
 
-function mediaMarkerAction(action){
-	$.post('/media/marker', {action:action}, function(data){
+function mediaMarkerAction(action, delta){
+	$.post('/media/marker', {action:action, delta:delta || 0}, function(data){
 		if(data && data.success === false){
 			mediaMessage(data.message || '跳过设置失败');
 			return;
 		}
-		mediaMessage(action === 'clear' ? '已清除片头片尾跳过。' : (action === 'opening' ? '已记住片头结束位置。' : '已记住片尾开始位置。'));
+		if(action === 'clear') mediaMessage('已清除片头片尾跳过。');
+		else if(action === 'opening') mediaMessage('已将当前位置设为片头结束。');
+		else if(action === 'ending') mediaMessage('已将当前位置设为片尾开始。');
+		else mediaMessage('已微调跳过时间。');
 		refreshMediaPlaybackStatus();
 	}, 'json').fail(function(){ mediaMessage('跳过设置失败，请稍后重试。'); });
 }
@@ -927,6 +930,9 @@ $('#btnMediaPlayPause').on('click', function(){
 $('#btnMediaMarkOpening').on('click', function(){ mediaMarkerAction('opening'); });
 $('#btnMediaMarkEnding').on('click', function(){ mediaMarkerAction('ending'); });
 $('#btnMediaClearMarkers').on('click', function(){ mediaMarkerAction('clear'); });
+$('.media-skip-adjust').on('click', function(){
+	mediaMarkerAction($(this).attr('data-marker')+'-adjust', $(this).attr('data-delta'));
+});
 $('#mediaLibraryNav').on('click', '.media-library-tab', function(){
 	var section = $(this).attr('data-section') || 'browse';
 	if(section === 'browse') loadMediaHome();

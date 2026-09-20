@@ -46,6 +46,8 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
     private long lastHistoryWrite;
     private boolean advancing;
     private boolean awaitingPrepared;
+    private boolean outroTriggered;
+    private static final long MIN_PLAYABLE_WINDOW_MS = 5000L;
 
     private MediaPlaybackManager(Context context) {
         this.context = context.getApplicationContext();
@@ -111,24 +113,55 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         }
     }
 
-    public JSONObject updateMarker(String action) throws Exception {
+    public JSONObject updateMarker(String action, String deltaRaw) throws Exception {
         XLVideoPlayActivity.WebPlaybackStatus status = XLVideoPlayActivity.getWebPlaybackStatus();
         synchronized (this) {
             if (session.length() == 0) throw new Exception("当前没有可设置的播放内容");
+            long duration = status.duration > 0 ? status.duration : Math.max(0, session.optLong("duration", 0));
             if ("opening".equals(action)) {
+                if (duration <= 0) throw new Exception("当前视频还没有可用的总时长");
                 session.put("opening", Math.max(0, status.position));
             } else if ("ending".equals(action)) {
-                if (status.duration <= 0) throw new Exception("当前视频还没有可用的总时长");
-                session.put("ending", Math.max(0, status.duration - status.position));
+                if (duration <= 0) throw new Exception("当前视频还没有可用的总时长");
+                session.put("ending", Math.max(0, duration - status.position));
+            } else if ("opening-adjust".equals(action) || "ending-adjust".equals(action)) {
+                long delta = parseMarkerDelta(deltaRaw);
+                String key = "opening-adjust".equals(action) ? "opening" : "ending";
+                session.put(key, Math.max(0, session.optLong(key, 0) + delta));
             } else if ("clear".equals(action)) {
                 session.put("opening", 0);
                 session.put("ending", 0);
             } else {
                 throw new Exception("未知的跳过设置");
             }
+            normalizeMarkersLocked(duration);
             persistLocked(true);
             return cloneObject(session);
         }
+    }
+
+    private long parseMarkerDelta(String deltaRaw) {
+        try {
+            long delta = Long.parseLong(deltaRaw == null ? "0" : deltaRaw);
+            return Math.max(-10000L, Math.min(10000L, delta));
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    private void normalizeMarkersLocked(long durationMs) throws Exception {
+        long opening = Math.max(0, session.optLong("opening", 0));
+        long ending = Math.max(0, session.optLong("ending", 0));
+        if (durationMs > 0) {
+            long maxCombined = Math.max(0, durationMs - MIN_PLAYABLE_WINDOW_MS);
+            opening = Math.min(opening, maxCombined);
+            ending = Math.min(ending, maxCombined);
+            if (opening + ending > maxCombined) {
+                ending = Math.max(0, maxCombined - opening);
+            }
+        }
+        session.put("opening", opening);
+        session.put("ending", ending);
     }
 
     public JSONObject playAdjacent(int delta) throws Exception {
@@ -175,6 +208,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
             try {
                 qualityStore.recordSuccess(session.optString("sourceKey"));
                 session.put("duration", Math.max(0, durationMs));
+                normalizeMarkersLocked(durationMs);
                 long opening = Math.max(0, session.optLong("opening", 0));
                 long resume = Math.max(0, session.optLong("resumePosition", 0));
                 long start = Math.max(opening, resume);
@@ -205,7 +239,8 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
                 long ending = Math.max(0, session.optLong("ending", 0));
                 int knownDuration = session.optInt("duration", durationMs);
                 shouldAdvance = ending > 0 && knownDuration > 0 && positionMs > 0
-                        && positionMs + ending >= knownDuration && hasAdjacentLocked(1) && !advancing;
+                        && positionMs + ending >= knownDuration && hasAdjacentLocked(1) && !advancing && !outroTriggered;
+                if (shouldAdvance) outroTriggered = true;
             } catch (Exception ignored) {
             }
         }
@@ -367,6 +402,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         next.put("updatedAt", System.currentTimeMillis());
         session = next;
         awaitingPrepared = true;
+        outroTriggered = false;
         lastHistoryWrite = 0;
         persistLocked(true);
     }

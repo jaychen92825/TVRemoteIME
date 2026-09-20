@@ -76,7 +76,7 @@ public class MediaRequestProcesser implements RequestProcesser {
                 if ("/media/play".equals(fileName)) return playResponse(params);
                 if ("/media/resume".equals(fileName)) return ok(playbackManager.resumeCurrent());
                 if ("/media/episode".equals(fileName)) return ok(playbackManager.playAdjacent(parseDirection(params.get("direction"))));
-                if ("/media/marker".equals(fileName)) return ok(playbackManager.updateMarker(params.get("action")));
+                if ("/media/marker".equals(fileName)) return ok(playbackManager.updateMarker(params.get("action"), params.get("delta")));
                 if ("/media/favorite".equals(fileName)) return favoriteResponse(params);
                 if ("/media/history/clear".equals(fileName)) return clearHistoryResponse();
             }
