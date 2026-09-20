@@ -169,7 +169,7 @@ body {
 }
 
 .media-playback-controls.expanded {
-	width: min(460px, calc(100vw - 44px));
+	width: min(430px, calc(100vw - 44px));
 	box-shadow: 0 10px 32px rgba(0,0,0,.18);
 }
 
@@ -209,9 +209,13 @@ body {
 
 .media-playback-compact-copy {
 	display: none;
-	grid-template-columns: auto minmax(0, 1fr) auto;
-	align-items: baseline;
-	gap: 5px;
+	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-areas:
+		"title episode"
+		"label label";
+	align-items: center;
+	column-gap: 6px;
+	row-gap: 1px;
 	min-width: 0;
 	width: 100%;
 }
@@ -221,6 +225,7 @@ body {
 }
 
 .media-playback-compact-label {
+	grid-area: label;
 	font-size: 10px;
 	font-weight: 600;
 	color: var(--color-text-secondary);
@@ -228,6 +233,7 @@ body {
 }
 
 .media-playback-compact-title {
+	grid-area: title;
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -237,6 +243,7 @@ body {
 }
 
 .media-playback-compact-episode {
+	grid-area: episode;
 	font-size: 11px;
 	color: var(--color-text-secondary);
 	white-space: nowrap;
@@ -261,7 +268,7 @@ body {
 .media-playback-expanded {
 	display: none;
 	max-height: min(560px, calc(100vh - 110px));
-	padding: 12px;
+	padding: 14px;
 	overflow-y: auto;
 	border-top: 1px solid var(--color-border);
 }
@@ -281,25 +288,32 @@ body {
 
 .media-playback-head {
 	justify-content: space-between;
-	gap: 12px;
-	margin-bottom: 8px;
+	align-items: flex-start;
+	gap: 14px;
+	margin-bottom: 12px;
 }
 
 .media-playback-label {
+	grid-area: label;
 	font-size: 12px;
 	font-weight: 600;
 	color: var(--color-text-secondary);
 }
 
 .media-now-playing {
-	display: flex;
-	align-items: baseline;
-	gap: 6px;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-areas:
+		"title episode"
+		"label label";
+	column-gap: 7px;
+	row-gap: 2px;
 	min-width: 0;
 	overflow: hidden;
 }
 
 .media-playback-title {
+	grid-area: title;
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -310,20 +324,22 @@ body {
 }
 
 .media-playback-episode {
+	grid-area: episode;
 	flex: 0 0 auto;
 	font-size: 12px;
 	color: var(--color-text-secondary);
 }
 
 .media-speed-control {
-	gap: 6px;
+	flex: 0 0 auto;
+	gap: 5px;
 	font-size: 12px;
 	color: var(--color-text-secondary);
 }
 
 .media-speed-control select {
-	height: 30px;
-	padding: 0 7px;
+	height: 28px;
+	padding: 0 6px;
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius-sm);
 	background: var(--color-card-bg);
@@ -333,6 +349,7 @@ body {
 
 .media-playback-progress {
 	gap: 8px;
+	margin-bottom: 12px;
 	font-size: 11px;
 	font-variant-numeric: tabular-nums;
 	color: var(--color-text-secondary);
@@ -346,12 +363,14 @@ body {
 }
 
 .media-playback-actions {
-	gap: 6px;
-	margin-top: 9px;
+	justify-content: center;
+	gap: 10px;
+	margin: 0;
 }
 
 .media-control-icon {
-	width: 34px;
+	width: 38px;
+	height: 38px;
 	padding: 0;
 	display: inline-flex;
 	align-items: center;
@@ -362,12 +381,21 @@ body {
 	display: none;
 }
 
+.media-playback-actions .media-control-icon.media-control-primary {
+	width: 42px;
+	height: 42px;
+	background: var(--color-primary);
+	color: #fff;
+}
+
 .media-playback-queue {
 	display: flex;
 	align-items: center;
 	gap: 7px;
 	min-width: 0;
-	margin-top: 8px;
+	margin-top: 14px;
+	padding-top: 12px;
+	border-top: 1px solid var(--color-border);
 }
 
 .media-queue-label {
@@ -436,9 +464,52 @@ body {
 
 .media-skip-actions {
 	gap: 6px;
-	margin-top: 7px;
+	margin-top: 10px;
 	min-width: 0;
 	flex-wrap: wrap;
+}
+
+.media-playback-tools {
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid var(--color-border);
+}
+
+.media-playback-tools summary {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 30px;
+	color: var(--color-text-secondary);
+	font-size: 11px;
+	cursor: pointer;
+	list-style: none;
+}
+
+.media-playback-tools summary::-webkit-details-marker {
+	display: none;
+}
+
+.media-playback-tools-icon,
+.media-playback-tools-chevron {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+}
+
+.media-playback-tools .media-skip-summary {
+	flex: 1;
+	min-width: 0;
+	text-align: right;
+}
+
+.media-playback-tools-chevron {
+	transition: transform .16s ease;
+}
+
+.media-playback-tools[open] .media-playback-tools-chevron {
+	transform: rotate(180deg);
 }
 
 .media-skip-btn,
@@ -1307,14 +1378,19 @@ body {
 
 	.media-playback-compact-copy {
 		display: grid;
-		grid-template-columns: auto minmax(0, 1fr) auto;
-		align-items: baseline;
-		gap: 5px;
+		grid-template-columns: minmax(0, 1fr) auto;
+		grid-template-areas:
+			"title episode"
+			"label label";
+		align-items: center;
+		column-gap: 6px;
+		row-gap: 1px;
 		min-width: 0;
 		width: 100%;
 	}
 
 	.media-playback-compact-label {
+		grid-area: label;
 		font-size: 10px;
 		font-weight: 600;
 		color: var(--color-text-secondary);
@@ -1322,6 +1398,7 @@ body {
 	}
 
 	.media-playback-compact-title {
+		grid-area: title;
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -1331,6 +1408,7 @@ body {
 	}
 
 	.media-playback-compact-episode {
+		grid-area: episode;
 		font-size: 11px;
 		color: var(--color-text-secondary);
 		white-space: nowrap;
@@ -1383,7 +1461,7 @@ body {
 	.media-playback-expanded {
 		display: none;
 		max-height: calc(100dvh - 142px - env(safe-area-inset-bottom));
-		padding: 10px;
+		padding: 12px;
 		overflow-y: auto;
 		border-top: 1px solid var(--color-border);
 	}
@@ -1393,20 +1471,21 @@ body {
 	}
 
 	.media-playback-head {
-		margin-bottom: 7px;
-	}
-
-	.media-playback-head {
 		align-items: flex-start;
+		margin-bottom: 10px;
 	}
 
 	.media-now-playing {
-		flex-wrap: wrap;
+		grid-template-columns: minmax(0, 1fr) auto;
+		grid-template-areas:
+			"title episode"
+			"label label";
+		column-gap: 6px;
 		row-gap: 2px;
 	}
 
 	.media-playback-title {
-		max-width: 48vw;
+		max-width: none;
 	}
 
 	.media-playback-actions,
@@ -1415,26 +1494,29 @@ body {
 	}
 
 	.media-playback-actions {
-		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		display: flex;
+		justify-content: center;
+		gap: 12px;
 	}
 
 	.media-playback-actions .media-control-btn {
-		width: 100%;
-		height: 36px;
-		padding: 0 6px;
+		width: 44px;
+		height: 44px;
+		padding: 0;
 	}
 
 	.media-playback-actions .media-control-icon {
-		gap: 6px;
+		gap: 0;
 	}
 
 	.media-control-label {
-		display: inline;
+		display: none;
 	}
 
 	#btnMediaResume {
-		grid-column: 1 / -1;
+		width: auto;
+		min-width: 120px;
+		padding: 0 14px;
 	}
 
 	.media-speed-control select {
@@ -1444,6 +1526,10 @@ body {
 	.media-skip-btn,
 	.media-skip-adjust {
 		min-height: 32px;
+	}
+
+	.media-playback-tools summary {
+		min-height: 38px;
 	}
 
 	.media-state {
