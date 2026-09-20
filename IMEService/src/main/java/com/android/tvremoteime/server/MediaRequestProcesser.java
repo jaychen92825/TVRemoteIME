@@ -147,7 +147,14 @@ public class MediaRequestProcesser implements RequestProcesser {
     private NanoHTTPD.Response homeResponse(String sourceKey) throws Exception {
         MediaSource source = requestedSource(sourceKey);
         if (source == null) throw new Exception("这个配置没有可用的点播源");
-        MediaBrowseResult result = home(source);
+        MediaBrowseResult result;
+        try {
+            result = home(source);
+            qualityStore.recordSuccess(source.key);
+        } catch (Exception e) {
+            qualityStore.recordFailure(source.key);
+            throw e;
+        }
         JSONObject obj = new JSONObject();
         obj.put("sourceKey", source.key);
         obj.put("sourceName", source.name);
@@ -165,7 +172,13 @@ public class MediaRequestProcesser implements RequestProcesser {
         MediaSource source = requireSource(sourceKey);
         JSONObject obj = new JSONObject();
         JSONArray items = new JSONArray();
-        addItems(items, category(source, id, page));
+        try {
+            addItems(items, category(source, id, page));
+            qualityStore.recordSuccess(source.key);
+        } catch (Exception e) {
+            qualityStore.recordFailure(source.key);
+            throw e;
+        }
         obj.put("sourceKey", source.key);
         obj.put("sourceName", source.name);
         obj.put("categoryId", id);
@@ -255,7 +268,9 @@ public class MediaRequestProcesser implements RequestProcesser {
             if (!source.isType3Csp()) throw new Exception("这个媒体源不支持 spider 图片代理");
             image = new Type3SourceAdapter(context, source).proxyImage(url);
         } else {
-            image = com.android.tvremoteime.media.MediaHttp.getBinary(url, configManager.getConfig());
+            MediaSource source = TextUtils.isEmpty(sourceKey) ? null : configManager.getSource(sourceKey);
+            image = com.android.tvremoteime.media.MediaHttp.getBinary(
+                    url, source == null ? null : source.headers, configManager.getConfig());
         }
         NanoHTTPD.Response response = NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, image.mimeType,
                 new ByteArrayInputStream(image.data), image.data.length);

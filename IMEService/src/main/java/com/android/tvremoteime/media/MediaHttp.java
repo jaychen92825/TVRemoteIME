@@ -51,6 +51,12 @@ public class MediaHttp {
     private static final Pattern IMAGE_HEADER_MARKER = Pattern.compile("@([A-Za-z0-9_-]+)=");
     private static final Pattern IMAGE_MIME = Pattern.compile("image/[a-z0-9.+-]+", Pattern.CASE_INSENSITIVE);
     private static final int MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+    private static final int MAX_IMAGE_CACHE_BYTES = 12 * 1024 * 1024;
+    private static final int MAX_IMAGE_FETCH_ATTEMPTS = 2;
+    private static final Object IMAGE_CACHE_LOCK = new Object();
+    private static final LinkedHashMap<String, MediaBinary> IMAGE_CACHE =
+            new LinkedHashMap<String, MediaBinary>(32, 0.75f, true);
+    private static int imageCacheBytes;
     private static final X509TrustManager MEDIA_TRUST_MANAGER = new X509TrustManager() {
         @Override
         public void checkClientTrusted(X509Certificate[] chain, String authType) {
@@ -210,10 +216,14 @@ public class MediaHttp {
     }
 
     public static MediaBinary getBinary(String uri) throws Exception {
-        return getBinary(uri, null);
+        return getBinary(uri, null, null);
     }
 
     public static MediaBinary getBinary(String uri, JSONObject config) throws Exception {
+        return getBinary(uri, null, config);
+    }
+
+    public static MediaBinary getBinary(String uri, Map<String, String> sourceHeaders, JSONObject config) throws Exception {
         MediaImageRequest imageRequest = parseImageRequest(uri);
         if (imageRequest.url.regionMatches(true, 0, "data:", 0, 5)) {
             return decodeDataImage(imageRequest.url);
@@ -223,28 +233,66 @@ public class MediaHttp {
             throw new IOException("不支持的图片地址");
         }
 
+        String cacheKey = imageCacheKey(imageRequest, sourceHeaders, config);
+        MediaBinary cached = getCachedImage(cacheKey);
+        if (cached != null) return cached;
+
         Request.Builder request = new Request.Builder()
                 .url(url)
                 .get()
                 .header("Accept", "image/*,*/*")
                 .header("Accept-Encoding", "identity")
                 .header("User-Agent", DEFAULT_USER_AGENT);
+        applyRequestHeaders(request, sourceHeaders);
+        // Match config request behavior: global host rules override SiteApi headers.
         applyConfigHeaders(request, url.getHost(), config);
+        // Explicit artwork suffix headers are part of the image URL itself and stay most specific.
         for (Map.Entry<String, String> entry : imageRequest.headers.entrySet()) {
             setHeaderIfValid(request, entry.getKey(), entry.getValue());
         }
 
         OkHttpClient client = getImageClient(config);
+        MediaBinary result = fetchImage(client, request.build());
+        putCachedImage(cacheKey, result);
+        return result;
+    }
 
-        Response response = null;
+    private static MediaBinary fetchImage(OkHttpClient client, Request request) throws IOException {
+        IOException lastError = null;
+        for (int attempt = 0; attempt < MAX_IMAGE_FETCH_ATTEMPTS; attempt++) {
+            Response response = null;
+            try {
+                response = client.newCall(request).execute();
+                if (!response.isSuccessful()) {
+                    int code = response.code();
+                    IOException error = new IOException("HTTP " + code);
+                    if (attempt + 1 < MAX_IMAGE_FETCH_ATTEMPTS && isTransientImageStatus(code)) {
+                        lastError = error;
+                        continue;
+                    }
+                    if (!isTransientImageStatus(code)) throw new PermanentImageException(error.getMessage(), error);
+                    throw error;
+                }
+                return readImageResponse(response);
+            } catch (PermanentImageException e) {
+                throw e;
+            } catch (IOException e) {
+                lastError = e;
+                if (attempt + 1 >= MAX_IMAGE_FETCH_ATTEMPTS) throw e;
+            } finally {
+                if (response != null) response.close();
+            }
+        }
+        throw lastError == null ? new IOException("图片下载失败") : lastError;
+    }
+
+    private static MediaBinary readImageResponse(Response response) throws IOException {
         try {
-            response = client.newCall(request.build()).execute();
-            if (!response.isSuccessful()) throw new IOException("HTTP " + response.code());
             ResponseBody body = response.body();
             if (body == null) throw new IOException("图片响应为空");
             InputStream input = new BufferedInputStream(body.byteStream());
             long bodyLength = body.contentLength();
-            if (bodyLength > MAX_IMAGE_BYTES) throw new IOException("图片文件过大");
+            if (bodyLength > MAX_IMAGE_BYTES) throw new PermanentImageException("图片文件过大");
             int capacity = bodyLength > 0 && bodyLength <= MAX_IMAGE_BYTES ? (int) bodyLength : 4096;
             ByteArrayOutputStream output = new ByteArrayOutputStream(Math.max(4096, capacity));
             try {
@@ -253,12 +301,16 @@ public class MediaHttp {
                 int total = 0;
                 while ((read = input.read(buffer)) != -1) {
                     total += read;
-                    if (total > MAX_IMAGE_BYTES) throw new IOException("图片文件过大");
+                    if (total > MAX_IMAGE_BYTES) throw new PermanentImageException("图片文件过大");
                     output.write(buffer, 0, read);
                 }
                 MediaBinary result = new MediaBinary();
                 result.data = output.toByteArray();
-                result.mimeType = resolveImageMime(body.contentType() == null ? null : body.contentType().toString(), result.data);
+                try {
+                    result.mimeType = resolveImageMime(body.contentType() == null ? null : body.contentType().toString(), result.data);
+                } catch (IOException e) {
+                    throw new PermanentImageException(e.getMessage(), e);
+                }
                 return result;
             } finally {
                 try {
@@ -267,8 +319,65 @@ public class MediaHttp {
                     input.close();
                 }
             }
-        } finally {
-            if (response != null) response.close();
+        } catch (PermanentImageException e) {
+            throw e;
+        }
+    }
+
+    private static boolean isTransientImageStatus(int code) {
+        return code == 408 || code == 425 || code == 429 || code >= 500;
+    }
+
+    private static void applyRequestHeaders(Request.Builder request, Map<String, String> headers) {
+        if (headers == null || headers.isEmpty()) return;
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            setHeaderIfValid(request, normalizeHeaderName(entry.getKey()), entry.getValue());
+        }
+    }
+
+    private static String imageCacheKey(MediaImageRequest imageRequest, Map<String, String> sourceHeaders, JSONObject config) {
+        StringBuilder key = new StringBuilder(imageRequest.url);
+        appendCacheHeaders(key, sourceHeaders);
+        appendCacheHeaders(key, imageRequest.headers);
+        if (config != null) key.append("\nconfig=").append(config.toString());
+        return key.toString();
+    }
+
+    private static void appendCacheHeaders(StringBuilder key, Map<String, String> headers) {
+        if (headers == null || headers.isEmpty()) return;
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            key.append('\n').append(normalizeHeaderName(entry.getKey())).append('=').append(entry.getValue());
+        }
+    }
+
+    private static MediaBinary getCachedImage(String key) {
+        synchronized (IMAGE_CACHE_LOCK) {
+            return IMAGE_CACHE.get(key);
+        }
+    }
+
+    private static void putCachedImage(String key, MediaBinary image) {
+        if (image == null || image.data == null || image.data.length == 0 || image.data.length > MAX_IMAGE_CACHE_BYTES) return;
+        synchronized (IMAGE_CACHE_LOCK) {
+            MediaBinary previous = IMAGE_CACHE.put(key, image);
+            if (previous != null && previous.data != null) imageCacheBytes -= previous.data.length;
+            imageCacheBytes += image.data.length;
+            Iterator<Map.Entry<String, MediaBinary>> iterator = IMAGE_CACHE.entrySet().iterator();
+            while (imageCacheBytes > MAX_IMAGE_CACHE_BYTES && iterator.hasNext()) {
+                MediaBinary removed = iterator.next().getValue();
+                if (removed != null && removed.data != null) imageCacheBytes -= removed.data.length;
+                iterator.remove();
+            }
+        }
+    }
+
+    private static class PermanentImageException extends IOException {
+        PermanentImageException(String message) {
+            super(message);
+        }
+
+        PermanentImageException(String message, Throwable cause) {
+            super(message, cause);
         }
     }
 
