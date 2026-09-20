@@ -601,6 +601,30 @@ body {
 	padding: 12px 0;
 }
 
+.media-pagination {
+	display: flex;
+	justify-content: center;
+	padding: 16px 0 4px;
+}
+
+.media-load-more {
+	min-width: 112px;
+	min-height: 38px;
+	padding: 0 16px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-sm);
+	background: var(--color-card-bg);
+	color: var(--color-text-secondary);
+	font: inherit;
+	font-size: 13px;
+	cursor: pointer;
+}
+
+.media-load-more:disabled {
+	opacity: .6;
+	cursor: default;
+}
+
 .media-state {
 	min-height: 128px;
 	box-sizing: border-box;
@@ -1227,7 +1251,8 @@ body {
 	.media-route,
 	.media-episode,
 	.media-back-btn,
-	.media-resume-btn {
+	.media-resume-btn,
+	.media-load-more {
 		min-height: 44px;
 	}
 

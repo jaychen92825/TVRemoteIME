@@ -30,6 +30,13 @@ var mediaPlaybackHasSession = false;
 var mediaSearchAllItems = [];
 var mediaSearchFiltersAvailable = false;
 var mediaSearchStatusBase = '';
+var mediaPage = 1;
+var mediaPageId = '';
+var mediaPageMode = '';
+var mediaPageName = '';
+var mediaLoadingMore = false;
+var mediaHasMore = false;
+var mediaPaginationObserver = null;
 try {
 	mediaDisplayMode = localStorage.getItem('mediaDisplayMode') === 'list' ? 'list' : 'grid';
 } catch(e) {}
@@ -325,6 +332,7 @@ function showMediaBrowse(restorePosition){
 	mediaView = 'browse';
 	$('.media-panel').removeClass('media-detail-active media-settings-active');
 	$('#mediaToolbar,#mediaLibraryNav,#mediaStatus,#mediaCategories,#mediaGrid').removeClass('hide');
+	$('#mediaPagination').toggleClass('hide', !mediaHasMore);
 	$('#mediaCategories').toggleClass('hide', mediaSection !== 'browse');
 	$('#mediaFilters').toggleClass('hide', !(mediaSection === 'browse' && mediaSearchFiltersAvailable));
 	$('#mediaDetail,#mediaSettingsView').addClass('hide');
@@ -337,7 +345,7 @@ function showMediaDetailView(){
 	rememberMediaBrowsePosition();
 	mediaView = 'detail';
 	$('.media-panel').removeClass('media-settings-active').addClass('media-detail-active');
-	$('#mediaToolbar,#mediaLibraryNav,#mediaCategories,#mediaFilters,#mediaGrid,#mediaSettingsView').addClass('hide');
+	$('#mediaToolbar,#mediaLibraryNav,#mediaCategories,#mediaFilters,#mediaGrid,#mediaSettingsView,#mediaPagination').addClass('hide');
 	$('#mediaStatus,#mediaDetail').removeClass('hide');
 	updateContainerWidth();
 	$('.container').scrollTop(0);
@@ -346,7 +354,7 @@ function showMediaSettingsView(){
 	rememberMediaBrowsePosition();
 	mediaView = 'settings';
 	$('.media-panel').removeClass('media-detail-active').addClass('media-settings-active');
-	$('#mediaToolbar,#mediaLibraryNav,#mediaStatus,#mediaCategories,#mediaFilters,#mediaGrid,#mediaDetail').addClass('hide');
+	$('#mediaToolbar,#mediaLibraryNav,#mediaStatus,#mediaCategories,#mediaFilters,#mediaGrid,#mediaDetail,#mediaPagination').addClass('hide');
 	$('#mediaSettingsView').removeClass('hide');
 	updateContainerWidth();
 	$('.container').scrollTop(0);
@@ -501,6 +509,7 @@ function showMediaReady(){
 	}
 }
 function loadMediaHome(){
+	resetMediaPagination();
 	mediaFolderStack = [];
 	currentMediaCategoryId = '';
 	selectMediaSection('browse');
@@ -545,6 +554,7 @@ function loadMediaCategory(id){
 		return;
 	}
 	mediaFolderStack = [];
+	resetMediaPagination('category', id, '');
 	currentMediaCategoryId = id;
 	showMediaBrowse(false);
 	hideMediaSearchFilters();
@@ -558,8 +568,12 @@ function loadMediaCategory(id){
 			$('#mediaGrid').html(mediaStateHtml('分类加载失败', data.message || '可以稍后重试。', 'category', '重试'));
 			return;
 		}
-		mediaMessage((data.sourceName || '当前源')+' · '+(data.items || []).length+' 部内容');
-		renderMediaGrid(data.items || []);
+		var items = data.items || [];
+		mediaPage = 1;
+		mediaHasMore = items.length > 0;
+		mediaMessage((data.sourceName || '当前源')+' · '+items.length+' 部内容');
+		renderMediaGrid(items);
+		updateMediaPagination();
 	}, error:function(){
 		mediaMessage('分类加载超时，请稍后重试。');
 		$('#mediaGrid').html(mediaStateHtml('分类暂时没有响应', '可以稍后重试。', 'category', '重试'));
@@ -571,6 +585,7 @@ function loadMediaFolder(sourceKey, id, name, push){
 	showMediaBrowse(false);
 	hideMediaSearchFilters();
 	currentMediaSourceKey = sourceKey || currentMediaSourceKey;
+	resetMediaPagination('folder', id, name || '文件夹');
 	$('#mediaSourceSelect').val(currentMediaSourceKey);
 	if(push !== false) mediaFolderStack.push({sourceKey:currentMediaSourceKey, id:id, name:name || '文件夹'});
 	$('#mediaCategories').html('<div class="media-category media-folder-back">‹ 返回</div><div class="media-category active">'+escapeHtml(name || '文件夹')+'</div>');
@@ -581,8 +596,12 @@ function loadMediaFolder(sourceKey, id, name, push){
 			$('#mediaGrid').html(mediaStateHtml('目录加载失败', data.message || '可以稍后重试。', 'folder', '重试'));
 			return;
 		}
-		mediaMessage((data.sourceName || '当前源')+' · '+escapeHtml(name || '目录')+' · '+(data.items || []).length+' 项');
-		renderMediaGrid(data.items || []);
+		var items = data.items || [];
+		mediaPage = 1;
+		mediaHasMore = items.length > 0;
+		mediaMessage((data.sourceName || '当前源')+' · '+escapeHtml(name || '目录')+' · '+items.length+' 项');
+		renderMediaGrid(items);
+		updateMediaPagination();
 	}, error:function(){
 		mediaMessage('目录加载超时，请稍后重试。');
 		$('#mediaGrid').html(mediaStateHtml('目录暂时没有响应', '可以稍后重试。', 'folder', '重试'));
@@ -600,6 +619,75 @@ function closeMediaFolder(){
 }
 function cssAttributeValue(value){
 	return String(value == null ? '' : value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+function resetMediaPagination(mode, id, name){
+	mediaPage = 1;
+	mediaPageMode = mode || '';
+	mediaPageId = id || '';
+	mediaPageName = name || '';
+	mediaLoadingMore = false;
+	mediaHasMore = false;
+	$('#mediaPagination').addClass('hide');
+	$('#btnMediaLoadMore').prop('disabled', false).text('加载更多');
+}
+function mediaItemKey(item){
+	return [item && item.sourceKey || '', item && item.id || '', item && item.folder ? '1' : '0'].join('|');
+}
+function appendUniqueMediaItems(items){
+	var existing = {};
+	for(var i=0;i<renderedMediaItems.length;i++) existing[mediaItemKey(renderedMediaItems[i])] = true;
+	var added = 0;
+	for(var j=0;j<items.length;j++){
+		var key = mediaItemKey(items[j]);
+		if(existing[key]) continue;
+		existing[key] = true;
+		renderedMediaItems.push(items[j]);
+		added++;
+	}
+	return added;
+}
+function updateMediaPagination(){
+	var visible = mediaView === 'browse' && mediaSection === 'browse' && mediaHasMore && !!mediaPageMode;
+	$('#mediaPagination').toggleClass('hide', !visible);
+	$('#btnMediaLoadMore').prop('disabled', mediaLoadingMore).text(mediaLoadingMore ? '正在加载…' : '加载更多');
+}
+function loadMoreMedia(){
+	if(mediaLoadingMore || !mediaHasMore || !mediaPageMode || !mediaPageId) return;
+	mediaLoadingMore = true;
+	updateMediaPagination();
+	var nextPage = mediaPage + 1;
+	$.ajax({url:'/media/category', data:{sourceKey:currentMediaSourceKey,id:mediaPageId,page:String(nextPage)}, dataType:'json', timeout:65000, success:function(data){
+		if(data && data.success === false){
+			mediaLoadingMore = false;
+			updateMediaPagination();
+			mediaMessage('加载更多失败：'+(data.message || '未知错误'));
+			return;
+		}
+		var items = data.items || [];
+		var added = appendUniqueMediaItems(items);
+		if(items.length === 0 || added === 0){
+			mediaHasMore = false;
+		}else{
+			mediaPage = nextPage;
+		}
+		mediaLoadingMore = false;
+		renderMediaGrid(renderedMediaItems);
+		updateMediaPagination();
+		var label = mediaPageMode === 'folder' ? (mediaPageName || '目录') : '当前分类';
+		mediaMessage(label+' · 已加载 '+renderedMediaItems.length+' 项'+(mediaHasMore ? '' : ' · 已到底'));
+	}, error:function(){
+		mediaLoadingMore = false;
+		updateMediaPagination();
+		mediaMessage('加载更多超时，请重试。');
+	}});
+}
+function initMediaPaginationObserver(){
+	if(!window.IntersectionObserver || mediaPaginationObserver) return;
+	mediaPaginationObserver = new IntersectionObserver(function(entries){
+		if(entries.length && entries[0].isIntersecting) loadMoreMedia();
+	}, {root:document.querySelector('.container'), rootMargin:'0px 0px 280px 0px'});
+	var target = document.getElementById('mediaPagination');
+	if(target) mediaPaginationObserver.observe(target);
 }
 function renderMediaGrid(items){
 	renderedMediaItems = items || [];
@@ -644,6 +732,7 @@ function selectMediaSection(section){
 	$('#mediaLibraryNav .media-library-tab[data-section="'+cssAttributeValue(mediaSection)+'"]').addClass('active');
 }
 function loadMediaLibrary(section){
+	resetMediaPagination();
 	mediaFolderStack = [];
 	currentMediaCategoryId = '';
 	selectMediaSection(section);
@@ -670,6 +759,7 @@ function searchMedia(){
 		showMediaReady();
 		return;
 	}
+	resetMediaPagination();
 	selectMediaSection('browse');
 	mediaFolderStack = [];
 	currentMediaCategoryId = '';
@@ -1018,6 +1108,8 @@ $('#mediaSourceSelect').on('change', function(){
 	currentMediaSourceKey = $(this).val() || '';
 	loadMediaHome();
 });
+$('#btnMediaLoadMore').on('click', loadMoreMedia);
+initMediaPaginationObserver();
 $('#mediaCategories').on('click', '.media-category', function(){
 	if($(this).hasClass('media-folder-back')){
 		closeMediaFolder();
