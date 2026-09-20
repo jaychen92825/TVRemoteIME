@@ -816,6 +816,14 @@ function renderMediaPlaybackStatus(data){
 	$('#btnMediaResume').toggleClass('hide', active);
 	$('#btnMediaPrevEpisode').prop('disabled', !data.canPrev);
 	$('#btnMediaNextEpisode').prop('disabled', !data.canNext);
+	var queue = data.queue || [];
+	var queueHtml = [];
+	for(var i=0;i<queue.length;i++){
+		queueHtml.push('<button type="button" class="media-queue-item'+(queue[i].current ? ' current' : '')+'" data-index="'+Number(queue[i].index)+'"'+(queue[i].current ? ' disabled' : '')+'>'+escapeHtml(queue[i].name || ('第 '+(Number(queue[i].index)+1)+' 集'))+'</button>');
+	}
+	$('#mediaQueueItems').html(queueHtml.join(''));
+	$('#mediaPlaybackQueue').toggleClass('hide', queue.length <= 1);
+	$('#btnMediaNextEpisode').attr('title', data.nextEpisode ? '下一集：'+data.nextEpisode : '下一集');
 	$('#btnMediaMarkOpening,#btnMediaMarkEnding,.media-skip-adjust').prop('disabled', !active || duration <= 0);
 	var skip = [];
 	if(Number(data.opening) > 0) skip.push('片头跳过 '+formatPlaybackTime(data.opening));
@@ -828,6 +836,15 @@ function mediaEpisodeAction(direction){
 	$.ajax({url:'/media/episode', type:'POST', data:{direction:direction}, dataType:'json', timeout:45000, success:function(data){
 		if(data && data.success === false) mediaMessage(data.message || '切换剧集失败');
 		else mediaMessage('已切换到 '+(data.episode || (direction === 'prev' ? '上一集' : '下一集'))+'。');
+		refreshMediaPlaybackStatus();
+	}, error:function(){ mediaMessage('切换剧集超时，请稍后重试。'); }});
+}
+
+function mediaQueueEpisode(index){
+	mediaMessage('正在切换剧集…');
+	$.ajax({url:'/media/episode', type:'POST', data:{index:index}, dataType:'json', timeout:45000, success:function(data){
+		if(data && data.success === false) mediaMessage(data.message || '切换剧集失败');
+		else mediaMessage('已切换到 '+(data.episode || '所选剧集')+'。');
 		refreshMediaPlaybackStatus();
 	}, error:function(){ mediaMessage('切换剧集超时，请稍后重试。'); }});
 }
@@ -932,6 +949,9 @@ $('#btnMediaMarkEnding').on('click', function(){ mediaMarkerAction('ending'); })
 $('#btnMediaClearMarkers').on('click', function(){ mediaMarkerAction('clear'); });
 $('.media-skip-adjust').on('click', function(){
 	mediaMarkerAction($(this).attr('data-marker')+'-adjust', $(this).attr('data-delta'));
+});
+$('#mediaQueueItems').on('click', '.media-queue-item:not(.current)', function(){
+	mediaQueueEpisode(Number($(this).attr('data-index')));
 });
 $('#mediaLibraryNav').on('click', '.media-library-tab', function(){
 	var section = $(this).attr('data-section') || 'browse';

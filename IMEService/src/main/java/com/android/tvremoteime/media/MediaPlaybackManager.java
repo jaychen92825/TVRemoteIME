@@ -97,11 +97,17 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
             result.put("flag", current.optString("flag"));
             result.put("playId", current.optString("playId"));
             int episodeIndex = current.optInt("episodeIndex", -1);
-            int episodeCount = current.optJSONArray("episodes") == null ? 0 : current.optJSONArray("episodes").length();
+            JSONArray episodes = current.optJSONArray("episodes");
+            int episodeCount = episodes == null ? 0 : episodes.length();
             result.put("episodeIndex", episodeIndex);
             result.put("episodeCount", episodeCount);
             result.put("canPrev", episodeIndex > 0);
             result.put("canNext", episodeIndex >= 0 && episodeIndex + 1 < episodeCount);
+            result.put("queue", buildQueue(episodes, episodeIndex));
+            if (episodes != null && episodeIndex >= 0 && episodeIndex + 1 < episodes.length()) {
+                JSONObject next = episodes.optJSONObject(episodeIndex + 1);
+                if (next != null) result.put("nextEpisode", next.optString("name"));
+            }
             result.put("opening", current.optLong("opening", 0));
             result.put("ending", current.optLong("ending", 0));
             if (!result.optBoolean("active")) {
@@ -167,6 +173,17 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
     public JSONObject playAdjacent(int delta) throws Exception {
         PlaybackTarget target = adjacentTarget(delta);
         if (target == null) throw new Exception(delta < 0 ? "已经是第一集" : "已经是最后一集");
+        return playQueueTarget(target);
+    }
+
+    public JSONObject playEpisodeAt(int index) throws Exception {
+        JSONObject current = snapshot();
+        PlaybackTarget target = queueTarget(current, index);
+        if (target == null) throw new Exception("找不到这个剧集");
+        return playQueueTarget(target);
+    }
+
+    private JSONObject playQueueTarget(PlaybackTarget target) throws Exception {
         activateTarget(target, null, false);
         VideoPlayHelper.playUrl(context, target.url, 0, false, displayTitle(target));
         JSONObject result = new JSONObject();
@@ -176,6 +193,23 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         result.put("sourceName", target.source.name);
         result.put("fallback", target.fallback);
         return result;
+    }
+
+    private JSONArray buildQueue(JSONArray episodes, int currentIndex) throws Exception {
+        JSONArray queue = new JSONArray();
+        if (episodes == null || episodes.length() == 0) return queue;
+        int start = Math.max(0, currentIndex - 1);
+        int end = Math.min(episodes.length(), Math.max(start + 1, currentIndex + 5));
+        for (int i = start; i < end; i++) {
+            JSONObject episode = episodes.optJSONObject(i);
+            if (episode == null) continue;
+            JSONObject item = new JSONObject();
+            item.put("index", i);
+            item.put("name", episode.optString("name"));
+            item.put("current", i == currentIndex);
+            queue.put(item);
+        }
+        return queue;
     }
 
     public JSONObject resumeCurrent() throws Exception {
@@ -412,8 +446,12 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         synchronized (this) {
             current = cloneObject(session);
         }
-        JSONArray episodes = current.optJSONArray("episodes");
         int nextIndex = current.optInt("episodeIndex", -1) + delta;
+        return queueTarget(current, nextIndex);
+    }
+
+    private PlaybackTarget queueTarget(JSONObject current, int nextIndex) throws Exception {
+        JSONArray episodes = current.optJSONArray("episodes");
         if (episodes == null || nextIndex < 0 || nextIndex >= episodes.length()) return null;
         JSONObject epJson = episodes.optJSONObject(nextIndex);
         if (epJson == null) return null;
