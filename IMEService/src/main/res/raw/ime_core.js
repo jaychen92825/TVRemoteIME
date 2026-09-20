@@ -826,6 +826,8 @@ function loadMediaDetail(sourceKey, id){
 		var historyEpisode = history ? mediaFindEpisode(item, history.playId, history.flag) : null;
 		var historyProgress = mediaHistoryProgress(history);
 		var groups = mediaEpisodeGroups(item.episodes || []);
+		var firstEpisode = groups.length && groups[0].episodes.length ? groups[0].episodes[0] : null;
+		var canResume = !!(history && historyEpisode && historyProgress > 0 && historyProgress < 95);
 		var episodeChunkSize = 30;
 		var initialRoute = 0;
 		var initialRanges = {};
@@ -848,8 +850,10 @@ function loadMediaDetail(sourceKey, id){
 		html.push('<div class="media-detail-title">'+escapeHtml(item.name)+'</div>');
 		html.push('<div class="media-card-meta">'+escapeHtml(item.sourceName || '')+(item.year ? ' · '+escapeHtml(item.year) : '')+(item.remark ? ' · '+escapeHtml(item.remark) : '')+'</div>');
 		html.push('<div class="media-detail-actions">');
-		if(history && historyEpisode && historyProgress > 0 && historyProgress < 95){
-			html.push('<button type="button" class="media-resume-btn" id="btnMediaContinue" data-source="'+escapeHtml(item.sourceKey)+'" data-playid="'+escapeHtml(historyEpisode.playId || '')+'" data-flag="'+escapeHtml(historyEpisode.flag || '')+'" data-title="'+escapeHtml(item.name || '')+'" data-episode="'+escapeHtml(historyEpisode.name || history.episode || '')+'">继续观看 · '+escapeHtml(historyEpisode.name || history.episode || '上次位置')+' · '+Math.round(historyProgress)+'%</button>');
+		if(canResume){
+			html.push('<button type="button" class="media-resume-btn" id="btnMediaContinue" data-source="'+escapeHtml(item.sourceKey)+'" data-playid="'+escapeHtml(historyEpisode.playId || '')+'" data-flag="'+escapeHtml(historyEpisode.flag || '')+'" data-title="'+escapeHtml(item.name || '')+'" data-episode="'+escapeHtml(historyEpisode.name || history.episode || '')+'" title="继续观看 '+escapeHtml(historyEpisode.name || history.episode || '上次位置')+'"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" fill="currentColor"/></svg><span class="media-action-label">继续观看 · '+escapeHtml(historyEpisode.name || history.episode || '上次位置')+' · '+Math.round(historyProgress)+'%</span></button>');
+		}else if(!historyEpisode && firstEpisode){
+			html.push('<button type="button" class="media-resume-btn" id="btnMediaStart" data-source="'+escapeHtml(item.sourceKey)+'" data-playid="'+escapeHtml(firstEpisode.playId || '')+'" data-flag="'+escapeHtml(firstEpisode.flag || '')+'" data-title="'+escapeHtml(item.name || '')+'" data-episode="'+escapeHtml(firstEpisode.name || '')+'" title="开始播放"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" fill="currentColor"/></svg><span class="media-action-label">开始播放</span></button>');
 		}
 		html.push('<button type="button" class="media-favorite-btn'+(item.favorite ? ' active' : '')+'" id="btnMediaFavorite" aria-label="'+(item.favorite ? '取消收藏' : '收藏')+'"><span class="media-favorite-icon">'+(item.favorite ? '★' : '☆')+'</span><span>'+(item.favorite ? '已收藏' : '收藏')+'</span></button>');
 		html.push('</div>');
@@ -1195,7 +1199,12 @@ $('#mediaDetail').on('click', '.media-episode', function(){
 	$(this).addClass('playing');
 	playMediaEpisode($(this).attr('data-source'), $(this).attr('data-flag'), $(this).attr('data-playid'), $(this).attr('data-title'), $(this).attr('data-episode'));
 });
-$('#mediaDetail').on('click', '#btnMediaContinue', function(){
+$('#mediaDetail').on('click', '#btnMediaContinue,#btnMediaStart', function(){
+	var playId = String($(this).attr('data-playid') || '');
+	var flag = String($(this).attr('data-flag') || '');
+	$('#mediaDetail .media-episode').removeClass('playing').filter(function(){
+		return String($(this).attr('data-playid') || '') === playId && String($(this).attr('data-flag') || '') === flag;
+	}).addClass('playing');
 	playMediaEpisode($(this).attr('data-source'), $(this).attr('data-flag'), $(this).attr('data-playid'), $(this).attr('data-title'), $(this).attr('data-episode'));
 });
 $('#mediaDetail').on('click', '#btnMediaFavorite', function(){
