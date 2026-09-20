@@ -457,7 +457,7 @@ body {
 
 .media-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(126px, 1fr));
+	grid-template-columns: repeat(6, minmax(0, 1fr));
 	gap: 14px 12px;
 }
 
@@ -905,6 +905,54 @@ body {
 	gap: 8px;
 }
 
+@media (min-width: 820px) and (max-width: 1024px) {
+	.media-panel {
+		margin: 10px 16px 22px;
+	}
+
+	.media-grid {
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+		gap: 14px 10px;
+	}
+
+	.media-detail-layout {
+		grid-template-columns: 156px minmax(0, 1fr);
+		gap: 20px;
+	}
+
+	.media-detail-layout .media-poster {
+		width: 156px;
+	}
+}
+
+@media (min-width: 641px) and (max-width: 819px) {
+	.media-panel {
+		margin: 10px 14px 20px;
+	}
+
+	.media-toolbar {
+		grid-template-columns: auto minmax(0, 1fr) auto;
+	}
+
+	.media-grid {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 14px 10px;
+	}
+
+	.media-detail-layout {
+		grid-template-columns: 144px minmax(0, 1fr);
+		gap: 18px;
+	}
+
+	.media-detail-layout .media-poster {
+		width: 144px;
+	}
+
+	.media-episodes {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+}
+
 @media (max-width: 640px) {
 	.media-panel {
 		margin: 10px 12px 18px;
@@ -916,11 +964,15 @@ body {
 	}
 
 	.media-icon-btn {
-		height: 34px;
+		height: 44px;
 	}
 
 	.media-icon-btn {
-		width: 34px;
+		width: 44px;
+	}
+
+	.media-search-control {
+		height: 44px;
 	}
 
 	.media-search-control {
@@ -942,6 +994,7 @@ body {
 
 	.media-library-tab {
 		flex: 1;
+		height: 40px;
 	}
 
 	.media-playback-controls {
@@ -1144,12 +1197,12 @@ body {
 	}
 
 	.media-detail-layout {
-		grid-template-columns: 96px minmax(0, 1fr);
+		grid-template-columns: 112px minmax(0, 1fr);
 		gap: 14px;
 	}
 
 	.media-detail-layout .media-poster {
-		width: 96px;
+		width: 112px;
 	}
 
 	.media-detail-title {
@@ -1169,6 +1222,13 @@ body {
 
 	.media-episodes {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+
+	.media-route,
+	.media-episode,
+	.media-back-btn,
+	.media-resume-btn {
+		min-height: 44px;
 	}
 
 	.media-settings-card {
