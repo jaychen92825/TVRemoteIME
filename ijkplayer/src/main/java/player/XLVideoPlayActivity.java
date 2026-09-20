@@ -46,6 +46,7 @@ import player.settings.GlobalSettings;
 import player.widget.media.IjkVideoView;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
+import tv.danmaku.ijk.media.player.misc.ITrackInfo;
 import xllib.FileUtils;
 import xllib.PlayListItem;
 import xllib.PlayListItemAdapter;
@@ -125,6 +126,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     private volatile boolean webPlaybackPlaying;
     private volatile float webPlaybackSpeed = 1.0f;
     private volatile boolean webPlaybackSpeedSupported;
+    private volatile int webVolumeBeforeMute = -1;
     private int webSeekTarget = -1;
     private long webSeekTargetTimestamp;
 
@@ -344,22 +346,47 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         public final boolean playing;
         public final float speed;
         public final boolean speedSupported;
+        public final int volume;
+        public final boolean muted;
+        public final WebTrackInfo[] audioTracks;
+        public final WebTrackInfo[] subtitleTracks;
 
         private WebPlaybackStatus(boolean active, int position, int duration,
-                                  boolean playing, float speed, boolean speedSupported) {
+                                  boolean playing, float speed, boolean speedSupported,
+                                  int volume, boolean muted,
+                                  WebTrackInfo[] audioTracks, WebTrackInfo[] subtitleTracks) {
             this.active = active;
             this.position = position;
             this.duration = duration;
             this.playing = playing;
             this.speed = speed;
             this.speedSupported = speedSupported;
+            this.volume = volume;
+            this.muted = muted;
+            this.audioTracks = audioTracks;
+            this.subtitleTracks = subtitleTracks;
+        }
+    }
+
+    public static final class WebTrackInfo {
+        public final int index;
+        public final String language;
+        public final String info;
+        public final boolean selected;
+
+        private WebTrackInfo(int index, String language, String info, boolean selected) {
+            this.index = index;
+            this.language = language;
+            this.info = info;
+            this.selected = selected;
         }
     }
 
     public static WebPlaybackStatus getWebPlaybackStatus() {
         XLVideoPlayActivity activity = runningInstance;
         if (!isRunning || activity == null || activity.isFinishing()) {
-            return new WebPlaybackStatus(false, 0, 0, false, 1.0f, false);
+            return new WebPlaybackStatus(false, 0, 0, false, 1.0f, false,
+                    0, false, new WebTrackInfo[0], new WebTrackInfo[0]);
         }
         int position = activity.webPlaybackPosition;
         int duration = activity.webPlaybackDuration;
@@ -393,8 +420,85 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         if (duration > 0) {
             position = Math.min(duration, position);
         }
+        int volume = activity.getWebVolumePercent();
+        WebTrackInfo[][] tracks = activity.getWebTracks();
         return new WebPlaybackStatus(true, Math.max(0, position), Math.max(0, duration),
-                playing, activity.webPlaybackSpeed, activity.webPlaybackSpeedSupported);
+                playing, activity.webPlaybackSpeed, activity.webPlaybackSpeedSupported,
+                volume, volume <= 0, tracks[0], tracks[1]);
+    }
+
+    public static boolean dispatchStopPlayback() {
+        final XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing()) {
+            return false;
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity == runningInstance && !activity.isFinishing()) activity.finish();
+            }
+        });
+        return true;
+    }
+
+    public static boolean dispatchVolumePercent(final int percent) {
+        final XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing() || percent < 0 || percent > 100) {
+            return false;
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return activity.setVolumePercentForWeb(percent);
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity == runningInstance && !activity.isFinishing()) {
+                    activity.setVolumePercentForWeb(percent);
+                }
+            }
+        });
+        return true;
+    }
+
+    public static boolean dispatchMute(final boolean muted) {
+        final XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing()) {
+            return false;
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return activity.setMutedForWeb(muted);
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity == runningInstance && !activity.isFinishing()) {
+                    activity.setMutedForWeb(muted);
+                }
+            }
+        });
+        return true;
+    }
+
+    public static boolean dispatchTrackSelection(final String kind, final int index) {
+        final XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing()) {
+            return false;
+        }
+        if (!"audio".equals(kind) && !"subtitle".equals(kind)) {
+            return false;
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return activity.selectTrackForWeb(kind, index);
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity == runningInstance && !activity.isFinishing()) {
+                    activity.selectTrackForWeb(kind, index);
+                }
+            }
+        });
+        return true;
     }
 
     public static boolean dispatchAbsoluteSeek(final int positionMs) {
@@ -574,6 +678,92 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             refreshWebPlaybackSnapshot();
         }
         return supported;
+    }
+
+    private int getWebVolumePercent() {
+        if (audioManager == null) return 0;
+        int max = Math.max(1, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+        int current = Math.max(0, audioManager.getStreamVolume(AudioManager.STREAM_MUSIC));
+        return Math.max(0, Math.min(100, Math.round(current * 100f / max)));
+    }
+
+    private boolean setVolumePercentForWeb(int percent) {
+        if (audioManager == null) return false;
+        int max = Math.max(1, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+        int target = Math.max(0, Math.min(max, Math.round(max * percent / 100f)));
+        if (target > 0) webVolumeBeforeMute = target;
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0);
+        return true;
+    }
+
+    private boolean setMutedForWeb(boolean muted) {
+        if (audioManager == null) return false;
+        int current = Math.max(0, audioManager.getStreamVolume(AudioManager.STREAM_MUSIC));
+        if (muted) {
+            if (current > 0) webVolumeBeforeMute = current;
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0);
+        } else if (current == 0) {
+            int max = Math.max(1, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+            int restore = webVolumeBeforeMute > 0 ? webVolumeBeforeMute : Math.max(1, max / 2);
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, Math.min(max, restore), 0);
+        }
+        return true;
+    }
+
+    private WebTrackInfo[][] getWebTracks() {
+        WebTrackInfo[] empty = new WebTrackInfo[0];
+        if (mVideoView == null) return new WebTrackInfo[][]{empty, empty};
+        ITrackInfo[] infos;
+        try {
+            infos = mVideoView.getTrackInfo();
+        } catch (RuntimeException e) {
+            return new WebTrackInfo[][]{empty, empty};
+        }
+        if (infos == null || infos.length == 0) return new WebTrackInfo[][]{empty, empty};
+
+        int selectedAudio = mVideoView.getSelectedTrack(ITrackInfo.MEDIA_TRACK_TYPE_AUDIO);
+        int selectedTimedText = mVideoView.getSelectedTrack(ITrackInfo.MEDIA_TRACK_TYPE_TIMEDTEXT);
+        int selectedSubtitle = mVideoView.getSelectedTrack(ITrackInfo.MEDIA_TRACK_TYPE_SUBTITLE);
+        java.util.ArrayList<WebTrackInfo> audio = new java.util.ArrayList<>();
+        java.util.ArrayList<WebTrackInfo> subtitles = new java.util.ArrayList<>();
+        for (int i = 0; i < infos.length; i++) {
+            ITrackInfo info = infos[i];
+            if (info == null) continue;
+            int type = info.getTrackType();
+            String language = info.getLanguage();
+            String inline = info.getInfoInline();
+            if (type == ITrackInfo.MEDIA_TRACK_TYPE_AUDIO) {
+                audio.add(new WebTrackInfo(i, language, inline, i == selectedAudio));
+            } else if (type == ITrackInfo.MEDIA_TRACK_TYPE_TIMEDTEXT
+                    || type == ITrackInfo.MEDIA_TRACK_TYPE_SUBTITLE) {
+                boolean selected = i == selectedTimedText || i == selectedSubtitle;
+                subtitles.add(new WebTrackInfo(i, language, inline, selected));
+            }
+        }
+        return new WebTrackInfo[][]{
+                audio.toArray(new WebTrackInfo[audio.size()]),
+                subtitles.toArray(new WebTrackInfo[subtitles.size()])
+        };
+    }
+
+    private boolean selectTrackForWeb(String kind, int index) {
+        if (mVideoView == null) return false;
+        ITrackInfo[] infos = mVideoView.getTrackInfo();
+        if ("subtitle".equals(kind) && index < 0) {
+            int timedText = mVideoView.getSelectedTrack(ITrackInfo.MEDIA_TRACK_TYPE_TIMEDTEXT);
+            int subtitle = mVideoView.getSelectedTrack(ITrackInfo.MEDIA_TRACK_TYPE_SUBTITLE);
+            if (timedText >= 0) mVideoView.deselectTrack(timedText);
+            if (subtitle >= 0 && subtitle != timedText) mVideoView.deselectTrack(subtitle);
+            return true;
+        }
+        if (infos == null || index < 0 || index >= infos.length || infos[index] == null) return false;
+        int type = infos[index].getTrackType();
+        if ("audio".equals(kind) && type != ITrackInfo.MEDIA_TRACK_TYPE_AUDIO) return false;
+        if ("subtitle".equals(kind)
+                && type != ITrackInfo.MEDIA_TRACK_TYPE_TIMEDTEXT
+                && type != ITrackInfo.MEDIA_TRACK_TYPE_SUBTITLE) return false;
+        mVideoView.selectTrack(index);
+        return true;
     }
 
     private void refreshWebPlaybackSnapshot() {

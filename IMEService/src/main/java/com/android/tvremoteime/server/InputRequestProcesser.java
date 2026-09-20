@@ -6,6 +6,7 @@ import android.view.KeyEvent;
 import com.android.tvremoteime.IMEService;
 import com.android.tvremoteime.media.MediaPlaybackManager;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -40,6 +41,10 @@ public class InputRequestProcesser implements RequestProcesser {
                 case "/player/status":
                 case "/player/seek":
                 case "/player/speed":
+                case "/player/volume":
+                case "/player/mute":
+                case "/player/stop":
+                case "/player/track":
                 case "/mouseMove":
                 case "/mouseClick":
                     return true;
@@ -107,6 +112,14 @@ public class InputRequestProcesser implements RequestProcesser {
                 return playerSeekResponse(params.get("position"));
             case "/player/speed":
                 return playerSpeedResponse(params.get("speed"));
+            case "/player/volume":
+                return playerVolumeResponse(params.get("volume"));
+            case "/player/mute":
+                return playerMuteResponse(params.get("muted"));
+            case "/player/stop":
+                return playerActionResponse(XLVideoPlayActivity.dispatchStopPlayback(), null);
+            case "/player/track":
+                return playerTrackResponse(params.get("kind"), params.get("index"));
             case "/mouseMove":
                 if (mDataReceiver != null) {
                     //单次触控板位移不可能很大，限制一下范围防止畸形/恶意参数导致虚拟光标坐标跳变
@@ -171,6 +184,10 @@ public class InputRequestProcesser implements RequestProcesser {
             result.put("playing", status.playing);
             result.put("speed", status.speed);
             result.put("speedSupported", status.speedSupported);
+            result.put("volume", status.volume);
+            result.put("muted", status.muted);
+            result.put("audioTracks", trackArray(status.audioTracks));
+            result.put("subtitleTracks", trackArray(status.subtitleTracks));
             MediaPlaybackManager.get(context).decorateStatus(result);
         } catch (JSONException ignored) {
         }
@@ -191,6 +208,42 @@ public class InputRequestProcesser implements RequestProcesser {
             return playerActionResponse(false, "invalid speed");
         }
         return playerActionResponse(XLVideoPlayActivity.dispatchPlaybackSpeed(speed), null);
+    }
+
+    private static NanoHTTPD.Response playerVolumeResponse(String value){
+        if (value == null) return playerActionResponse(false, "invalid volume");
+        int volume = parseIntSafely(value);
+        if (volume < 0 || volume > 100) return playerActionResponse(false, "invalid volume");
+        return playerActionResponse(XLVideoPlayActivity.dispatchVolumePercent(volume), null);
+    }
+
+    private static NanoHTTPD.Response playerMuteResponse(String value){
+        if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) {
+            return playerActionResponse(false, "invalid muted state");
+        }
+        return playerActionResponse(XLVideoPlayActivity.dispatchMute(Boolean.parseBoolean(value)), null);
+    }
+
+    private static NanoHTTPD.Response playerTrackResponse(String kind, String value){
+        if (kind == null || value == null) return playerActionResponse(false, "invalid track");
+        int index = parseIntSafely(value);
+        if (index < -1) return playerActionResponse(false, "invalid track");
+        return playerActionResponse(XLVideoPlayActivity.dispatchTrackSelection(kind, index), null);
+    }
+
+    private static JSONArray trackArray(XLVideoPlayActivity.WebTrackInfo[] tracks) throws JSONException {
+        JSONArray result = new JSONArray();
+        if (tracks == null) return result;
+        for (XLVideoPlayActivity.WebTrackInfo track : tracks) {
+            if (track == null) continue;
+            JSONObject item = new JSONObject();
+            item.put("index", track.index);
+            item.put("language", track.language == null ? "" : track.language);
+            item.put("info", track.info == null ? "" : track.info);
+            item.put("selected", track.selected);
+            result.put(item);
+        }
+        return result;
     }
 
     private static NanoHTTPD.Response playerActionResponse(boolean handled, String message){
