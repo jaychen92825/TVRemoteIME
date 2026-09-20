@@ -155,7 +155,9 @@ body {
 
 .media-playback-head,
 .media-playback-progress,
-.media-speed-control {
+.media-speed-control,
+.media-playback-actions,
+.media-skip-actions {
 	display: flex;
 	align-items: center;
 }
@@ -169,6 +171,30 @@ body {
 .media-playback-label {
 	font-size: 12px;
 	font-weight: 600;
+	color: var(--color-text-secondary);
+}
+
+.media-now-playing {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	min-width: 0;
+	overflow: hidden;
+}
+
+.media-playback-title {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--color-text);
+}
+
+.media-playback-episode {
+	flex: 0 0 auto;
+	font-size: 12px;
 	color: var(--color-text-secondary);
 }
 
@@ -200,6 +226,74 @@ body {
 	min-width: 0;
 	margin: 0;
 	accent-color: var(--color-primary);
+}
+
+.media-playback-actions {
+	gap: 6px;
+	margin-top: 9px;
+}
+
+.media-control-btn,
+.media-skip-btn {
+	height: 30px;
+	padding: 0 10px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-sm);
+	background: var(--color-card-bg);
+	color: var(--color-text-secondary);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.media-control-btn:disabled,
+.media-skip-btn:disabled {
+	opacity: .4;
+	cursor: default;
+}
+
+.media-control-primary {
+	border-color: var(--color-primary);
+	background: var(--color-primary-soft);
+	color: var(--color-primary-dark);
+}
+
+.media-skip-actions {
+	gap: 6px;
+	margin-top: 7px;
+	min-width: 0;
+}
+
+.media-skip-btn {
+	height: 27px;
+	padding: 0 8px;
+	font-size: 11px;
+}
+
+.media-skip-summary {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 11px;
+	color: var(--color-text-secondary);
+}
+
+.media-progress-track {
+	position: absolute;
+	left: 5px;
+	right: 5px;
+	bottom: 5px;
+	height: 3px;
+	border-radius: 2px;
+	background: rgba(255,255,255,.45);
+	overflow: hidden;
+}
+
+.media-progress-fill {
+	display: block;
+	height: 100%;
+	background: var(--color-primary);
 }
 
 .media-categories {
@@ -658,6 +752,24 @@ body {
 
 	.media-playback-head {
 		margin-bottom: 7px;
+	}
+
+	.media-playback-head {
+		align-items: flex-start;
+	}
+
+	.media-now-playing {
+		flex-wrap: wrap;
+		row-gap: 2px;
+	}
+
+	.media-playback-title {
+		max-width: 48vw;
+	}
+
+	.media-playback-actions,
+	.media-skip-actions {
+		flex-wrap: wrap;
 	}
 
 	.media-grid {

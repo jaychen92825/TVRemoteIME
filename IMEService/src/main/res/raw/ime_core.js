@@ -356,7 +356,11 @@ function mediaPoster(item, overlay){
 	}
 	if(!overlay) return poster;
 	var score = mediaScore(item);
-	return '<div class="media-poster-wrap">'+poster+(score ? '<span class="media-score">'+escapeHtml(score)+'</span>' : '')+'</div>';
+	var duration = Math.max(0, Number(item.duration) || 0);
+	var position = Math.max(0, Number(item.position) || 0);
+	var progress = duration > 0 ? Math.max(0, Math.min(100, position * 100 / duration)) : 0;
+	var progressHtml = progress > 0 ? '<span class="media-progress-track"><span class="media-progress-fill" style="width:'+progress.toFixed(1)+'%"></span></span>' : '';
+	return '<div class="media-poster-wrap">'+poster+(score ? '<span class="media-score">'+escapeHtml(score)+'</span>' : '')+progressHtml+'</div>';
 }
 function renderMediaSources(data){
 	mediaSources = data.sources || [];
@@ -673,7 +677,7 @@ function playMediaEpisode(sourceKey, flag, playId, title, episode){
 	var displayTitle = title || '';
 	if(episode) displayTitle += (displayTitle ? ' · ' : '') + episode;
 	var item = currentMediaDetail || {};
-	$.ajax({url:'/media/play', type:'POST', data:{sourceKey:sourceKey, sourceName:item.sourceName || '', mediaId:item.id || '', mediaName:item.name || title || '', pic:item.pic || '', score:item.score || '', remark:item.remark || '', flag:flag, playId:playId, episode:episode || '', title:displayTitle}, dataType:'json', timeout:30000, success:function(data){
+	$.ajax({url:'/media/play', type:'POST', data:{sourceKey:sourceKey, sourceName:item.sourceName || '', mediaId:item.id || '', mediaName:item.name || title || '', pic:item.pic || '', score:item.score || '', remark:item.remark || '', flag:flag, playId:playId, episode:episode || '', title:displayTitle}, dataType:'json', timeout:45000, success:function(data){
 		if(data && data.success === false){
 			mediaMessage(data.message || '播放失败');
 		}else{
@@ -702,23 +706,55 @@ function isMediaTabVisible(){
 
 function renderMediaPlaybackStatus(data){
 	var active = !!(data && data.active);
-	$('#mediaPlaybackControls').toggleClass('hide', !active);
-	if(!active) return;
+	var hasSession = !!(data && data.hasSession);
+	$('#mediaPlaybackControls').toggleClass('hide', !(active || hasSession));
+	if(!(active || hasSession)) return;
 
 	var duration = Math.max(0, Number(data.duration) || 0);
 	var position = Math.max(0, Number(data.position) || 0);
 	if(duration > 0) position = Math.min(duration, position);
 	var $seek = $('#mediaPlaybackSeek');
-	$seek.attr('max', duration).prop('disabled', duration <= 0);
+	$seek.attr('max', duration).prop('disabled', !active || duration <= 0);
 	if(!mediaPlaybackDragging) $seek.val(position);
 	$('#mediaPlaybackCurrent').text(formatPlaybackTime(mediaPlaybackDragging ? $seek.val() : position));
 	$('#mediaPlaybackDuration').text(duration > 0 ? formatPlaybackTime(duration) : '--:--');
-	$('#mediaPlaybackLabel').text(data.playing ? '电视播放中' : '电视已暂停');
+	$('#mediaPlaybackLabel').text(active ? (data.playing ? '电视播放中' : '电视已暂停') : '继续观看');
+	$('#mediaPlaybackTitle').text(data.mediaName || '');
+	$('#mediaPlaybackEpisode').text(data.episode || '');
 
 	var speed = Number(data.speed) || 1;
 	var $speed = $('#mediaPlaybackSpeed');
-	$speed.prop('disabled', !data.speedSupported);
+	$speed.prop('disabled', !active || !data.speedSupported);
 	if(!mediaPlaybackDragging) $speed.val(String(speed));
+	$('#btnMediaPlayPause').toggleClass('hide', !active).text(data.playing ? '暂停' : '播放');
+	$('#btnMediaResume').toggleClass('hide', active);
+	$('#btnMediaPrevEpisode').prop('disabled', !data.canPrev);
+	$('#btnMediaNextEpisode').prop('disabled', !data.canNext);
+	$('#btnMediaMarkOpening,#btnMediaMarkEnding').prop('disabled', !active || duration <= 0);
+	var skip = [];
+	if(Number(data.opening) > 0) skip.push('片头 '+formatPlaybackTime(data.opening));
+	if(Number(data.ending) > 0) skip.push('片尾前 '+formatPlaybackTime(data.ending));
+	$('#mediaSkipSummary').text(skip.join(' · '));
+}
+
+function mediaEpisodeAction(direction){
+	mediaMessage(direction === 'prev' ? '正在切换上一集…' : '正在切换下一集…');
+	$.ajax({url:'/media/episode', type:'POST', data:{direction:direction}, dataType:'json', timeout:45000, success:function(data){
+		if(data && data.success === false) mediaMessage(data.message || '切换剧集失败');
+		else mediaMessage('已切换到 '+(data.episode || (direction === 'prev' ? '上一集' : '下一集'))+'。');
+		refreshMediaPlaybackStatus();
+	}, error:function(){ mediaMessage('切换剧集超时，请稍后重试。'); }});
+}
+
+function mediaMarkerAction(action){
+	$.post('/media/marker', {action:action}, function(data){
+		if(data && data.success === false){
+			mediaMessage(data.message || '跳过设置失败');
+			return;
+		}
+		mediaMessage(action === 'clear' ? '已清除片头片尾跳过。' : (action === 'opening' ? '已记住片头结束位置。' : '已记住片尾开始位置。'));
+		refreshMediaPlaybackStatus();
+	}, 'json').fail(function(){ mediaMessage('跳过设置失败，请稍后重试。'); });
 }
 
 function refreshMediaPlaybackStatus(){
@@ -788,6 +824,22 @@ $('#mediaPlaybackSpeed').on('change', function(){
 		mediaMessage('倍速切换失败，请稍后重试。');
 	});
 });
+$('#btnMediaPrevEpisode').on('click', function(){ mediaEpisodeAction('prev'); });
+$('#btnMediaNextEpisode').on('click', function(){ mediaEpisodeAction('next'); });
+$('#btnMediaResume').on('click', function(){
+	mediaMessage('正在继续播放…');
+	$.ajax({url:'/media/resume', type:'POST', dataType:'json', timeout:45000, success:function(data){
+		if(data && data.success === false) mediaMessage(data.message || '继续播放失败');
+		else mediaMessage('已继续在电视播放。');
+		refreshMediaPlaybackStatus();
+	}, error:function(){ mediaMessage('继续播放超时，请稍后重试。'); }});
+});
+$('#btnMediaPlayPause').on('click', function(){
+	$.post('/player/control', {code:'85',action:'press'}, function(){ refreshMediaPlaybackStatus(); });
+});
+$('#btnMediaMarkOpening').on('click', function(){ mediaMarkerAction('opening'); });
+$('#btnMediaMarkEnding').on('click', function(){ mediaMarkerAction('ending'); });
+$('#btnMediaClearMarkers').on('click', function(){ mediaMarkerAction('clear'); });
 $('#mediaLibraryNav').on('click', '.media-library-tab', function(){
 	var section = $(this).attr('data-section') || 'browse';
 	if(section === 'browse') loadMediaHome();

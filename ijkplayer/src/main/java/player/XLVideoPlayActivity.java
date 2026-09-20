@@ -64,10 +64,35 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     protected static final int MESSAGE_HIDE_CENTER_BOX = 4;
     private static final int MESSAGE_RESTART_PLAY = 5;
     private static final int MESSAGE_LIVE_RESTART = 6;
+    private static final int MESSAGE_SESSION_PROGRESS = 7;
 
     private static volatile boolean isRunning = false;
     private static volatile boolean isForeground = false;
     private static volatile XLVideoPlayActivity runningInstance = null;
+    private static volatile PlaybackLifecycleListener playbackLifecycleListener = null;
+
+    public interface PlaybackLifecycleListener {
+        int onPrepared(int durationMs);
+        void onProgress(int positionMs, int durationMs, boolean playing);
+        boolean onCompletion();
+        boolean onPlaybackError();
+        void onStopped(int positionMs, int durationMs);
+    }
+
+    public static void setPlaybackLifecycleListener(PlaybackLifecycleListener listener) {
+        playbackLifecycleListener = listener;
+    }
+
+    public static void finishCurrentPlayback() {
+        final XLVideoPlayActivity activity = runningInstance;
+        if (activity == null || activity.isFinishing()) return;
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity == runningInstance && !activity.isFinishing()) activity.finish();
+            }
+        });
+    }
 
     private String mVideoPath;
     private String mVideoTitle;
@@ -675,6 +700,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     private void resetWebPlaybackForNewMedia() {
         handler.removeMessages(MESSAGE_SEEK_NEW_POSITION);
         handler.removeMessages(MESSAGE_LIVE_RESTART);
+        handler.removeMessages(MESSAGE_SESSION_PROGRESS);
         changeProgressByKey = false;
         seekStartPosition = -1;
         newPosition = -1;
@@ -823,11 +849,18 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
     @Override
     public void onCompletion(IMediaPlayer iMediaPlayer) {
+        if (runningInstance != this) return;
+        notifyPlaybackProgress();
+        PlaybackLifecycleListener listener = playbackLifecycleListener;
+        if (listener != null && listener.onCompletion()) return;
         finish();
     }
 
     @Override
     public boolean onError(IMediaPlayer iMediaPlayer, int i, int i1) {
+        if (runningInstance != this) return true;
+        PlaybackLifecycleListener listener = playbackLifecycleListener;
+        if (listener != null && listener.onPlaybackError()) return true;
         return false;
     }
 
@@ -877,6 +910,12 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             webPlaybackSpeed = mVideoView.getPlaybackSpeed();
         }
 
+        PlaybackLifecycleListener listener = playbackLifecycleListener;
+        if (listener != null && duration > 0) {
+            int startPosition = listener.onPrepared(duration);
+            if (startPosition > 0 && startPosition < duration) seekTo(startPosition);
+        }
+
         final GestureDetector gestureDetector = new GestureDetector(this, new PlayerGestureListener());
         mRoot = findViewById(R.id.touch_area);
         mRoot.setClickable(true);
@@ -898,6 +937,8 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         });
 
         start();
+        handler.removeMessages(MESSAGE_SESSION_PROGRESS);
+        handler.sendEmptyMessageDelayed(MESSAGE_SESSION_PROGRESS, 1000);
     }
     /**
      * 获取当前播放位置
@@ -1264,6 +1305,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             webPlaybackDuration = duration;
         }
         webPlaybackPlaying = mVideoView.isPlaying();
+        notifyPlaybackProgress();
         if (seekBar != null) {
             if (duration > 0) {
                 seekBar.setProgress((position * 100 / duration));
@@ -1279,6 +1321,15 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         $.id(R.id.app_video_endTime).text(generateTime(this.duration));
         $.id(R.id.app_video_speed).text(FileUtils.convertFileSize(mVideoView.getTcpSpeed()) + "/s");
         return position;
+    }
+
+    private void notifyPlaybackProgress() {
+        if (runningInstance != this) return;
+        PlaybackLifecycleListener listener = playbackLifecycleListener;
+        if (listener == null || mVideoView == null) return;
+        int position = Math.max(0, mVideoView.getCurrentPosition());
+        int playbackDuration = Math.max(0, mVideoView.getDuration());
+        listener.onProgress(position, playbackDuration, mVideoView.isPlaying());
     }
 
     private String generateTime(int time) {
@@ -1456,12 +1507,19 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                     }
                     isLiveRestarted = true;
                     break;
+                case MESSAGE_SESSION_PROGRESS:
+                    notifyPlaybackProgress();
+                    if (runningInstance == XLVideoPlayActivity.this && !isFinishing()) {
+                        sendEmptyMessageDelayed(MESSAGE_SESSION_PROGRESS, 1000);
+                    }
+                    break;
             }
         }
     };
 
     @Override
     protected void onPause() {
+        notifyPlaybackProgress();
         super.onPause();
         if (runningInstance == this) {
             isForeground = false;
@@ -1493,15 +1551,21 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
     @Override
     protected void onStop() {
+        notifyPlaybackProgress();
         super.onStop();
         if (mVideoView.isPlaying()) {
-            currentPosition = 0;
+            currentPosition = Math.max(0, mVideoView.getCurrentPosition());
             pause();
         }
     }
 
     @Override
     protected void onDestroy() {
+        boolean ownsPlaybackSession = runningInstance == this;
+        notifyPlaybackProgress();
+        PlaybackLifecycleListener listener = playbackLifecycleListener;
+        if (ownsPlaybackSession && listener != null) listener.onStopped(webPlaybackPosition, webPlaybackDuration);
+        handler.removeMessages(MESSAGE_SESSION_PROGRESS);
         super.onDestroy();
 
         // A replacement player Activity can already be running by the time an older

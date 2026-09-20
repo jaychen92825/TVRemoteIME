@@ -5,7 +5,6 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.tvremoteime.IMEService;
-import com.android.tvremoteime.VideoPlayHelper;
 import com.android.tvremoteime.media.MediaBinary;
 import com.android.tvremoteime.media.MediaBrowseResult;
 import com.android.tvremoteime.media.MediaCategory;
@@ -13,6 +12,7 @@ import com.android.tvremoteime.media.MediaConfigManager;
 import com.android.tvremoteime.media.MediaDetail;
 import com.android.tvremoteime.media.MediaItem;
 import com.android.tvremoteime.media.MediaLibraryStore;
+import com.android.tvremoteime.media.MediaPlaybackManager;
 import com.android.tvremoteime.media.MediaSource;
 import com.android.tvremoteime.media.Type0SourceAdapter;
 import com.android.tvremoteime.media.Type3SourceAdapter;
@@ -38,11 +38,13 @@ public class MediaRequestProcesser implements RequestProcesser {
     private final Context context;
     private final MediaConfigManager configManager;
     private final MediaLibraryStore libraryStore;
+    private final MediaPlaybackManager playbackManager;
 
     public MediaRequestProcesser(Context context) {
         this.context = context;
         this.configManager = new MediaConfigManager(context);
         this.libraryStore = new MediaLibraryStore(context);
+        this.playbackManager = MediaPlaybackManager.get(context);
     }
 
     @Override
@@ -62,9 +64,13 @@ public class MediaRequestProcesser implements RequestProcesser {
                 if ("/media/image".equals(fileName)) return imageResponse(params.get("url"), params.get("sourceKey"));
                 if ("/media/history".equals(fileName)) return libraryResponse(libraryStore.getHistory());
                 if ("/media/favorites".equals(fileName)) return libraryResponse(libraryStore.getFavorites());
+                if ("/media/session".equals(fileName)) return ok(playbackManager.snapshot());
             } else if (session.getMethod() == NanoHTTPD.Method.POST) {
                 if ("/media/config".equals(fileName)) return saveConfigResponse(params.get("url"));
                 if ("/media/play".equals(fileName)) return playResponse(params);
+                if ("/media/resume".equals(fileName)) return ok(playbackManager.resumeCurrent());
+                if ("/media/episode".equals(fileName)) return ok(playbackManager.playAdjacent(parseDirection(params.get("direction"))));
+                if ("/media/marker".equals(fileName)) return ok(playbackManager.updateMarker(params.get("action")));
                 if ("/media/favorite".equals(fileName)) return favoriteResponse(params);
                 if ("/media/history/clear".equals(fileName)) return clearHistoryResponse();
             }
@@ -164,25 +170,12 @@ public class MediaRequestProcesser implements RequestProcesser {
     }
 
     private NanoHTTPD.Response playResponse(Map<String, String> params) throws Exception {
-        MediaSource source = requireSource(params.get("sourceKey"));
-        String url = resolve(source, params.get("flag"), params.get("playId"));
-        if (TextUtils.isEmpty(url)) throw new Exception("无法解析播放地址");
-        // Media Browser is intentionally tied to TVRemoteIME's internal player so the
-        // web remote can control the same Activity after playback starts.  The general
-        // /play endpoint still keeps its existing "use system player" option.
-        VideoPlayHelper.playUrl(context, url, 0, false, params.get("title"));
-        if (!TextUtils.isEmpty(params.get("mediaId"))) {
-            JSONObject history = libraryItem(params);
-            history.put("episode", safe(params.get("episode")));
-            history.put("flag", safe(params.get("flag")));
-            history.put("playId", safe(params.get("playId")));
-            history.put("updatedAt", System.currentTimeMillis());
-            libraryStore.addHistory(history);
-        }
-        JSONObject obj = new JSONObject();
-        obj.put("success", true);
-        obj.put("playUrl", url);
-        return ok(obj);
+        return ok(playbackManager.play(params));
+    }
+
+    private int parseDirection(String direction) {
+        if ("prev".equalsIgnoreCase(direction) || "previous".equalsIgnoreCase(direction) || "-1".equals(direction)) return -1;
+        return 1;
     }
 
     private NanoHTTPD.Response libraryResponse(JSONArray items) throws Exception {

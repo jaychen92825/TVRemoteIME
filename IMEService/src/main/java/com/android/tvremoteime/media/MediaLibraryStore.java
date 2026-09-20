@@ -28,6 +28,12 @@ public class MediaLibraryStore {
         return read(FAVORITES);
     }
 
+    public synchronized JSONObject getHistoryItem(String sourceKey, String id) {
+        JSONArray items = read(HISTORY);
+        int index = find(items, sourceKey, id);
+        return index >= 0 ? items.optJSONObject(index) : null;
+    }
+
     public synchronized boolean isFavorite(String sourceKey, String id) {
         return find(read(FAVORITES), sourceKey, id) >= 0;
     }

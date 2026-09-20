@@ -4,6 +4,7 @@ import android.content.Context;
 import android.view.KeyEvent;
 
 import com.android.tvremoteime.IMEService;
+import com.android.tvremoteime.media.MediaPlaybackManager;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -160,7 +161,7 @@ public class InputRequestProcesser implements RequestProcesser {
         return false;
     }
 
-    private static NanoHTTPD.Response playerStatusResponse(){
+    private NanoHTTPD.Response playerStatusResponse(){
         XLVideoPlayActivity.WebPlaybackStatus status = XLVideoPlayActivity.getWebPlaybackStatus();
         JSONObject result = new JSONObject();
         try {
@@ -170,6 +171,7 @@ public class InputRequestProcesser implements RequestProcesser {
             result.put("playing", status.playing);
             result.put("speed", status.speed);
             result.put("speedSupported", status.speedSupported);
+            MediaPlaybackManager.get(context).decorateStatus(result);
         } catch (JSONException ignored) {
         }
         return RemoteServer.createJSONResponse(NanoHTTPD.Response.Status.OK, result.toString());

@@ -186,7 +186,11 @@
 			<div class="media-status media-browse-status" id="mediaStatus">未加载配置</div>
 			<div class="media-playback-controls hide" id="mediaPlaybackControls">
 				<div class="media-playback-head">
-					<span class="media-playback-label" id="mediaPlaybackLabel">电视播放</span>
+					<div class="media-now-playing">
+						<span class="media-playback-label" id="mediaPlaybackLabel">电视播放</span>
+						<span class="media-playback-title" id="mediaPlaybackTitle"></span>
+						<span class="media-playback-episode" id="mediaPlaybackEpisode"></span>
+					</div>
 					<label class="media-speed-control" for="mediaPlaybackSpeed"><span>倍速</span>
 						<select id="mediaPlaybackSpeed" aria-label="播放倍速">
 							<option value="0.5">0.5x</option>
@@ -203,6 +207,18 @@
 					<span id="mediaPlaybackCurrent">00:00</span>
 					<input type="range" id="mediaPlaybackSeek" min="0" max="0" step="1000" value="0" aria-label="播放进度" />
 					<span id="mediaPlaybackDuration">00:00</span>
+				</div>
+				<div class="media-playback-actions">
+					<button type="button" class="media-control-btn" id="btnMediaPrevEpisode">上一集</button>
+					<button type="button" class="media-control-btn media-control-primary" id="btnMediaPlayPause">暂停</button>
+					<button type="button" class="media-control-btn" id="btnMediaNextEpisode">下一集</button>
+					<button type="button" class="media-control-btn media-control-primary hide" id="btnMediaResume">继续播放</button>
+				</div>
+				<div class="media-skip-actions">
+					<button type="button" class="media-skip-btn" id="btnMediaMarkOpening">设片头结束</button>
+					<button type="button" class="media-skip-btn" id="btnMediaMarkEnding">设片尾开始</button>
+					<button type="button" class="media-skip-btn" id="btnMediaClearMarkers">清除跳过</button>
+					<span class="media-skip-summary" id="mediaSkipSummary"></span>
 				</div>
 			</div>
 			<div class="media-settings-view hide" id="mediaSettingsView">
