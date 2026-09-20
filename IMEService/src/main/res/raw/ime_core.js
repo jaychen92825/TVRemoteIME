@@ -933,14 +933,26 @@ function isMediaTabVisible(){
 function setMediaPlaybackPlayingUi(active, playing){
 	var isPlaying = !!(active && playing);
 	mediaPlaybackPlaying = isPlaying;
-	$('#mediaPlaybackCompactIcon .media-compact-play-icon, .media-playback-fab-icon .media-mini-play-icon').toggleClass('hide', isPlaying);
-	$('#mediaPlaybackCompactIcon .media-compact-pause-icon, .media-playback-fab-icon .media-mini-pause-icon').toggleClass('hide', !isPlaying);
+	$('.media-playback-fab-icon .media-mini-play-icon').toggleClass('hide', isPlaying);
+	$('.media-playback-fab-icon .media-mini-pause-icon').toggleClass('hide', !isPlaying);
+	$('#mediaPlaybackCompactActionPath').attr('d', isPlaying ? 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z' : 'm8 5 11 7-11 7V5Z');
 	$('#btnMediaCompactPrimary').attr('aria-label', active ? (isPlaying ? '暂停' : '播放') : '继续播放');
 	var $playPause = $('#btnMediaPlayPause').toggleClass('hide', !active);
 	$playPause.attr('aria-label', isPlaying ? '暂停' : '播放').attr('title', isPlaying ? '暂停' : '播放');
 	$playPause.find('.media-control-label').text(isPlaying ? '暂停' : '播放');
 	$playPause.find('.media-control-play-icon').toggleClass('hide', isPlaying);
 	$playPause.find('.media-control-pause-icon').toggleClass('hide', !isPlaying);
+}
+
+function toggleMediaPlayback(){
+	mediaPlaybackPlayingPendingUntil = Date.now() + 900;
+	setMediaPlaybackPlayingUi(true, !mediaPlaybackPlaying);
+	$.post('/player/control', {code:'85',action:'press'}, function(){
+		setTimeout(refreshMediaPlaybackStatus, 300);
+	}).fail(function(){
+		mediaPlaybackPlayingPendingUntil = 0;
+		refreshMediaPlaybackStatus();
+	});
 }
 
 function renderMediaPlaybackStatus(data){
@@ -1107,14 +1119,7 @@ $('#btnMediaResume').on('click', function(){
 	}, error:function(){ mediaMessage('继续播放超时，请稍后重试。'); }});
 });
 $('#btnMediaPlayPause').on('click', function(){
-	mediaPlaybackPlayingPendingUntil = Date.now() + 900;
-	setMediaPlaybackPlayingUi(true, !mediaPlaybackPlaying);
-	$.post('/player/control', {code:'85',action:'press'}, function(){
-		setTimeout(refreshMediaPlaybackStatus, 300);
-	}).fail(function(){
-		mediaPlaybackPlayingPendingUntil = 0;
-		refreshMediaPlaybackStatus();
-	});
+	toggleMediaPlayback();
 });
 $('#btnMediaPlaybackToggle').on('click', function(){
 	var expanded = !$('#mediaPlaybackControls').hasClass('expanded');
@@ -1123,7 +1128,7 @@ $('#btnMediaPlaybackToggle').on('click', function(){
 });
 $('#btnMediaCompactPrimary').on('click', function(){
 	if(mediaPlaybackActive){
-		$('#btnMediaPlayPause').trigger('click');
+		toggleMediaPlayback();
 	}else if(mediaPlaybackHasSession){
 		$('#btnMediaResume').trigger('click');
 	}
