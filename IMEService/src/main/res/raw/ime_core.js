@@ -40,6 +40,8 @@ var mediaPageName = '';
 var mediaLoadingMore = false;
 var mediaHasMore = false;
 var mediaPaginationObserver = null;
+var mediaContinueItems = [];
+var mediaContinueRequestVersion = 0;
 try {
 	mediaDisplayMode = localStorage.getItem('mediaDisplayMode') === 'list' ? 'list' : 'grid';
 } catch(e) {}
@@ -331,6 +333,16 @@ function mediaStateHtml(title, message, action, label, loading){
 function rememberMediaBrowsePosition(){
 	if(mediaView === 'browse') mediaBrowseScrollTop = $('.container').scrollTop() || 0;
 }
+function mediaContinueContextActive(){
+	return mediaView === 'browse' && mediaSection === 'browse' && !currentMediaCategoryId && !mediaFolderStack.length && !mediaSearchStatusBase && !String($('#mediaSearchInput').val() || '').trim();
+}
+function updateMediaContinueVisibility(){
+	$('#mediaContinue').toggleClass('hide', !mediaContinueItems.length || !mediaContinueContextActive());
+}
+function hideMediaContinue(cancelPending){
+	if(cancelPending) mediaContinueRequestVersion++;
+	$('#mediaContinue').addClass('hide');
+}
 function showMediaBrowse(restorePosition){
 	mediaView = 'browse';
 	$('.media-panel').removeClass('media-detail-active media-settings-active');
@@ -339,6 +351,7 @@ function showMediaBrowse(restorePosition){
 	$('#mediaCategories').toggleClass('hide', mediaSection !== 'browse');
 	$('#mediaFilters').toggleClass('hide', !(mediaSection === 'browse' && mediaSearchFiltersAvailable));
 	$('#mediaDetail,#mediaSettingsView').addClass('hide');
+	updateMediaContinueVisibility();
 	updateContainerWidth();
 	setTimeout(function(){
 		$('.container').scrollTop(restorePosition ? mediaBrowseScrollTop : 0);
@@ -347,6 +360,7 @@ function showMediaBrowse(restorePosition){
 function showMediaDetailView(){
 	rememberMediaBrowsePosition();
 	mediaView = 'detail';
+	hideMediaContinue(true);
 	$('.media-panel').removeClass('media-settings-active').addClass('media-detail-active');
 	$('#mediaToolbar,#mediaLibraryNav,#mediaCategories,#mediaFilters,#mediaGrid,#mediaSettingsView,#mediaPagination').addClass('hide');
 	$('#mediaStatus,#mediaDetail').removeClass('hide');
@@ -356,6 +370,7 @@ function showMediaDetailView(){
 function showMediaSettingsView(){
 	rememberMediaBrowsePosition();
 	mediaView = 'settings';
+	hideMediaContinue(true);
 	$('.media-panel').removeClass('media-detail-active').addClass('media-settings-active');
 	$('#mediaToolbar,#mediaLibraryNav,#mediaStatus,#mediaCategories,#mediaFilters,#mediaGrid,#mediaDetail,#mediaPagination').addClass('hide');
 	$('#mediaSettingsView').removeClass('hide');
@@ -393,6 +408,40 @@ function mediaHistoryProgress(history){
 	var duration = Math.max(0, Number(history.duration) || 0);
 	var position = Math.max(0, Number(history.position) || 0);
 	return duration > 0 ? Math.max(0, Math.min(100, position * 100 / duration)) : 0;
+}
+function renderMediaContinue(items, requestVersion){
+	if(requestVersion !== mediaContinueRequestVersion) return;
+	var filtered = [];
+	for(var i=0;i<(items || []).length && filtered.length < 8;i++){
+		var item = items[i] || {};
+		var progress = mediaHistoryProgress(item);
+		if(progress <= 0 || progress >= 95) continue;
+		if(!item.sourceKey || !item.id || !item.playId || !sourceByKey(item.sourceKey)) continue;
+		filtered.push(item);
+	}
+	mediaContinueItems = filtered;
+	var html = [];
+	for(var j=0;j<filtered.length;j++){
+		var history = filtered[j];
+		var percent = Math.round(mediaHistoryProgress(history));
+		html.push('<button type="button" class="media-continue-card" data-source="'+escapeHtml(history.sourceKey)+'" data-id="'+escapeHtml(history.id)+'" title="继续观看 '+escapeHtml(history.name || '')+'">');
+		html.push(mediaPoster(history, true));
+		html.push('<span class="media-continue-copy"><span class="media-continue-title">'+escapeHtml(history.name || '未命名影片')+'</span><span class="media-continue-meta">'+escapeHtml(history.episode || '继续观看')+' · '+percent+'%</span></span>');
+		html.push('</button>');
+	}
+	$('#mediaContinueItems').html(html.join(''));
+	updateMediaContinueVisibility();
+}
+function loadMediaContinueHome(){
+	var requestVersion = ++mediaContinueRequestVersion;
+	$.get('/media/history', null, function(data){
+		renderMediaContinue(data && data.items ? data.items : [], requestVersion);
+	}, 'json').fail(function(){
+		if(requestVersion !== mediaContinueRequestVersion) return;
+		mediaContinueItems = [];
+		$('#mediaContinueItems').empty();
+		updateMediaContinueVisibility();
+	});
 }
 function mediaFindEpisode(item, playId, flag){
 	var episodes = item && item.episodes ? item.episodes : [];
@@ -516,16 +565,18 @@ function loadMediaHome(){
 	mediaFolderStack = [];
 	currentMediaCategoryId = '';
 	selectMediaSection('browse');
-	showMediaBrowse(false);
 	hideMediaSearchFilters();
 	$('#mediaSearchInput').val('');
+	showMediaBrowse(false);
 	$('#mediaDetail').empty();
 	$('#mediaCategories').empty();
 	if(!hasHomeSource()){
+		hideMediaContinue(true);
 		$('#mediaGrid').html(mediaStateHtml('没有可用点播源', '可以在媒体配置中切换源或更换配置。', 'settings', '打开媒体配置'));
 		return;
 	}
 	currentMediaSourceKey = $('#mediaSourceSelect').val() || currentMediaSourceKey || firstSupportedSourceKey();
+	loadMediaContinueHome();
 	$('#mediaGrid').html(mediaStateHtml('正在加载首页', '', '', '', true));
 	$.ajax({url:'/media/home', data:{sourceKey:currentMediaSourceKey}, dataType:'json', timeout:65000, success:function(data){
 		if(data && data.success === false){
@@ -557,6 +608,7 @@ function loadMediaCategory(id){
 		return;
 	}
 	mediaFolderStack = [];
+	hideMediaContinue(true);
 	resetMediaPagination('category', id, '');
 	currentMediaCategoryId = id;
 	showMediaBrowse(false);
@@ -586,6 +638,7 @@ function loadMediaFolder(sourceKey, id, name, push){
 	if(!id) return;
 	selectMediaSection('browse');
 	showMediaBrowse(false);
+	hideMediaContinue(true);
 	hideMediaSearchFilters();
 	currentMediaSourceKey = sourceKey || currentMediaSourceKey;
 	resetMediaPagination('folder', id, name || '文件夹');
@@ -739,6 +792,7 @@ function loadMediaLibrary(section){
 	mediaFolderStack = [];
 	currentMediaCategoryId = '';
 	selectMediaSection(section);
+	hideMediaContinue(true);
 	showMediaBrowse(false);
 	hideMediaSearchFilters();
 	$('#mediaSearchInput').val('');
@@ -767,6 +821,7 @@ function searchMedia(){
 	mediaFolderStack = [];
 	currentMediaCategoryId = '';
 	showMediaBrowse(false);
+	hideMediaContinue(true);
 	$('#mediaDetail').empty();
 	$('#mediaGrid').html(mediaStateHtml('正在搜索', q, '', '', true));
 	$.ajax({url:'/media/search', data:{q:q,sourceKey:''}, dataType:'json', timeout:45000, success:function(data){
@@ -1269,6 +1324,12 @@ $('#mediaLibraryNav').on('click', '.media-library-tab', function(){
 	var section = $(this).attr('data-section') || 'browse';
 	if(section === 'browse') loadMediaHome();
 	else loadMediaLibrary(section);
+});
+$('#btnMediaContinueAll').on('click', function(){
+	loadMediaLibrary('history');
+});
+$('#mediaContinueItems').on('click', '.media-continue-card', function(){
+	loadMediaDetail($(this).attr('data-source') || '', $(this).attr('data-id') || '');
 });
 $('.media-panel').on('click', '.media-state-action', function(){
 	var action = $(this).attr('data-media-action') || '';
