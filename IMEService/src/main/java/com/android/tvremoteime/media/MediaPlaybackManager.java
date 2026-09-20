@@ -96,6 +96,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
             result.put("episode", current.optString("episode"));
             result.put("flag", current.optString("flag"));
             result.put("playId", current.optString("playId"));
+            result.put("routes", current.optJSONArray("routes") == null ? new JSONArray() : current.optJSONArray("routes"));
             int episodeIndex = current.optInt("episodeIndex", -1);
             JSONArray episodes = current.optJSONArray("episodes");
             int episodeCount = episodes == null ? 0 : episodes.length();
@@ -183,6 +184,60 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         return playQueueTarget(target);
     }
 
+    public JSONObject switchRoute(String flag) throws Exception {
+        JSONObject current = snapshot();
+        if (current.length() == 0 || TextUtils.isEmpty(current.optString("mediaName"))) {
+            throw new Exception("当前没有可切换线路的播放内容");
+        }
+        flag = safe(flag);
+        if (TextUtils.equals(flag, current.optString("flag"))) return switchResult(current);
+
+        MediaSource source = requireSource(current.optString("sourceKey"));
+        if (TextUtils.isEmpty(current.optString("mediaId")) || source.indexs == 1) {
+            throw new Exception("当前内容无法重新加载线路");
+        }
+        MediaDetail detail = detail(source, current.optString("mediaId"));
+        MediaEpisode episode = findEpisodeInRoute(detail, flag, current.optString("episode"), current.optInt("episodeIndex", -1));
+        if (episode == null) throw new Exception("这条线路没有匹配到当前剧集");
+
+        PlaybackTarget target = createTarget(source, detail, episode, null, false);
+        target.url = resolve(source, episode.flag, episode.playId);
+        if (TextUtils.isEmpty(target.url)) throw new Exception("这条线路无法解析播放地址");
+        target.resumePosition = currentPlaybackPosition(current);
+        activateTarget(target, null, false);
+        VideoPlayHelper.playUrl(context, target.url, 0, false, displayTitle(target));
+        return switchResult(snapshot());
+    }
+
+    public JSONObject switchSource(String sourceKey) throws Exception {
+        JSONObject current = snapshot();
+        if (current.length() == 0 || TextUtils.isEmpty(current.optString("mediaName"))) {
+            throw new Exception("当前没有可切换来源的播放内容");
+        }
+        MediaSource source = requireSource(sourceKey);
+        if (TextUtils.equals(source.key, current.optString("sourceKey"))) return switchResult(current);
+        if (!source.searchable || source.indexs == 1) throw new Exception("这个源暂不支持播放中切换");
+
+        PlaybackTarget target = targetFromAlternateSource(source, current.optString("mediaName"),
+                current.optString("episode"), current.optInt("episodeIndex", -1));
+        if (target == null || TextUtils.isEmpty(target.url)) throw new Exception("这个源没有找到可播放的同名内容");
+        target.fallback = false;
+        target.resumePosition = currentPlaybackPosition(current);
+        activateTarget(target, null, false);
+        VideoPlayHelper.playUrl(context, target.url, 0, false, displayTitle(target));
+        return switchResult(snapshot());
+    }
+
+    private JSONObject switchResult(JSONObject current) throws Exception {
+        JSONObject result = new JSONObject();
+        result.put("success", true);
+        result.put("sourceKey", current.optString("sourceKey"));
+        result.put("sourceName", current.optString("sourceName"));
+        result.put("flag", current.optString("flag"));
+        result.put("episode", current.optString("episode"));
+        return result;
+    }
+
     private JSONObject playQueueTarget(PlaybackTarget target) throws Exception {
         activateTarget(target, null, false);
         VideoPlayHelper.playUrl(context, target.url, 0, false, displayTitle(target));
@@ -191,6 +246,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         result.put("episode", target.episode == null ? "" : safe(target.episode.name));
         result.put("sourceKey", target.source.key);
         result.put("sourceName", target.source.name);
+        result.put("flag", target.episode == null ? "" : safe(target.episode.flag));
         result.put("fallback", target.fallback);
         return result;
     }
@@ -309,6 +365,10 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
             @Override
             public void run() {
                 try {
+                    synchronized (MediaPlaybackManager.this) {
+                        session.put("failedFlags", addFailedFlag(session.optJSONArray("failedFlags"), session.optString("flag")));
+                        persistLocked(false);
+                    }
                     PlaybackTarget target = fallbackForSession(true);
                     if (target == null) {
                         XLVideoPlayActivity.finishCurrentPlayback();
@@ -372,6 +432,13 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         }
         if (!TextUtils.isEmpty(target.url)) return target;
 
+        PlaybackTarget routeFallback = findAlternateRoute(source, detail, episode.flag, episode.name,
+                target.episodeIndex, addFailedFlag(null, episode.flag));
+        if (routeFallback != null) {
+            routeFallback.fallback = true;
+            return routeFallback;
+        }
+
         String title = detail != null ? detail.name : safe(params.get("mediaName"));
         PlaybackTarget fallback = findFallback(title, episode.name, target.episodeIndex, source.key);
         if (fallback == null) throw new Exception("当前源无法解析播放地址，且没有找到可用的备用源");
@@ -395,6 +462,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         target.type = detail == null ? "" : safe(detail.type);
         target.routeEpisodes = routeEpisodes(detail, episode == null ? "" : episode.flag);
         target.episodeIndex = episodeIndex(target.routeEpisodes, episode == null ? "" : episode.playId);
+        target.routes = buildRoutes(detail, episode == null ? "" : episode.flag);
         return target;
     }
 
@@ -425,6 +493,8 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         next.put("flag", target.episode == null ? "" : safe(target.episode.flag));
         next.put("playId", target.episode == null ? "" : safe(target.episode.playId));
         next.put("episodes", target.routeEpisodes == null ? new JSONArray() : target.routeEpisodes);
+        next.put("routes", target.routes == null ? new JSONArray() : target.routes);
+        next.put("failedFlags", target.failedFlags == null ? new JSONArray() : target.failedFlags);
         next.put("episodeIndex", target.episodeIndex);
         next.put("opening", Math.max(0, opening));
         next.put("ending", Math.max(0, ending));
@@ -469,6 +539,8 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         target.year = current.optString("year");
         target.type = current.optString("type");
         target.routeEpisodes = episodes;
+        target.routes = current.optJSONArray("routes");
+        target.failedFlags = current.optJSONArray("failedFlags");
         target.episodeIndex = nextIndex;
         try {
             target.url = resolve(source, episode.flag, episode.playId);
@@ -476,6 +548,17 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
             Log.w(IMEService.TAG, "next episode failed on current source: " + e.getMessage());
         }
         if (!TextUtils.isEmpty(target.url)) return target;
+        try {
+            MediaDetail detail = source.indexs == 1 ? null : detail(source, target.mediaId);
+            PlaybackTarget routeFallback = findAlternateRoute(source, detail, episode.flag, episode.name,
+                    nextIndex, addFailedFlag(target.failedFlags, episode.flag));
+            if (routeFallback != null) {
+                routeFallback.fallback = true;
+                return routeFallback;
+            }
+        } catch (Exception e) {
+            Log.w(IMEService.TAG, "next episode same-source fallback failed: " + e.getMessage());
+        }
         PlaybackTarget fallback = findFallback(target.mediaName, episode.name, nextIndex, source.key);
         if (fallback != null) fallback.fallback = true;
         return fallback;
@@ -512,6 +595,22 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
 
     private PlaybackTarget fallbackForSession(boolean excludeCurrent) throws Exception {
         JSONObject current = snapshot();
+        try {
+            MediaSource currentSource = requireSource(current.optString("sourceKey"));
+            if (currentSource.indexs != 1 && !TextUtils.isEmpty(current.optString("mediaId"))) {
+                MediaDetail detail = detail(currentSource, current.optString("mediaId"));
+                JSONArray failedFlags = addFailedFlag(current.optJSONArray("failedFlags"), current.optString("flag"));
+                PlaybackTarget routeFallback = findAlternateRoute(currentSource, detail, current.optString("flag"),
+                        current.optString("episode"), current.optInt("episodeIndex", -1), failedFlags);
+                if (routeFallback != null) {
+                    routeFallback.fallback = true;
+                    routeFallback.failedFlags = failedFlags;
+                    return routeFallback;
+                }
+            }
+        } catch (Exception e) {
+            Log.w(IMEService.TAG, "same-source line fallback failed: " + e.getMessage());
+        }
         String exclude = excludeCurrent ? current.optString("sourceKey") : "";
         return findFallback(current.optString("mediaName"), current.optString("episode"),
                 current.optInt("episodeIndex", -1), exclude);
@@ -534,6 +633,8 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         target.year = current.optString("year");
         target.type = current.optString("type");
         target.routeEpisodes = current.optJSONArray("episodes");
+        target.routes = current.optJSONArray("routes");
+        target.failedFlags = current.optJSONArray("failedFlags");
         target.episodeIndex = current.optInt("episodeIndex", -1);
         try {
             target.url = resolve(source, episode.flag, episode.playId);
@@ -604,6 +705,33 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         return TextUtils.isEmpty(target.url) ? null : target;
     }
 
+    private PlaybackTarget findAlternateRoute(MediaSource source, MediaDetail detail, String currentFlag,
+                                               String episodeName, int preferredIndex, JSONArray failedFlags) throws Exception {
+        if (source == null || detail == null || detail.episodes == null || detail.episodes.isEmpty()) return null;
+        List<String> flags = routeFlags(detail);
+        if (flags.size() <= 1) return null;
+        int currentIndex = flags.indexOf(safe(currentFlag));
+        if (currentIndex < 0) currentIndex = 0;
+        for (int offset = 1; offset < flags.size(); offset++) {
+            String flag = flags.get((currentIndex + offset) % flags.size());
+            if (containsString(failedFlags, flag)) continue;
+            MediaEpisode episode = findEpisodeInRoute(detail, flag, episodeName, preferredIndex);
+            if (episode == null) continue;
+            try {
+                PlaybackTarget target = createTarget(source, detail, episode, null, true);
+                target.url = resolve(source, episode.flag, episode.playId);
+                if (!TextUtils.isEmpty(target.url)) {
+                    target.failedFlags = failedFlags;
+                    return target;
+                }
+            } catch (Exception e) {
+                failedFlags = addFailedFlag(failedFlags, flag);
+                Log.w(IMEService.TAG, "alternate line failed: " + flag + " · " + e.getMessage());
+            }
+        }
+        return null;
+    }
+
     private MediaItem bestTitleMatch(List<MediaItem> items, String title) {
         String normalized = normalize(title);
         MediaItem partial = null;
@@ -633,6 +761,71 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
             if (preferredIndex < route.length()) return episodeFromJson(route.optJSONObject(preferredIndex));
         }
         return detail.episodes.get(0);
+    }
+
+    private MediaEpisode findEpisodeInRoute(MediaDetail detail, String flag, String episodeName, int preferredIndex) {
+        JSONArray route = routeEpisodes(detail, flag);
+        if (route.length() == 0) return null;
+        String normalizedEpisode = normalize(episodeName);
+        if (!TextUtils.isEmpty(normalizedEpisode)) {
+            for (int i = 0; i < route.length(); i++) {
+                JSONObject obj = route.optJSONObject(i);
+                if (obj != null && normalizedEpisode.equals(normalize(obj.optString("name")))) return episodeFromJson(obj);
+            }
+        }
+        if (preferredIndex >= 0 && preferredIndex < route.length()) return episodeFromJson(route.optJSONObject(preferredIndex));
+        return episodeFromJson(route.optJSONObject(0));
+    }
+
+    private List<String> routeFlags(MediaDetail detail) {
+        List<String> flags = new ArrayList<String>();
+        if (detail == null || detail.episodes == null) return flags;
+        for (MediaEpisode episode : detail.episodes) {
+            String flag = safe(episode.flag);
+            if (!flags.contains(flag)) flags.add(flag);
+        }
+        return flags;
+    }
+
+    private JSONArray buildRoutes(MediaDetail detail, String currentFlag) throws Exception {
+        JSONArray routes = new JSONArray();
+        List<String> flags = routeFlags(detail);
+        for (String flag : flags) {
+            JSONObject item = new JSONObject();
+            item.put("flag", flag);
+            item.put("name", TextUtils.isEmpty(flag) ? "默认线路" : flag);
+            item.put("current", TextUtils.equals(flag, safe(currentFlag)));
+            item.put("episodeCount", routeEpisodes(detail, flag).length());
+            routes.put(item);
+        }
+        return routes;
+    }
+
+    private JSONArray addFailedFlag(JSONArray source, String flag) {
+        JSONArray result = new JSONArray();
+        if (source != null) {
+            for (int i = 0; i < source.length(); i++) {
+                String value = source.optString(i);
+                if (!containsString(result, value)) result.put(value);
+            }
+        }
+        String value = safe(flag);
+        if (!containsString(result, value)) result.put(value);
+        return result;
+    }
+
+    private boolean containsString(JSONArray array, String value) {
+        if (array == null) return false;
+        value = safe(value);
+        for (int i = 0; i < array.length(); i++) {
+            if (TextUtils.equals(value, array.optString(i))) return true;
+        }
+        return false;
+    }
+
+    private long currentPlaybackPosition(JSONObject current) {
+        XLVideoPlayActivity.WebPlaybackStatus status = XLVideoPlayActivity.getWebPlaybackStatus();
+        return status.active ? Math.max(0, status.position) : Math.max(0, current.optLong("position", 0));
     }
 
     private JSONArray routeEpisodes(MediaDetail detail, String flag) {
@@ -768,6 +961,8 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         String year;
         String type;
         JSONArray routeEpisodes;
+        JSONArray routes;
+        JSONArray failedFlags;
         int episodeIndex = -1;
         String url;
         boolean fallback;

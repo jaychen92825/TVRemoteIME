@@ -81,6 +81,12 @@ public class MediaRequestProcesser implements RequestProcesser {
                             ? playbackManager.playAdjacent(parseDirection(params.get("direction")))
                             : playbackManager.playEpisodeAt(Integer.parseInt(index)));
                 }
+                if ("/media/switch".equals(fileName)) {
+                    String type = params.get("type");
+                    if ("route".equals(type)) return ok(playbackManager.switchRoute(params.get("flag")));
+                    if ("source".equals(type)) return ok(playbackManager.switchSource(params.get("sourceKey")));
+                    throw new Exception("未知的播放切换类型");
+                }
                 if ("/media/marker".equals(fileName)) return ok(playbackManager.updateMarker(params.get("action"), params.get("delta")));
                 if ("/media/favorite".equals(fileName)) return favoriteResponse(params);
                 if ("/media/history/clear".equals(fileName)) return clearHistoryResponse();

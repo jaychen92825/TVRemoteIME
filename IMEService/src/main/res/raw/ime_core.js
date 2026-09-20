@@ -986,6 +986,7 @@ function renderMediaPlaybackStatus(data){
 	$('#btnMediaResume').toggleClass('hide', active);
 	$('#btnMediaPrevEpisode').prop('disabled', !data.canPrev);
 	$('#btnMediaNextEpisode').prop('disabled', !data.canNext);
+	renderMediaPlaybackSwitchers(data);
 	var queue = data.queue || [];
 	var queueHtml = [];
 	for(var i=0;i<queue.length;i++){
@@ -999,6 +1000,59 @@ function renderMediaPlaybackStatus(data){
 	if(Number(data.opening) > 0) skip.push('片头跳过 '+formatPlaybackTime(data.opening));
 	if(Number(data.ending) > 0) skip.push('片尾提前 '+formatPlaybackTime(data.ending));
 	$('#mediaSkipSummary').text(skip.length ? skip.join(' · ') : '未设置跳过');
+}
+
+function renderMediaPlaybackSwitchers(data){
+	data = data || {};
+	var sourceOptions = [];
+	var currentSourceKey = String(data.sourceKey || '');
+	var hasCurrentSourceOption = false;
+	for(var i=0;i<mediaSources.length;i++){
+		var source = mediaSources[i] || {};
+		if(!source.supported || !source.searchable || Number(source.indexs) === 1) continue;
+		if(String(source.key || '') === currentSourceKey) hasCurrentSourceOption = true;
+		sourceOptions.push('<option value="'+escapeHtml(source.key || '')+'">'+escapeHtml(source.name || source.key || '未命名源')+'</option>');
+	}
+	if(currentSourceKey && !hasCurrentSourceOption){
+		sourceOptions.unshift('<option value="'+escapeHtml(currentSourceKey)+'">'+escapeHtml(data.sourceName || currentSourceKey)+'</option>');
+	}
+	var $source = $('#mediaPlaybackSource').html(sourceOptions.join(''));
+	$source.val(currentSourceKey).prop('disabled', sourceOptions.length <= 1);
+
+	var routes = data.routes || [];
+	var routeOptions = [];
+	for(var r=0;r<routes.length;r++){
+		var route = routes[r] || {};
+		var routeName = route.name || route.flag || '默认线路';
+		routeOptions.push('<option value="'+escapeHtml(route.flag || '')+'">'+escapeHtml(routeName)+'</option>');
+	}
+	if(!routeOptions.length && data.flag !== undefined){
+		routeOptions.push('<option value="'+escapeHtml(data.flag || '')+'">'+escapeHtml(data.flag || '默认线路')+'</option>');
+	}
+	var $route = $('#mediaPlaybackRoute').html(routeOptions.join(''));
+	$route.val(String(data.flag || '')).prop('disabled', routeOptions.length <= 1);
+	$('#mediaPlaybackSwitchers').toggleClass('hide', !sourceOptions.length && !routeOptions.length);
+}
+
+function mediaPlaybackSwitch(type, value){
+	var isSource = type === 'source';
+	var $control = isSource ? $('#mediaPlaybackSource') : $('#mediaPlaybackRoute');
+	$control.prop('disabled', true);
+	mediaMessage(isSource ? '正在切换播放源…' : '正在切换线路…');
+	var payload = {type:type};
+	if(isSource) payload.sourceKey = value;
+	else payload.flag = value;
+	$.ajax({url:'/media/switch', type:'POST', data:payload, dataType:'json', timeout:45000, success:function(data){
+		if(data && data.success === false){
+			mediaMessage(data.message || (isSource ? '切换播放源失败' : '切换线路失败'));
+		}else{
+			mediaMessage(isSource ? '已切换播放源。' : '已切换线路。');
+		}
+		refreshMediaPlaybackStatus();
+	}, error:function(){
+		mediaMessage(isSource ? '切换播放源超时，请稍后重试。' : '切换线路超时，请稍后重试。');
+		refreshMediaPlaybackStatus();
+	}});
 }
 
 function mediaEpisodeAction(direction){
@@ -1092,6 +1146,8 @@ $('#mediaPlaybackSpeed').on('change', function(){
 		mediaMessage('倍速切换失败，请稍后重试。');
 	});
 });
+$('#mediaPlaybackSource').on('change', function(){ mediaPlaybackSwitch('source', $(this).val()); });
+$('#mediaPlaybackRoute').on('change', function(){ mediaPlaybackSwitch('route', $(this).val()); });
 $('#btnMediaPrevEpisode').on('click', function(){ mediaEpisodeAction('prev'); });
 $('#btnMediaNextEpisode').on('click', function(){ mediaEpisodeAction('next'); });
 $('#btnMediaResume').on('click', function(){
