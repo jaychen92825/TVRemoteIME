@@ -187,6 +187,7 @@
 			<div class="media-playback-controls hide" id="mediaPlaybackControls">
 				<div class="media-playback-compact">
 					<button type="button" class="media-playback-compact-main" id="btnMediaPlaybackToggle" aria-expanded="false" aria-label="展开播放控制">
+						<span class="media-playback-fab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m10 9 5 3-5 3V9Z" fill="currentColor"/></svg></span>
 						<span class="media-playback-compact-copy">
 							<span class="media-playback-compact-label" id="mediaPlaybackCompactLabel">电视播放</span>
 							<span class="media-playback-compact-title" id="mediaPlaybackCompactTitle"></span>
@@ -224,9 +225,9 @@
 					<span id="mediaPlaybackDuration">00:00</span>
 				</div>
 				<div class="media-playback-actions">
-					<button type="button" class="media-control-btn" id="btnMediaPrevEpisode">上一集</button>
-					<button type="button" class="media-control-btn media-control-primary" id="btnMediaPlayPause">暂停</button>
-					<button type="button" class="media-control-btn" id="btnMediaNextEpisode">下一集</button>
+					<button type="button" class="media-control-btn media-control-icon" id="btnMediaPrevEpisode" aria-label="上一集" title="上一集"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M7 6v12M18 7l-8 5 8 5V7Z" fill="currentColor"/></svg><span class="media-control-label">上一集</span></button>
+					<button type="button" class="media-control-btn media-control-icon media-control-primary" id="btnMediaPlayPause" aria-label="暂停" title="暂停"><svg class="media-control-play-icon hide" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" fill="currentColor"/></svg><svg class="media-control-pause-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="7" y="5" width="3.5" height="14" rx="1" fill="currentColor"/><rect x="13.5" y="5" width="3.5" height="14" rx="1" fill="currentColor"/></svg><span class="media-control-label">暂停</span></button>
+					<button type="button" class="media-control-btn media-control-icon" id="btnMediaNextEpisode" aria-label="下一集" title="下一集"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M17 6v12M6 7l8 5-8 5V7Z" fill="currentColor"/></svg><span class="media-control-label">下一集</span></button>
 					<button type="button" class="media-control-btn media-control-primary hide" id="btnMediaResume">继续播放</button>
 				</div>
 				<div class="media-playback-queue hide" id="mediaPlaybackQueue">
@@ -255,7 +256,7 @@
 			</div>
 			<div class="media-settings-view hide" id="mediaSettingsView">
 				<div class="media-subview-head">
-					<button type="button" class="media-back-btn" id="btnMediaSettingsBack">返回浏览</button>
+					<button type="button" class="media-back-btn" id="btnMediaSettingsBack" aria-label="返回浏览" title="返回浏览"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 					<div class="media-subview-title">媒体配置</div>
 				</div>
 				<div class="media-settings-card">

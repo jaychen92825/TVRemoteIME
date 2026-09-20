@@ -800,7 +800,7 @@ function mediaEpisodeGroups(episodes){
 	return groups;
 }
 function mediaDetailHeader(){
-	return '<div class="media-subview-head"><button type="button" class="media-back-btn" id="btnMediaDetailBack">返回浏览</button></div>';
+	return '<div class="media-subview-head"><button type="button" class="media-back-btn" id="btnMediaDetailBack" aria-label="返回浏览" title="返回浏览"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>';
 }
 function loadMediaDetail(sourceKey, id){
 	currentMediaDetail = null;
@@ -955,7 +955,11 @@ function renderMediaPlaybackStatus(data){
 	var $speed = $('#mediaPlaybackSpeed');
 	$speed.prop('disabled', !active || !data.speedSupported);
 	if(!mediaPlaybackDragging) $speed.val(String(speed));
-	$('#btnMediaPlayPause').toggleClass('hide', !active).text(data.playing ? '暂停' : '播放');
+	var $playPause = $('#btnMediaPlayPause').toggleClass('hide', !active);
+	$playPause.attr('aria-label', data.playing ? '暂停' : '播放').attr('title', data.playing ? '暂停' : '播放');
+	$playPause.find('.media-control-label').text(data.playing ? '暂停' : '播放');
+	$playPause.find('.media-control-play-icon').toggleClass('hide', !!data.playing);
+	$playPause.find('.media-control-pause-icon').toggleClass('hide', !data.playing);
 	$('#btnMediaResume').toggleClass('hide', active);
 	$('#btnMediaPrevEpisode').prop('disabled', !data.canPrev);
 	$('#btnMediaNextEpisode').prop('disabled', !data.canNext);
