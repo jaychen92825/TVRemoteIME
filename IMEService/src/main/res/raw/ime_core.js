@@ -902,7 +902,7 @@ function playMediaEpisode(sourceKey, flag, playId, title, episode){
 	var displayTitle = title || '';
 	if(episode) displayTitle += (displayTitle ? ' · ' : '') + episode;
 	var item = currentMediaDetail || {};
-	$.ajax({url:'/media/play', type:'POST', data:{sourceKey:sourceKey, sourceName:item.sourceName || '', mediaId:item.id || '', mediaName:item.name || title || '', pic:item.pic || '', score:item.score || '', remark:item.remark || '', flag:flag, playId:playId, episode:episode || '', title:displayTitle}, dataType:'json', timeout:45000, success:function(data){
+	$.ajax({url:'/media/play', type:'POST', data:{sourceKey:sourceKey, sourceName:item.sourceName || '', mediaId:item.id || '', canonicalId:item.canonicalId || '', mediaName:item.name || title || '', pic:item.pic || '', score:item.score || '', remark:item.remark || '', year:item.year || '', type:item.type || '', flag:flag, playId:playId, episode:episode || '', title:displayTitle}, dataType:'json', timeout:45000, success:function(data){
 		if(data && data.success === false){
 			mediaMessage(data.message || '播放失败');
 		}else{
@@ -1245,7 +1245,7 @@ $('#mediaGrid').on('click', '.media-card-unfavorite', function(e){
 	var item = renderedMediaItems[index];
 	if(!item) return;
 	var $button = $(this).prop('disabled', true);
-	$.post('/media/favorite', {sourceKey:item.sourceKey || '', sourceName:item.sourceName || '', mediaId:item.id || '', mediaName:item.name || '', pic:item.pic || '', score:item.score || '', remark:item.remark || ''}, function(data){
+	$.post('/media/favorite', {sourceKey:item.sourceKey || '', sourceName:item.sourceName || '', mediaId:item.id || '', canonicalId:item.canonicalId || '', mediaName:item.name || '', pic:item.pic || '', score:item.score || '', remark:item.remark || '', year:item.year || '', type:item.type || ''}, function(data){
 		if(!data || data.success === false || data.favorite){
 			$button.prop('disabled', false);
 			mediaMessage(data && data.message ? data.message : '取消收藏失败');
@@ -1275,7 +1275,7 @@ $('#mediaDetail').on('click', '#btnMediaContinue,#btnMediaStart', function(){
 $('#mediaDetail').on('click', '#btnMediaFavorite', function(){
 	if(!currentMediaDetail) return;
 	var item = currentMediaDetail;
-	$.post('/media/favorite', {sourceKey:item.sourceKey || '', sourceName:item.sourceName || '', mediaId:item.id || '', mediaName:item.name || '', pic:item.pic || '', score:item.score || '', remark:item.remark || ''}, function(data){
+	$.post('/media/favorite', {sourceKey:item.sourceKey || '', sourceName:item.sourceName || '', mediaId:item.id || '', canonicalId:item.canonicalId || '', mediaName:item.name || '', pic:item.pic || '', score:item.score || '', remark:item.remark || '', year:item.year || '', type:item.type || ''}, function(data){
 		if(!data || data.success === false){
 			mediaMessage(data && data.message ? data.message : '收藏操作失败');
 			return;

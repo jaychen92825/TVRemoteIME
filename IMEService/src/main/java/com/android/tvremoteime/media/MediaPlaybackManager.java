@@ -96,6 +96,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
             result.put("sourceKey", current.optString("sourceKey"));
             result.put("sourceName", current.optString("sourceName"));
             result.put("mediaId", current.optString("mediaId"));
+            result.put("canonicalId", current.optString("canonicalId"));
             result.put("mediaName", current.optString("mediaName"));
             result.put("pic", current.optString("pic"));
             result.put("episode", current.optString("episode"));
@@ -206,6 +207,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         if (episode == null) throw new Exception("这条线路没有匹配到当前剧集");
 
         PlaybackTarget target = createTarget(source, detail, episode, null, false);
+        target.canonicalId = canonicalId(current.optString("canonicalId"), target.mediaName, target.year);
         target.url = resolve(source, episode.flag, episode.playId);
         if (TextUtils.isEmpty(target.url)) throw new Exception("这条线路无法解析播放地址");
         target.resumePosition = currentPlaybackPosition(current);
@@ -224,7 +226,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         if (!source.searchable || source.indexs == 1) throw new Exception("这个源暂不支持播放中切换");
 
         PlaybackTarget target = targetFromAlternateSource(source, current.optString("mediaName"),
-                current.optString("episode"), current.optInt("episodeIndex", -1));
+                current.optString("episode"), current.optInt("episodeIndex", -1), current.optString("canonicalId"));
         if (target == null || TextUtils.isEmpty(target.url)) throw new Exception("这个源没有找到可播放的同名内容");
         target.fallback = false;
         target.resumePosition = currentPlaybackPosition(current);
@@ -445,11 +447,12 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
                 target.episodeIndex, addFailedFlag(null, episode.flag));
         if (routeFallback != null) {
             routeFallback.fallback = true;
+            routeFallback.canonicalId = target.canonicalId;
             return routeFallback;
         }
 
         String title = detail != null ? detail.name : safe(params.get("mediaName"));
-        PlaybackTarget fallback = findFallback(title, episode.name, target.episodeIndex, source.key);
+        PlaybackTarget fallback = findFallback(title, episode.name, target.episodeIndex, source.key, target.canonicalId);
         if (fallback == null) throw new Exception("当前源无法解析播放地址，且没有找到可用的备用源");
         fallback.fallback = true;
         return fallback;
@@ -467,8 +470,9 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         target.pic = detail != null && !TextUtils.isEmpty(detail.pic) ? detail.pic : safe(params == null ? null : params.get("pic"));
         target.score = detail != null && !TextUtils.isEmpty(detail.score) ? detail.score : safe(params == null ? null : params.get("score"));
         target.remark = detail != null && !TextUtils.isEmpty(detail.remark) ? detail.remark : safe(params == null ? null : params.get("remark"));
-        target.year = detail == null ? "" : safe(detail.year);
-        target.type = detail == null ? "" : safe(detail.type);
+        target.year = detail != null && !TextUtils.isEmpty(detail.year) ? detail.year : safe(params == null ? null : params.get("year"));
+        target.type = detail != null && !TextUtils.isEmpty(detail.type) ? detail.type : safe(params == null ? null : params.get("type"));
+        target.canonicalId = canonicalId(safe(params == null ? null : params.get("canonicalId")), target.mediaName, target.year);
         target.routeEpisodes = routeEpisodes(detail, episode == null ? "" : episode.flag);
         target.episodeIndex = episodeIndex(target.routeEpisodes, episode == null ? "" : episode.playId);
         target.routes = buildRoutes(detail, episode == null ? "" : episode.flag);
@@ -477,7 +481,8 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
 
     private synchronized void activateTarget(PlaybackTarget target, Map<String, String> params, boolean allowResume) throws Exception {
         if (target == null || target.source == null || TextUtils.isEmpty(target.url)) throw new Exception("无法解析播放地址");
-        JSONObject old = libraryStore.getHistoryItem(target.source.key, target.mediaId);
+        JSONObject old = libraryStore.getHistoryItem(target.source.key, target.mediaId, target.canonicalId,
+                target.mediaName, target.year);
         long opening = old == null ? session.optLong("opening", 0) : old.optLong("opening", 0);
         long ending = old == null ? session.optLong("ending", 0) : old.optLong("ending", 0);
         long resume = 0;
@@ -492,6 +497,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         next.put("sourceKey", safe(target.source.key));
         next.put("sourceName", safe(target.source.name));
         next.put("mediaId", safe(target.mediaId));
+        next.put("canonicalId", safe(target.canonicalId));
         next.put("mediaName", safe(target.mediaName));
         next.put("pic", safe(target.pic));
         next.put("score", safe(target.score));
@@ -550,12 +556,13 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
                     nextIndex, addFailedFlag(target.failedFlags, episode.flag));
             if (routeFallback != null) {
                 routeFallback.fallback = true;
+                routeFallback.canonicalId = target.canonicalId;
                 return routeFallback;
             }
         } catch (Exception e) {
             Log.w(IMEService.TAG, "next episode same-source fallback failed: " + e.getMessage());
         }
-        PlaybackTarget fallback = findFallback(target.mediaName, episode.name, nextIndex, source.key);
+        PlaybackTarget fallback = findFallback(target.mediaName, episode.name, nextIndex, source.key, target.canonicalId);
         if (fallback != null) fallback.fallback = true;
         return fallback;
     }
@@ -572,6 +579,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         target.source = source;
         target.episode = episode;
         target.mediaId = current.optString("mediaId");
+        target.canonicalId = canonicalId(current.optString("canonicalId"), current.optString("mediaName"), current.optString("year"));
         target.mediaName = current.optString("mediaName");
         target.pic = current.optString("pic");
         target.score = current.optString("score");
@@ -686,6 +694,8 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
                 if (routeFallback != null) {
                     routeFallback.fallback = true;
                     routeFallback.failedFlags = failedFlags;
+                    routeFallback.canonicalId = canonicalId(current.optString("canonicalId"),
+                            current.optString("mediaName"), current.optString("year"));
                     return routeFallback;
                 }
             }
@@ -694,7 +704,8 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         }
         String exclude = excludeCurrent ? current.optString("sourceKey") : "";
         return findFallback(current.optString("mediaName"), current.optString("episode"),
-                current.optInt("episodeIndex", -1), exclude);
+                current.optInt("episodeIndex", -1), exclude,
+                canonicalId(current.optString("canonicalId"), current.optString("mediaName"), current.optString("year")));
     }
 
     private PlaybackTarget targetFromSession(JSONObject current) throws Exception {
@@ -707,6 +718,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         target.source = source;
         target.episode = episode;
         target.mediaId = current.optString("mediaId");
+        target.canonicalId = canonicalId(current.optString("canonicalId"), current.optString("mediaName"), current.optString("year"));
         target.mediaName = current.optString("mediaName");
         target.pic = current.optString("pic");
         target.score = current.optString("score");
@@ -726,7 +738,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
     }
 
     private PlaybackTarget findFallback(final String title, final String episodeName, final int episodeIndex,
-                                        String excludeSourceKey) throws Exception {
+                                        String excludeSourceKey, final String canonicalId) throws Exception {
         if (TextUtils.isEmpty(title)) return null;
         List<MediaSource> rawCandidates = new ArrayList<MediaSource>();
         for (MediaSource source : configManager.getSources()) {
@@ -744,7 +756,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
                 @Override
                 public PlaybackTarget call() {
                     try {
-                        return targetFromAlternateSource(source, title, episodeName, episodeIndex);
+                        return targetFromAlternateSource(source, title, episodeName, episodeIndex, canonicalId);
                     } catch (Exception ignored) {
                         return null;
                     }
@@ -773,7 +785,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
     }
 
     private PlaybackTarget targetFromAlternateSource(MediaSource source, String title, String episodeName,
-                                                      int preferredIndex) throws Exception {
+                                                      int preferredIndex, String canonicalId) throws Exception {
         List<MediaItem> results = search(source, title, true);
         MediaItem match = bestTitleMatch(results, title);
         if (match == null || TextUtils.isEmpty(match.id) || source.indexs == 1) return null;
@@ -782,6 +794,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         MediaEpisode episode = findEpisode(detail, null, null, episodeName, preferredIndex);
         if (episode == null) return null;
         PlaybackTarget target = createTarget(source, detail, episode, null, true);
+        target.canonicalId = canonicalId(canonicalId, target.mediaName, target.year);
         target.url = resolve(source, episode.flag, episode.playId);
         return TextUtils.isEmpty(target.url) ? null : target;
     }
@@ -958,6 +971,8 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
             history.put("sourceKey", session.optString("sourceKey"));
             history.put("sourceName", session.optString("sourceName"));
             history.put("id", session.optString("mediaId"));
+            history.put("canonicalId", canonicalId(session.optString("canonicalId"),
+                    session.optString("mediaName"), session.optString("year")));
             history.put("name", session.optString("mediaName"));
             history.put("pic", session.optString("pic"));
             history.put("score", session.optString("score"));
@@ -1026,6 +1041,10 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         return value.toLowerCase().replaceAll("[\\s\\p{Punct}·•，。！？：；、【】（）《》]+", "");
     }
 
+    private static String canonicalId(String value, String name, String year) {
+        return TextUtils.isEmpty(value) ? MediaLibraryStore.canonicalMediaId(name, year) : value;
+    }
+
     private static String safe(String value) {
         return value == null ? "" : value;
     }
@@ -1035,6 +1054,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         MediaDetail detail;
         MediaEpisode episode;
         String mediaId;
+        String canonicalId;
         String mediaName;
         String pic;
         String score;

@@ -212,8 +212,10 @@ public class MediaRequestProcesser implements RequestProcesser {
         if (TextUtils.isEmpty(detail.id)) detail.id = id;
         JSONObject obj = new JSONObject();
         JSONObject item = detail.toJson();
-        item.put("favorite", libraryStore.isFavorite(source.key, detail.id));
-        JSONObject history = libraryStore.getHistoryItem(source.key, detail.id);
+        String canonicalId = MediaLibraryStore.canonicalMediaId(detail.name, detail.year);
+        item.put("canonicalId", canonicalId);
+        item.put("favorite", libraryStore.isFavorite(source.key, detail.id, canonicalId, detail.name, detail.year));
+        JSONObject history = libraryStore.getHistoryItem(source.key, detail.id, canonicalId, detail.name, detail.year);
         if (history != null) item.put("history", history);
         obj.put("item", item);
         return ok(obj);
@@ -259,6 +261,9 @@ public class MediaRequestProcesser implements RequestProcesser {
         item.put("pic", safe(params.get("pic")));
         item.put("score", safe(params.get("score")));
         item.put("remark", safe(params.get("remark")));
+        item.put("year", safe(params.get("year")));
+        item.put("type", safe(params.get("type")));
+        item.put("canonicalId", safe(params.get("canonicalId")));
         return item;
     }
 
