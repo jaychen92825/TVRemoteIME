@@ -94,7 +94,10 @@ public class MediaRequestProcesser implements RequestProcesser {
             return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.NOT_FOUND, "Error 404, file not found.");
         } catch (Exception e) {
             Log.e(IMEService.TAG, "media request failed: " + fileName, e);
-            return errorResponse(e.getMessage());
+            return errorResponse(userFacingError(e));
+        } catch (LinkageError e) {
+            Log.e(IMEService.TAG, "media linkage failed: " + fileName, e);
+            return errorResponse(userFacingError(e));
         }
     }
 
@@ -510,5 +513,50 @@ public class MediaRequestProcesser implements RequestProcesser {
         } catch (Exception ignored) {
             return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.INTERNAL_ERROR, "请求失败");
         }
+    }
+
+    private String userFacingError(Throwable error) {
+        String message = error == null ? "" : error.getMessage();
+        StringBuilder trace = new StringBuilder();
+        Throwable current = error;
+        int depth = 0;
+        while (current != null && depth++ < 6) {
+            trace.append(current.getClass().getName()).append(' ');
+            if (!TextUtils.isEmpty(current.getMessage())) trace.append(current.getMessage()).append(' ');
+            current = current.getCause();
+        }
+        String detail = trace.toString().toLowerCase();
+
+        if (detail.contains("spider 调用超时")
+                || detail.contains("sockettimeoutexception")
+                || detail.contains("timeoutexception")
+                || detail.contains("timed out")) {
+            return "媒体源响应超时，请重试或切换其他源。";
+        }
+        if (detail.contains("classnotfoundexception")
+                || detail.contains("noclassdeffounderror")
+                || detail.contains("nosuchmethoderror")
+                || detail.contains("incompatibleclasschangeerror")
+                || detail.contains("verifyerror")) {
+            return "这个源需要的 Spider 组件与当前版本不兼容，请切换其他源。";
+        }
+        if (detail.contains("unknownhostexception")
+                || detail.contains("connectexception")
+                || detail.contains("ssl")
+                || detail.contains("connection reset")
+                || detail.contains("connection refused")) {
+            return "媒体源暂时无法连接，请检查网络或切换其他源。";
+        }
+        if (!TextUtils.isEmpty(message) && message.contains("未返回详情")) {
+            return "这个源没有返回可用详情，请返回浏览或切换其他源。";
+        }
+        if (TextUtils.isEmpty(message)) return "媒体源处理失败，请重试或切换其他源。";
+        if (message.startsWith("java.")
+                || message.contains("Exception:")
+                || message.contains("Error:")
+                || message.contains("com.github.catvod.")) {
+            return "媒体源处理失败，请重试或切换其他源。";
+        }
+        return message;
     }
 }

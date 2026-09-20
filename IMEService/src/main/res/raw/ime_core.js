@@ -867,8 +867,8 @@ function loadMediaDetail(sourceKey, id){
 	$('#mediaDetail').html(mediaDetailHeader()+mediaStateHtml('正在加载详情', '', '', '', true));
 	$.ajax({url:'/media/detail', data:{sourceKey:sourceKey, id:id}, dataType:'json', timeout:65000, success:function(data){
 		if(data && data.success === false){
-			var message = data.message || '详情加载失败';
-			mediaMessage('详情加载失败：'+message);
+			var message = mediaRecoveryMessage(data.message, '详情加载失败，请重试或返回浏览。', '可以重试，或返回浏览后切换其他源。');
+			mediaMessage(message);
 			$('#mediaDetail').html(mediaDetailHeader()+mediaStateHtml('详情加载失败', message, 'detail|'+encodeURIComponent(sourceKey)+'|'+encodeURIComponent(id), '重试'));
 			return;
 		}
@@ -961,7 +961,7 @@ function playMediaEpisode(sourceKey, flag, playId, title, episode){
 	var item = currentMediaDetail || {};
 	$.ajax({url:'/media/play', type:'POST', data:{sourceKey:sourceKey, sourceName:item.sourceName || '', mediaId:item.id || '', canonicalId:item.canonicalId || '', mediaName:item.name || title || '', pic:item.pic || '', score:item.score || '', remark:item.remark || '', year:item.year || '', type:item.type || '', flag:flag, playId:playId, episode:episode || '', title:displayTitle}, dataType:'json', timeout:45000, success:function(data){
 		if(data && data.success === false){
-			mediaMessage(data.message || '播放失败');
+			mediaMessage(mediaRecoveryMessage(data.message, '播放失败，请重试。', '可以换一条线路或切换其他源。'));
 		}else{
 			mediaMessage('已发送到电视播放。');
 			refreshMediaPlaybackStatus();
@@ -970,6 +970,13 @@ function playMediaEpisode(sourceKey, flag, playId, title, episode){
 	}, error:function(){
 		mediaMessage('播放解析超时，请换一条线路或换一个源。');
 	}});
+}
+
+function mediaRecoveryMessage(message, fallback, action){
+	var text = String(message || fallback || '请求失败').trim();
+	if(!action || /请|可以|建议|重试|切换|返回|检查/.test(text)) return text;
+	if(!/[。！？!?]$/.test(text)) text += '。';
+	return text + action;
 }
 
 function formatPlaybackTime(ms){
