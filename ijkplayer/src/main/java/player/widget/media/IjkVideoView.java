@@ -904,8 +904,17 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
 
     private IMediaPlayer getBaseMediaPlayer() {
         IMediaPlayer player = mMediaPlayer;
-        while (player instanceof MediaPlayerProxy) {
-            player = ((MediaPlayerProxy) player).getInternalMediaPlayer();
+        // Detached TextureView mode wraps the real player in TextureMediaPlayer,
+        // while a few other paths use MediaPlayerProxy. Unwrap both so capability
+        // checks and playback-speed commands reach the actual backend.
+        while (player != null) {
+            if (player instanceof TextureMediaPlayer) {
+                player = ((TextureMediaPlayer) player).getInternalMediaPlayer();
+            } else if (player instanceof MediaPlayerProxy) {
+                player = ((MediaPlayerProxy) player).getInternalMediaPlayer();
+            } else {
+                break;
+            }
         }
         return player;
     }
@@ -916,16 +925,36 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                 || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && player instanceof AndroidMediaPlayer);
     }
 
+    public float getPlaybackSpeed() {
+        IMediaPlayer player = getBaseMediaPlayer();
+        try {
+            if (player instanceof IjkMediaPlayer) {
+                float speed = ((IjkMediaPlayer) player).getSpeed(1.0f);
+                return speed > 0 ? speed : 1.0f;
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && player instanceof AndroidMediaPlayer) {
+                android.media.MediaPlayer androidPlayer = ((AndroidMediaPlayer) player).getInternalMediaPlayer();
+                return androidPlayer.getPlaybackParams().getSpeed();
+            }
+        } catch (RuntimeException ignored) {
+        }
+        return 1.0f;
+    }
+
     public boolean setPlaybackSpeed(float speed) {
         IMediaPlayer player = getBaseMediaPlayer();
-        if (player instanceof IjkMediaPlayer) {
-            ((IjkMediaPlayer) player).setSpeed(speed);
-            return true;
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && player instanceof AndroidMediaPlayer) {
-            android.media.MediaPlayer androidPlayer = ((AndroidMediaPlayer) player).getInternalMediaPlayer();
-            androidPlayer.setPlaybackParams(androidPlayer.getPlaybackParams().setSpeed(speed));
-            return true;
+        try {
+            if (player instanceof IjkMediaPlayer) {
+                IjkMediaPlayer ijkPlayer = (IjkMediaPlayer) player;
+                ijkPlayer.setSpeed(speed);
+                return Math.abs(ijkPlayer.getSpeed(1.0f) - speed) < 0.05f;
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && player instanceof AndroidMediaPlayer) {
+                android.media.MediaPlayer androidPlayer = ((AndroidMediaPlayer) player).getInternalMediaPlayer();
+                androidPlayer.setPlaybackParams(androidPlayer.getPlaybackParams().setSpeed(speed));
+                return Math.abs(androidPlayer.getPlaybackParams().getSpeed() - speed) < 0.05f;
+            }
+        } catch (RuntimeException ignored) {
         }
         return false;
     }
@@ -1138,8 +1167,14 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                     }
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1);
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 0);
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "soundtouch", 1);
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "enable-accurate-seek", 1);
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "accurate-seek-timeout", 1000);
 
-                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "http-detect-range-support", 0);
+                    // HTTP VOD is the dominant TVBox playback path. Let ijk detect
+                    // byte-range support so seekable servers are not treated like
+                    // restart-only streams.
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "http-detect-range-support", 1);
 
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48);
                 }
