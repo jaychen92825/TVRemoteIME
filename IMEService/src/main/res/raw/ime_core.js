@@ -27,8 +27,7 @@ var mediaPlaybackPollTimer = null;
 var mediaPlaybackDragging = false;
 var mediaPlaybackActive = false;
 var mediaPlaybackHasSession = false;
-var mediaPlaybackPlaying = false;
-var mediaPlaybackPlayingPendingUntil = 0;
+var mediaPlaybackTogglePending = false;
 var mediaSearchAllItems = [];
 var mediaSearchFiltersAvailable = false;
 var mediaSearchStatusBase = '';
@@ -926,13 +925,8 @@ function formatPlaybackTime(ms){
 	return hours > 0 ? hours + ':' + mm + ':' + ss : minutes + ':' + ss;
 }
 
-function isMediaTabVisible(){
-	return $('.tab.cur').attr('data-rel') === 'media';
-}
-
 function setMediaPlaybackPlayingUi(active, playing){
 	var isPlaying = !!(active && playing);
-	mediaPlaybackPlaying = isPlaying;
 	$('.media-playback-fab-icon .media-mini-play-icon').toggleClass('hide', isPlaying);
 	$('.media-playback-fab-icon .media-mini-pause-icon').toggleClass('hide', !isPlaying);
 	$('#mediaPlaybackCompactActionPath').attr('d', isPlaying ? 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z' : 'm8 5 11 7-11 7V5Z');
@@ -943,31 +937,32 @@ function setMediaPlaybackPlayingUi(active, playing){
 	$('#mediaPlaybackActionPath').attr('d', isPlaying ? 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z' : 'm8 5 11 7-11 7V5Z');
 }
 
+function setMediaPlaybackTogglePending(pending){
+	mediaPlaybackTogglePending = !!pending;
+	$('#btnMediaCompactPrimary,#btnMediaPlayPause').prop('disabled', mediaPlaybackTogglePending);
+}
+
 function toggleMediaPlayback(){
-	mediaPlaybackPlayingPendingUntil = Date.now() + 900;
-	setMediaPlaybackPlayingUi(true, !mediaPlaybackPlaying);
+	if(mediaPlaybackTogglePending) return;
+	setMediaPlaybackTogglePending(true);
 	$.post('/player/control', {code:'85',action:'press'}, function(){
-		setTimeout(refreshMediaPlaybackStatus, 300);
+		setTimeout(refreshMediaPlaybackStatus, 180);
+		setTimeout(refreshMediaPlaybackStatus, 600);
 	}).fail(function(){
-		mediaPlaybackPlayingPendingUntil = 0;
 		refreshMediaPlaybackStatus();
+	}).always(function(){
+		setTimeout(function(){ setMediaPlaybackTogglePending(false); }, 220);
 	});
 }
 
 function renderMediaPlaybackStatus(data){
 	var active = !!(data && data.active);
 	var hasSession = !!(data && data.hasSession);
-	var reportedPlaying = !!(data && data.playing);
-	var playing = reportedPlaying;
-	if(active && Date.now() < mediaPlaybackPlayingPendingUntil && reportedPlaying !== mediaPlaybackPlaying){
-		playing = mediaPlaybackPlaying;
-	}else{
-		mediaPlaybackPlayingPendingUntil = 0;
-	}
+	var playing = !!(data && data.playing);
 	mediaPlaybackActive = active;
 	mediaPlaybackHasSession = hasSession;
 	$('#mediaPlaybackControls').toggleClass('hide', !(active || hasSession));
-	$('.media-panel').toggleClass('media-has-playback', active || hasSession);
+	$('.container').toggleClass('media-has-global-playback', active || hasSession);
 	if(!(active || hasSession)) return;
 
 	var duration = Math.max(0, Number(data.duration) || 0);
@@ -1039,22 +1034,12 @@ function mediaMarkerAction(action, delta){
 }
 
 function refreshMediaPlaybackStatus(){
-	if(!isMediaTabVisible()) return;
 	$.ajax({url:'/player/status', type:'POST', dataType:'json', timeout:2500, success:renderMediaPlaybackStatus});
 }
 
 function updateMediaPlaybackPolling(){
-	if(mediaPlaybackPollTimer){
-		clearInterval(mediaPlaybackPollTimer);
-		mediaPlaybackPollTimer = null;
-	}
-	if(isMediaTabVisible()){
-		refreshMediaPlaybackStatus();
-		mediaPlaybackPollTimer = setInterval(refreshMediaPlaybackStatus, 1000);
-	}else{
-		$('#mediaPlaybackControls').addClass('hide');
-		$('.media-panel').removeClass('media-has-playback');
-	}
+	refreshMediaPlaybackStatus();
+	if(!mediaPlaybackPollTimer) mediaPlaybackPollTimer = setInterval(refreshMediaPlaybackStatus, 1000);
 }
 
 updateMediaDisplayMode(mediaDisplayMode);
@@ -1990,6 +1975,8 @@ getDiskSpace();
 loadTVList();
 loadMediaConfig();
 loadTorrentItems();
+$('#mediaPlaybackControls').appendTo('.container');
+updateMediaPlaybackPolling();
 
 //PWA分享目标(manifest.json里的share_target)：手机其它App"分享"一个视频链接过来时，
 //系统会带着title/text/url这几个查询参数打开这个页面——不同App放链接的字段不统一

@@ -1326,8 +1326,8 @@ body {
 		overflow: hidden;
 	}
 
-	.media-panel.media-has-playback {
-		padding-bottom: 72px;
+	.container.media-has-global-playback {
+		padding-bottom: calc(126px + env(safe-area-inset-bottom));
 	}
 
 	.media-playback-compact {
