@@ -945,9 +945,6 @@ function renderMediaPlaybackStatus(data){
 	if(!mediaPlaybackDragging) $seek.val(position);
 	$('#mediaPlaybackCurrent').text(formatPlaybackTime(mediaPlaybackDragging ? $seek.val() : position));
 	$('#mediaPlaybackDuration').text(duration > 0 ? formatPlaybackTime(duration) : '--:--');
-	$('#mediaPlaybackLabel').text(active ? (data.playing ? '电视播放中' : '电视已暂停') : '继续观看');
-	$('#mediaPlaybackTitle').text(data.mediaName || '');
-	$('#mediaPlaybackEpisode').text(data.episode || '');
 	$('#mediaPlaybackCompactLabel').text(active ? (data.playing ? '电视播放中' : '电视已暂停') : '继续观看');
 	$('#mediaPlaybackCompactTitle').text(data.mediaName || '');
 	$('#mediaPlaybackCompactEpisode').text(data.episode || '');
