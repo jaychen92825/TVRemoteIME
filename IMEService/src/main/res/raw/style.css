@@ -756,11 +756,29 @@ body {
 }
 
 .media-desc {
-	margin-top: 14px;
+	margin-top: 0;
 	color: #555;
 	font-size: 13px;
 	line-height: 21px;
 	max-width: 720px;
+}
+
+.media-desc-wrap {
+	max-width: 900px;
+	margin-top: 14px;
+}
+
+.media-desc-toggle {
+	display: none;
+	margin-top: 6px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--color-primary-dark);
+	font: inherit;
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
 }
 
 .media-subview-head {
@@ -796,6 +814,18 @@ body {
 	border-top: 1px solid var(--color-border);
 }
 
+.media-section-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.media-section-meta {
+	font-size: 12px;
+	color: var(--color-text-secondary);
+}
+
 .media-detail-actions {
 	display: flex;
 	align-items: center;
@@ -823,6 +853,33 @@ body {
 	overflow-x: auto;
 	padding: 10px 0 4px;
 	-webkit-overflow-scrolling: touch;
+}
+
+.media-episode-ranges {
+	display: flex;
+	gap: 7px;
+	overflow-x: auto;
+	padding: 8px 0 2px;
+	-webkit-overflow-scrolling: touch;
+}
+
+.media-episode-range {
+	flex: 0 0 auto;
+	min-height: 30px;
+	padding: 0 10px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-sm);
+	background: var(--color-card-bg);
+	color: var(--color-text-secondary);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.media-episode-range.active {
+	border-color: var(--color-primary);
+	background: var(--color-primary-soft);
+	color: var(--color-primary-dark);
 }
 
 .media-route {
@@ -1234,9 +1291,31 @@ body {
 		line-height: 26px;
 	}
 
+	.media-detail-actions .media-favorite-btn {
+		margin-top: 0;
+	}
+
+	.media-desc-wrap {
+		margin-top: 12px;
+	}
+
 	.media-desc {
-		margin-top: 9px;
 		line-height: 19px;
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 3;
+		overflow: hidden;
+	}
+
+	.media-desc-wrap.expanded .media-desc {
+		display: block;
+		overflow: visible;
+	}
+
+	.media-desc-toggle {
+		display: inline-flex;
+		align-items: center;
+		min-height: 36px;
 	}
 
 	.media-play-section {
@@ -1249,6 +1328,7 @@ body {
 	}
 
 	.media-route,
+	.media-episode-range,
 	.media-episode,
 	.media-back-btn,
 	.media-resume-btn,

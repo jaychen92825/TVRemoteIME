@@ -825,6 +825,21 @@ function loadMediaDetail(sourceKey, id){
 		var history = item.history || null;
 		var historyEpisode = history ? mediaFindEpisode(item, history.playId, history.flag) : null;
 		var historyProgress = mediaHistoryProgress(history);
+		var groups = mediaEpisodeGroups(item.episodes || []);
+		var episodeChunkSize = 30;
+		var initialRoute = 0;
+		var initialRanges = {};
+		for(var routeIndex=0;routeIndex<groups.length;routeIndex++){
+			initialRanges[routeIndex] = 0;
+			if(!historyEpisode) continue;
+			for(var historyIndex=0;historyIndex<groups[routeIndex].episodes.length;historyIndex++){
+				var historyCandidate = groups[routeIndex].episodes[historyIndex];
+				if(String(historyCandidate.playId || '') === String(historyEpisode.playId || '') && String(historyCandidate.flag || '') === String(historyEpisode.flag || '')){
+					initialRoute = routeIndex;
+					initialRanges[routeIndex] = Math.floor(historyIndex / episodeChunkSize);
+				}
+			}
+		}
 		var html = [];
 		html.push(mediaDetailHeader());
 		html.push('<div class="media-detail-layout">');
@@ -838,22 +853,34 @@ function loadMediaDetail(sourceKey, id){
 		}
 		html.push('<button type="button" class="media-favorite-btn'+(item.favorite ? ' active' : '')+'" id="btnMediaFavorite" aria-label="'+(item.favorite ? '取消收藏' : '收藏')+'"><span class="media-favorite-icon">'+(item.favorite ? '★' : '☆')+'</span><span>'+(item.favorite ? '已收藏' : '收藏')+'</span></button>');
 		html.push('</div>');
-		if(item.desc) html.push('<div class="media-desc">'+escapeHtml(item.desc)+'</div>');
 		html.push('</div></div>');
-		var groups = mediaEpisodeGroups(item.episodes || []);
-		html.push('<div class="media-play-section"><div class="media-section-title">播放</div>');
+		if(item.desc) html.push('<div class="media-desc-wrap"><div class="media-desc">'+escapeHtml(item.desc)+'</div><button type="button" class="media-desc-toggle" aria-expanded="false">展开简介</button></div>');
+		html.push('<div class="media-play-section"><div class="media-section-head"><div class="media-section-title">播放</div><div class="media-section-meta">'+(item.episodes || []).length+' 集</div></div>');
 		if(groups.length > 1){
 			html.push('<div class="media-routes">');
-			for(var g=0;g<groups.length;g++) html.push('<button type="button" class="media-route'+(g === 0 ? ' active' : '')+'" data-route="'+g+'">'+escapeHtml(groups[g].name)+'</button>');
+			for(var g=0;g<groups.length;g++) html.push('<button type="button" class="media-route'+(g === initialRoute ? ' active' : '')+'" data-route="'+g+'">'+escapeHtml(groups[g].name)+'</button>');
+			html.push('</div>');
+		}
+		for(var rangeGroup=0;rangeGroup<groups.length;rangeGroup++){
+			var rangeCount = Math.ceil(groups[rangeGroup].episodes.length / episodeChunkSize);
+			if(rangeCount <= 1) continue;
+			html.push('<div class="media-episode-ranges'+(rangeGroup === initialRoute ? '' : ' hide')+'" data-route="'+rangeGroup+'">');
+			for(var rangeIndex=0;rangeIndex<rangeCount;rangeIndex++){
+				var rangeStart = rangeIndex * episodeChunkSize + 1;
+				var rangeEnd = Math.min((rangeIndex + 1) * episodeChunkSize, groups[rangeGroup].episodes.length);
+				html.push('<button type="button" class="media-episode-range'+(rangeIndex === initialRanges[rangeGroup] ? ' active' : '')+'" data-route="'+rangeGroup+'" data-range="'+rangeIndex+'">'+rangeStart+'-'+rangeEnd+'</button>');
+			}
 			html.push('</div>');
 		}
 		html.push('<div class="media-episodes">');
 		for(var groupIndex=0;groupIndex<groups.length;groupIndex++){
 			for(var i=0;i<groups[groupIndex].episodes.length;i++){
 				var ep = groups[groupIndex].episodes[i];
+				var episodeRange = Math.floor(i / episodeChunkSize);
 				var isResumeEpisode = !!(historyEpisode && String(ep.playId || '') === String(historyEpisode.playId || '') && String(ep.flag || '') === String(historyEpisode.flag || ''));
 				var progressText = isResumeEpisode && historyProgress > 0 && historyProgress < 95 ? '<span class="media-episode-progress">'+Math.round(historyProgress)+'%</span>' : '';
-				html.push('<button type="button" class="media-episode'+(groupIndex === 0 ? '' : ' hide')+(isResumeEpisode ? ' resume' : '')+'" data-route="'+groupIndex+'" data-source="'+escapeHtml(item.sourceKey)+'" data-playid="'+escapeHtml(ep.playId)+'" data-flag="'+escapeHtml(ep.flag || '')+'" data-title="'+escapeHtml(item.name || '')+'" data-episode="'+escapeHtml(ep.name || '')+'"><span>'+escapeHtml(ep.name || '播放')+'</span>'+progressText+'</button>');
+				var visibleEpisode = groupIndex === initialRoute && episodeRange === initialRanges[groupIndex];
+				html.push('<button type="button" class="media-episode'+(visibleEpisode ? '' : ' hide')+(isResumeEpisode ? ' resume' : '')+'" data-route="'+groupIndex+'" data-range="'+episodeRange+'" data-source="'+escapeHtml(item.sourceKey)+'" data-playid="'+escapeHtml(ep.playId)+'" data-flag="'+escapeHtml(ep.flag || '')+'" data-title="'+escapeHtml(item.name || '')+'" data-episode="'+escapeHtml(ep.name || '')+'"><span>'+escapeHtml(ep.name || '播放')+'</span>'+progressText+'</button>');
 			}
 		}
 		if(!groups.length) html.push('<div class="media-empty">这个 source 没有返回可播放剧集。</div>');
@@ -1187,12 +1214,30 @@ $('#mediaDetail').on('click', '#btnMediaDetailBack', function(){
 	if(mediaSection === 'favorites' && currentMediaDetail && !currentMediaDetail.favorite) loadMediaLibrary(mediaSection);
 	else showMediaBrowse(true);
 });
+$('#mediaDetail').on('click', '.media-desc-toggle', function(){
+	var $wrap = $(this).closest('.media-desc-wrap');
+	var expanded = !$wrap.hasClass('expanded');
+	$wrap.toggleClass('expanded', expanded);
+	$(this).attr('aria-expanded', expanded ? 'true' : 'false').text(expanded ? '收起简介' : '展开简介');
+});
 $('#mediaDetail').on('click', '.media-route', function(){
 	var route = String($(this).attr('data-route') || '0');
 	$('#mediaDetail .media-route').removeClass('active');
 	$(this).addClass('active');
+	$('#mediaDetail .media-episode-ranges').addClass('hide');
+	var $ranges = $('#mediaDetail .media-episode-ranges[data-route="'+cssAttributeValue(route)+'"]').removeClass('hide');
+	var range = String($ranges.find('.media-episode-range.active').attr('data-range') || '0');
 	$('#mediaDetail .media-episode').addClass('hide');
-	$('#mediaDetail .media-episode[data-route="'+cssAttributeValue(route)+'"]').removeClass('hide');
+	$('#mediaDetail .media-episode[data-route="'+cssAttributeValue(route)+'"][data-range="'+cssAttributeValue(range)+'"]').removeClass('hide');
+});
+$('#mediaDetail').on('click', '.media-episode-range', function(){
+	var route = String($(this).attr('data-route') || '0');
+	var range = String($(this).attr('data-range') || '0');
+	var $nav = $(this).closest('.media-episode-ranges');
+	$nav.find('.media-episode-range').removeClass('active');
+	$(this).addClass('active');
+	$('#mediaDetail .media-episode[data-route="'+cssAttributeValue(route)+'"]').addClass('hide');
+	$('#mediaDetail .media-episode[data-route="'+cssAttributeValue(route)+'"][data-range="'+cssAttributeValue(range)+'"]').removeClass('hide');
 });
 $("#btnEnter").on("click", function(){
 	vibrateShort();
