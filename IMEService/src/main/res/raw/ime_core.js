@@ -858,7 +858,7 @@ function mediaEpisodeGroups(episodes){
 	return groups;
 }
 function mediaDetailHeader(){
-	return '<div class="media-subview-head"><button type="button" class="media-back-btn" id="btnMediaDetailBack" aria-label="返回浏览" title="返回浏览"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>';
+	return '<div class="media-subview-head media-detail-head"><button type="button" class="media-back-btn" id="btnMediaDetailBack" aria-label="返回浏览" title="返回浏览"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="media-subview-title">详情</div></div>';
 }
 function loadMediaDetail(sourceKey, id){
 	currentMediaDetail = null;
