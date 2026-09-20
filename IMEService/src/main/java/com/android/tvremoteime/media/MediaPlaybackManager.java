@@ -34,6 +34,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
     private static final String CURRENT_SESSION = "current_session";
     private static final long HISTORY_WRITE_INTERVAL_MS = 5000L;
     private static final long FALLBACK_DEADLINE_MS = 15000L;
+    private static final long NEXT_PRELOAD_WINDOW_MS = 5 * 60 * 1000L;
     private static MediaPlaybackManager instance;
 
     private final Context context;
@@ -41,12 +42,16 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
     private final MediaConfigManager configManager;
     private final MediaLibraryStore libraryStore;
     private final MediaSourceQualityStore qualityStore;
+    private final ExecutorService preloadExecutor = Executors.newSingleThreadExecutor();
 
     private JSONObject session;
     private long lastHistoryWrite;
     private boolean advancing;
     private boolean awaitingPrepared;
     private boolean outroTriggered;
+    private PlaybackTarget preloadedNext;
+    private String preloadedNextKey = "";
+    private long preloadGeneration;
     private static final long MIN_PLAYABLE_WINDOW_MS = 5000L;
 
     private MediaPlaybackManager(Context context) {
@@ -328,6 +333,10 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
                 if (now - lastHistoryWrite >= HISTORY_WRITE_INTERVAL_MS) persistLocked(false);
                 long ending = Math.max(0, session.optLong("ending", 0));
                 int knownDuration = session.optInt("duration", durationMs);
+                if (knownDuration > 0 && positionMs > 0 && hasAdjacentLocked(1)
+                        && positionMs + NEXT_PRELOAD_WINDOW_MS >= knownDuration) {
+                    scheduleNextPreloadLocked();
+                }
                 shouldAdvance = ending > 0 && knownDuration > 0 && positionMs > 0
                         && positionMs + ending >= knownDuration && hasAdjacentLocked(1) && !advancing && !outroTriggered;
                 if (shouldAdvance) outroTriggered = true;
@@ -508,6 +517,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         awaitingPrepared = true;
         outroTriggered = false;
         lastHistoryWrite = 0;
+        clearNextPreloadLocked();
         persistLocked(true);
     }
 
@@ -521,6 +531,36 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
     }
 
     private PlaybackTarget queueTarget(JSONObject current, int nextIndex) throws Exception {
+        PlaybackTarget preloaded = consumePreloadedTarget(current, nextIndex);
+        if (preloaded != null) return preloaded;
+
+        PlaybackTarget target = queueTargetBase(current, nextIndex);
+        if (target == null) return null;
+        MediaSource source = target.source;
+        MediaEpisode episode = target.episode;
+        try {
+            target.url = resolve(source, episode.flag, episode.playId);
+        } catch (Exception e) {
+            Log.w(IMEService.TAG, "next episode failed on current source: " + e.getMessage());
+        }
+        if (!TextUtils.isEmpty(target.url)) return target;
+        try {
+            MediaDetail detail = source.indexs == 1 ? null : detail(source, target.mediaId);
+            PlaybackTarget routeFallback = findAlternateRoute(source, detail, episode.flag, episode.name,
+                    nextIndex, addFailedFlag(target.failedFlags, episode.flag));
+            if (routeFallback != null) {
+                routeFallback.fallback = true;
+                return routeFallback;
+            }
+        } catch (Exception e) {
+            Log.w(IMEService.TAG, "next episode same-source fallback failed: " + e.getMessage());
+        }
+        PlaybackTarget fallback = findFallback(target.mediaName, episode.name, nextIndex, source.key);
+        if (fallback != null) fallback.fallback = true;
+        return fallback;
+    }
+
+    private PlaybackTarget queueTargetBase(JSONObject current, int nextIndex) throws Exception {
         JSONArray episodes = current.optJSONArray("episodes");
         if (episodes == null || nextIndex < 0 || nextIndex >= episodes.length()) return null;
         JSONObject epJson = episodes.optJSONObject(nextIndex);
@@ -542,26 +582,67 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         target.routes = current.optJSONArray("routes");
         target.failedFlags = current.optJSONArray("failedFlags");
         target.episodeIndex = nextIndex;
-        try {
-            target.url = resolve(source, episode.flag, episode.playId);
-        } catch (Exception e) {
-            Log.w(IMEService.TAG, "next episode failed on current source: " + e.getMessage());
-        }
-        if (!TextUtils.isEmpty(target.url)) return target;
-        try {
-            MediaDetail detail = source.indexs == 1 ? null : detail(source, target.mediaId);
-            PlaybackTarget routeFallback = findAlternateRoute(source, detail, episode.flag, episode.name,
-                    nextIndex, addFailedFlag(target.failedFlags, episode.flag));
-            if (routeFallback != null) {
-                routeFallback.fallback = true;
-                return routeFallback;
+        return target;
+    }
+
+    private synchronized PlaybackTarget consumePreloadedTarget(JSONObject current, int nextIndex) {
+        String key = preloadKey(current, nextIndex);
+        if (TextUtils.isEmpty(key) || preloadedNext == null || !TextUtils.equals(key, preloadedNextKey)) return null;
+        PlaybackTarget target = preloadedNext;
+        clearNextPreloadLocked();
+        return target;
+    }
+
+    private void scheduleNextPreloadLocked() {
+        final JSONObject current = cloneObject(session);
+        final int nextIndex = current.optInt("episodeIndex", -1) + 1;
+        final String key = preloadKey(current, nextIndex);
+        if (!TextUtils.isEmpty(key) && TextUtils.equals(key, preloadedNextKey)) return;
+        final long generation = ++preloadGeneration;
+        preloadedNext = null;
+        preloadedNextKey = key;
+        if (TextUtils.isEmpty(key)) return;
+
+        preloadExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                PlaybackTarget target = null;
+                try {
+                    target = queueTargetBase(current, nextIndex);
+                    if (target != null && target.episode != null) {
+                        target.url = resolve(target.source, target.episode.flag, target.episode.playId);
+                        if (TextUtils.isEmpty(target.url)) target = null;
+                    }
+                } catch (Exception e) {
+                    Log.w(IMEService.TAG, "next episode preload failed: " + e.getMessage());
+                    target = null;
+                }
+                synchronized (MediaPlaybackManager.this) {
+                    if (generation != preloadGeneration || !TextUtils.equals(key, preloadedNextKey)) return;
+                    preloadedNext = target;
+                }
             }
-        } catch (Exception e) {
-            Log.w(IMEService.TAG, "next episode same-source fallback failed: " + e.getMessage());
-        }
-        PlaybackTarget fallback = findFallback(target.mediaName, episode.name, nextIndex, source.key);
-        if (fallback != null) fallback.fallback = true;
-        return fallback;
+        });
+    }
+
+    private void clearNextPreloadLocked() {
+        preloadGeneration++;
+        preloadedNext = null;
+        preloadedNextKey = "";
+    }
+
+    private String preloadKey(JSONObject current, int nextIndex) {
+        if (current == null || nextIndex < 0) return "";
+        JSONArray episodes = current.optJSONArray("episodes");
+        if (episodes == null || nextIndex >= episodes.length()) return "";
+        JSONObject next = episodes.optJSONObject(nextIndex);
+        if (next == null || TextUtils.isEmpty(next.optString("playId"))) return "";
+        return current.optString("sourceKey") + "\n"
+                + current.optString("mediaId") + "\n"
+                + current.optString("flag") + "\n"
+                + current.optString("playId") + "\n"
+                + nextIndex + "\n"
+                + next.optString("playId");
     }
 
     private boolean queueAdjacent(final int delta, boolean fromCompletion) {
