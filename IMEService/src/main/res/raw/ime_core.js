@@ -27,6 +27,8 @@ var mediaPlaybackPollTimer = null;
 var mediaPlaybackDragging = false;
 var mediaPlaybackActive = false;
 var mediaPlaybackHasSession = false;
+var mediaPlaybackPlaying = false;
+var mediaPlaybackPlayingPendingUntil = 0;
 var mediaSearchAllItems = [];
 var mediaSearchFiltersAvailable = false;
 var mediaSearchStatusBase = '';
@@ -928,9 +930,29 @@ function isMediaTabVisible(){
 	return $('.tab.cur').attr('data-rel') === 'media';
 }
 
+function setMediaPlaybackPlayingUi(active, playing){
+	var isPlaying = !!(active && playing);
+	mediaPlaybackPlaying = isPlaying;
+	$('#mediaPlaybackCompactIcon .media-compact-play-icon, .media-playback-fab-icon .media-mini-play-icon').toggleClass('hide', isPlaying);
+	$('#mediaPlaybackCompactIcon .media-compact-pause-icon, .media-playback-fab-icon .media-mini-pause-icon').toggleClass('hide', !isPlaying);
+	$('#btnMediaCompactPrimary').attr('aria-label', active ? (isPlaying ? '暂停' : '播放') : '继续播放');
+	var $playPause = $('#btnMediaPlayPause').toggleClass('hide', !active);
+	$playPause.attr('aria-label', isPlaying ? '暂停' : '播放').attr('title', isPlaying ? '暂停' : '播放');
+	$playPause.find('.media-control-label').text(isPlaying ? '暂停' : '播放');
+	$playPause.find('.media-control-play-icon').toggleClass('hide', isPlaying);
+	$playPause.find('.media-control-pause-icon').toggleClass('hide', !isPlaying);
+}
+
 function renderMediaPlaybackStatus(data){
 	var active = !!(data && data.active);
 	var hasSession = !!(data && data.hasSession);
+	var reportedPlaying = !!(data && data.playing);
+	var playing = reportedPlaying;
+	if(active && Date.now() < mediaPlaybackPlayingPendingUntil && reportedPlaying !== mediaPlaybackPlaying){
+		playing = mediaPlaybackPlaying;
+	}else{
+		mediaPlaybackPlayingPendingUntil = 0;
+	}
 	mediaPlaybackActive = active;
 	mediaPlaybackHasSession = hasSession;
 	$('#mediaPlaybackControls').toggleClass('hide', !(active || hasSession));
@@ -945,23 +967,16 @@ function renderMediaPlaybackStatus(data){
 	if(!mediaPlaybackDragging) $seek.val(position);
 	$('#mediaPlaybackCurrent').text(formatPlaybackTime(mediaPlaybackDragging ? $seek.val() : position));
 	$('#mediaPlaybackDuration').text(duration > 0 ? formatPlaybackTime(duration) : '--:--');
-	$('#mediaPlaybackCompactLabel').text(active ? (data.playing ? '电视播放中' : '电视已暂停') : '继续观看');
+	$('#mediaPlaybackCompactLabel').text(active ? (playing ? '电视播放中' : '电视已暂停') : '继续观看');
 	$('#mediaPlaybackCompactTitle').text(data.mediaName || '');
 	$('#mediaPlaybackCompactEpisode').text(data.episode || '');
 	$('#mediaPlaybackCompactProgress').css('width', duration > 0 ? Math.max(0, Math.min(100, position * 100 / duration))+'%' : '0%');
-	$('#mediaPlaybackCompactIcon .media-compact-play-icon').toggleClass('hide', active && !!data.playing);
-	$('#mediaPlaybackCompactIcon .media-compact-pause-icon').toggleClass('hide', !(active && !!data.playing));
-	$('#btnMediaCompactPrimary').attr('aria-label', active ? (data.playing ? '暂停' : '播放') : '继续播放');
+	setMediaPlaybackPlayingUi(active, playing);
 
 	var speed = Number(data.speed) || 1;
 	var $speed = $('#mediaPlaybackSpeed');
 	$speed.prop('disabled', !active || !data.speedSupported);
 	if(!mediaPlaybackDragging) $speed.val(String(speed));
-	var $playPause = $('#btnMediaPlayPause').toggleClass('hide', !active);
-	$playPause.attr('aria-label', data.playing ? '暂停' : '播放').attr('title', data.playing ? '暂停' : '播放');
-	$playPause.find('.media-control-label').text(data.playing ? '暂停' : '播放');
-	$playPause.find('.media-control-play-icon').toggleClass('hide', !!data.playing);
-	$playPause.find('.media-control-pause-icon').toggleClass('hide', !data.playing);
 	$('#btnMediaResume').toggleClass('hide', active);
 	$('#btnMediaPrevEpisode').prop('disabled', !data.canPrev);
 	$('#btnMediaNextEpisode').prop('disabled', !data.canNext);
@@ -1092,12 +1107,14 @@ $('#btnMediaResume').on('click', function(){
 	}, error:function(){ mediaMessage('继续播放超时，请稍后重试。'); }});
 });
 $('#btnMediaPlayPause').on('click', function(){
-	var wasPlaying = !$('#mediaPlaybackCompactIcon .media-compact-pause-icon').hasClass('hide');
-	$('#mediaPlaybackCompactIcon .media-compact-play-icon').toggleClass('hide', !wasPlaying);
-	$('#mediaPlaybackCompactIcon .media-compact-pause-icon').toggleClass('hide', wasPlaying);
-	$('#btnMediaCompactPrimary').attr('aria-label', wasPlaying ? '播放' : '暂停');
-	$.post('/player/control', {code:'85',action:'press'}, function(){ refreshMediaPlaybackStatus(); })
-		.fail(function(){ refreshMediaPlaybackStatus(); });
+	mediaPlaybackPlayingPendingUntil = Date.now() + 900;
+	setMediaPlaybackPlayingUi(true, !mediaPlaybackPlaying);
+	$.post('/player/control', {code:'85',action:'press'}, function(){
+		setTimeout(refreshMediaPlaybackStatus, 300);
+	}).fail(function(){
+		mediaPlaybackPlayingPendingUntil = 0;
+		refreshMediaPlaybackStatus();
+	});
 });
 $('#btnMediaPlaybackToggle').on('click', function(){
 	var expanded = !$('#mediaPlaybackControls').hasClass('expanded');
