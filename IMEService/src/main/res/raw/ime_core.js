@@ -940,8 +940,7 @@ function setMediaPlaybackPlayingUi(active, playing){
 	var $playPause = $('#btnMediaPlayPause').toggleClass('hide', !active);
 	$playPause.attr('aria-label', isPlaying ? '暂停' : '播放').attr('title', isPlaying ? '暂停' : '播放');
 	$playPause.find('.media-control-label').text(isPlaying ? '暂停' : '播放');
-	$playPause.find('.media-control-play-icon').toggleClass('hide', isPlaying);
-	$playPause.find('.media-control-pause-icon').toggleClass('hide', !isPlaying);
+	$('#mediaPlaybackActionPath').attr('d', isPlaying ? 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z' : 'm8 5 11 7-11 7V5Z');
 }
 
 function toggleMediaPlayback(){
