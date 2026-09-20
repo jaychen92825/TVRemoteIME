@@ -949,7 +949,8 @@ function renderMediaPlaybackStatus(data){
 	$('#mediaPlaybackCompactTitle').text(data.mediaName || '');
 	$('#mediaPlaybackCompactEpisode').text(data.episode || '');
 	$('#mediaPlaybackCompactProgress').css('width', duration > 0 ? Math.max(0, Math.min(100, position * 100 / duration))+'%' : '0%');
-	$('#mediaPlaybackCompactIcon').text(active && data.playing ? 'Ⅱ' : '▶');
+	$('#mediaPlaybackCompactIcon .media-compact-play-icon').toggleClass('hide', active && !!data.playing);
+	$('#mediaPlaybackCompactIcon .media-compact-pause-icon').toggleClass('hide', !(active && !!data.playing));
 	$('#btnMediaCompactPrimary').attr('aria-label', active ? (data.playing ? '暂停' : '播放') : '继续播放');
 
 	var speed = Number(data.speed) || 1;
@@ -1091,7 +1092,12 @@ $('#btnMediaResume').on('click', function(){
 	}, error:function(){ mediaMessage('继续播放超时，请稍后重试。'); }});
 });
 $('#btnMediaPlayPause').on('click', function(){
-	$.post('/player/control', {code:'85',action:'press'}, function(){ refreshMediaPlaybackStatus(); });
+	var wasPlaying = !$('#mediaPlaybackCompactIcon .media-compact-pause-icon').hasClass('hide');
+	$('#mediaPlaybackCompactIcon .media-compact-play-icon').toggleClass('hide', !wasPlaying);
+	$('#mediaPlaybackCompactIcon .media-compact-pause-icon').toggleClass('hide', wasPlaying);
+	$('#btnMediaCompactPrimary').attr('aria-label', wasPlaying ? '播放' : '暂停');
+	$.post('/player/control', {code:'85',action:'press'}, function(){ refreshMediaPlaybackStatus(); })
+		.fail(function(){ refreshMediaPlaybackStatus(); });
 });
 $('#btnMediaPlaybackToggle').on('click', function(){
 	var expanded = !$('#mediaPlaybackControls').hasClass('expanded');
