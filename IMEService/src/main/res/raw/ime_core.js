@@ -25,6 +25,8 @@ var currentMediaCategoryId = '';
 var mediaDisplayMode = 'grid';
 var mediaPlaybackPollTimer = null;
 var mediaPlaybackDragging = false;
+var mediaPlaybackActive = false;
+var mediaPlaybackHasSession = false;
 var mediaSearchAllItems = [];
 var mediaSearchFiltersAvailable = false;
 var mediaSearchStatusBase = '';
@@ -808,7 +810,10 @@ function isMediaTabVisible(){
 function renderMediaPlaybackStatus(data){
 	var active = !!(data && data.active);
 	var hasSession = !!(data && data.hasSession);
+	mediaPlaybackActive = active;
+	mediaPlaybackHasSession = hasSession;
 	$('#mediaPlaybackControls').toggleClass('hide', !(active || hasSession));
+	$('.media-panel').toggleClass('media-has-playback', active || hasSession);
 	if(!(active || hasSession)) return;
 
 	var duration = Math.max(0, Number(data.duration) || 0);
@@ -822,6 +827,12 @@ function renderMediaPlaybackStatus(data){
 	$('#mediaPlaybackLabel').text(active ? (data.playing ? '电视播放中' : '电视已暂停') : '继续观看');
 	$('#mediaPlaybackTitle').text(data.mediaName || '');
 	$('#mediaPlaybackEpisode').text(data.episode || '');
+	$('#mediaPlaybackCompactLabel').text(active ? (data.playing ? '电视播放中' : '电视已暂停') : '继续观看');
+	$('#mediaPlaybackCompactTitle').text(data.mediaName || '');
+	$('#mediaPlaybackCompactEpisode').text(data.episode || '');
+	$('#mediaPlaybackCompactProgress').css('width', duration > 0 ? Math.max(0, Math.min(100, position * 100 / duration))+'%' : '0%');
+	$('#mediaPlaybackCompactIcon').text(active && data.playing ? 'Ⅱ' : '▶');
+	$('#btnMediaCompactPrimary').attr('aria-label', active ? (data.playing ? '暂停' : '播放') : '继续播放');
 
 	var speed = Number(data.speed) || 1;
 	var $speed = $('#mediaPlaybackSpeed');
@@ -893,6 +904,7 @@ function updateMediaPlaybackPolling(){
 		mediaPlaybackPollTimer = setInterval(refreshMediaPlaybackStatus, 1000);
 	}else{
 		$('#mediaPlaybackControls').addClass('hide');
+		$('.media-panel').removeClass('media-has-playback');
 	}
 }
 
@@ -958,6 +970,18 @@ $('#btnMediaResume').on('click', function(){
 });
 $('#btnMediaPlayPause').on('click', function(){
 	$.post('/player/control', {code:'85',action:'press'}, function(){ refreshMediaPlaybackStatus(); });
+});
+$('#btnMediaPlaybackToggle').on('click', function(){
+	var expanded = !$('#mediaPlaybackControls').hasClass('expanded');
+	$('#mediaPlaybackControls').toggleClass('expanded', expanded);
+	$(this).attr('aria-expanded', expanded ? 'true' : 'false').attr('aria-label', expanded ? '收起播放控制' : '展开播放控制');
+});
+$('#btnMediaCompactPrimary').on('click', function(){
+	if(mediaPlaybackActive){
+		$('#btnMediaPlayPause').trigger('click');
+	}else if(mediaPlaybackHasSession){
+		$('#btnMediaResume').trigger('click');
+	}
 });
 $('#btnMediaMarkOpening').on('click', function(){ mediaMarkerAction('opening'); });
 $('#btnMediaMarkEnding').on('click', function(){ mediaMarkerAction('ending'); });
