@@ -25,6 +25,9 @@ var currentMediaCategoryId = '';
 var mediaDisplayMode = 'grid';
 var mediaPlaybackPollTimer = null;
 var mediaPlaybackDragging = false;
+var mediaSearchAllItems = [];
+var mediaSearchFiltersAvailable = false;
+var mediaSearchStatusBase = '';
 try {
 	mediaDisplayMode = localStorage.getItem('mediaDisplayMode') === 'list' ? 'list' : 'grid';
 } catch(e) {}
@@ -312,6 +315,7 @@ function showMediaBrowse(restorePosition){
 	$('.media-panel').removeClass('media-detail-active media-settings-active');
 	$('#mediaToolbar,#mediaLibraryNav,#mediaStatus,#mediaCategories,#mediaGrid').removeClass('hide');
 	$('#mediaCategories').toggleClass('hide', mediaSection !== 'browse');
+	$('#mediaFilters').toggleClass('hide', !(mediaSection === 'browse' && mediaSearchFiltersAvailable));
 	$('#mediaDetail,#mediaSettingsView').addClass('hide');
 	updateContainerWidth();
 	setTimeout(function(){
@@ -322,7 +326,7 @@ function showMediaDetailView(){
 	rememberMediaBrowsePosition();
 	mediaView = 'detail';
 	$('.media-panel').removeClass('media-settings-active').addClass('media-detail-active');
-	$('#mediaToolbar,#mediaLibraryNav,#mediaCategories,#mediaGrid,#mediaSettingsView').addClass('hide');
+	$('#mediaToolbar,#mediaLibraryNav,#mediaCategories,#mediaFilters,#mediaGrid,#mediaSettingsView').addClass('hide');
 	$('#mediaStatus,#mediaDetail').removeClass('hide');
 	updateContainerWidth();
 	$('.container').scrollTop(0);
@@ -331,7 +335,7 @@ function showMediaSettingsView(){
 	rememberMediaBrowsePosition();
 	mediaView = 'settings';
 	$('.media-panel').removeClass('media-detail-active').addClass('media-settings-active');
-	$('#mediaToolbar,#mediaLibraryNav,#mediaStatus,#mediaCategories,#mediaGrid,#mediaDetail').addClass('hide');
+	$('#mediaToolbar,#mediaLibraryNav,#mediaStatus,#mediaCategories,#mediaFilters,#mediaGrid,#mediaDetail').addClass('hide');
 	$('#mediaSettingsView').removeClass('hide');
 	updateContainerWidth();
 	$('.container').scrollTop(0);
@@ -393,6 +397,57 @@ function firstSupportedSourceKey(){
 	}
 	return '';
 }
+function hideMediaSearchFilters(){
+	mediaSearchAllItems = [];
+	mediaSearchFiltersAvailable = false;
+	mediaSearchStatusBase = '';
+	$('#mediaFilterType,#mediaFilterYear').val('');
+	$('#mediaFilters').addClass('hide');
+}
+function mediaUniqueValues(items, key){
+	var seen = {};
+	var values = [];
+	for(var i=0;i<items.length;i++){
+		var value = String(items[i] && items[i][key] || '').trim();
+		if(!value || seen[value]) continue;
+		seen[value] = true;
+		values.push(value);
+	}
+	return values;
+}
+function renderMediaSearchFilters(items){
+	mediaSearchAllItems = items || [];
+	var types = mediaUniqueValues(mediaSearchAllItems, 'type').sort();
+	var years = mediaUniqueValues(mediaSearchAllItems, 'year').sort(function(a, b){
+		var an = parseInt(a, 10);
+		var bn = parseInt(b, 10);
+		if(!isNaN(an) && !isNaN(bn)) return bn - an;
+		return b.localeCompare(a);
+	});
+	var typeUseful = types.length > 1;
+	var yearUseful = years.length > 1;
+	var typeHtml = ['<option value="">全部类型</option>'];
+	var yearHtml = ['<option value="">全部年份</option>'];
+	for(var i=0;i<types.length;i++) typeHtml.push('<option value="'+escapeHtml(types[i])+'">'+escapeHtml(types[i])+'</option>');
+	for(var j=0;j<years.length;j++) yearHtml.push('<option value="'+escapeHtml(years[j])+'">'+escapeHtml(years[j])+'</option>');
+	$('#mediaFilterType').html(typeHtml.join('')).toggleClass('hide', !typeUseful);
+	$('#mediaFilterYear').html(yearHtml.join('')).toggleClass('hide', !yearUseful);
+	mediaSearchFiltersAvailable = typeUseful || yearUseful;
+	$('#mediaFilters').toggleClass('hide', !mediaSearchFiltersAvailable || mediaView !== 'browse' || mediaSection !== 'browse');
+}
+function applyMediaSearchFilters(){
+	var type = $('#mediaFilterType').val() || '';
+	var year = $('#mediaFilterYear').val() || '';
+	var filtered = [];
+	for(var i=0;i<mediaSearchAllItems.length;i++){
+		var item = mediaSearchAllItems[i];
+		if(type && String(item.type || '') !== type) continue;
+		if(year && String(item.year || '') !== year) continue;
+		filtered.push(item);
+	}
+	renderMediaGrid(filtered);
+	mediaMessage((type || year) ? mediaSearchStatusBase+' · 筛选后 '+filtered.length+' 条' : mediaSearchStatusBase);
+}
 function loadMediaConfig(){
 	$.get('/media/config', null, function(data){
 		renderMediaSources(data);
@@ -420,6 +475,7 @@ function loadMediaHome(){
 	currentMediaCategoryId = '';
 	selectMediaSection('browse');
 	showMediaBrowse(false);
+	hideMediaSearchFilters();
 	$('#mediaDetail').empty();
 	$('#mediaCategories').empty();
 	if(!hasHomeSource()){
@@ -460,6 +516,7 @@ function loadMediaCategory(id){
 	mediaFolderStack = [];
 	currentMediaCategoryId = id;
 	showMediaBrowse(false);
+	hideMediaSearchFilters();
 	$('#mediaDetail').empty();
 	$('#mediaCategories .media-category').removeClass('active');
 	$('#mediaCategories .media-category[data-id="'+cssAttributeValue(id)+'"]').addClass('active');
@@ -481,6 +538,7 @@ function loadMediaFolder(sourceKey, id, name, push){
 	if(!id) return;
 	selectMediaSection('browse');
 	showMediaBrowse(false);
+	hideMediaSearchFilters();
 	currentMediaSourceKey = sourceKey || currentMediaSourceKey;
 	$('#mediaSourceSelect').val(currentMediaSourceKey);
 	if(push !== false) mediaFolderStack.push({sourceKey:currentMediaSourceKey, id:id, name:name || '文件夹'});
@@ -526,8 +584,10 @@ function renderMediaGrid(items){
 			html.push('<div class="media-card-copy"><div class="media-card-title" title="'+escapeHtml(item.name)+'">'+escapeHtml(item.name)+'</div>');
 			var meta = [];
 			if(item.episode) meta.push(item.episode);
+			if(item.year) meta.push(item.year);
+			if(item.type && meta.indexOf(item.type) < 0) meta.push(item.type);
 			var cardScore = mediaScore(item);
-			if(item.remark && (!cardScore || String(item.remark).indexOf(cardScore) < 0)) meta.push(item.remark);
+			if(meta.length < 2 && item.remark && (!cardScore || String(item.remark).indexOf(cardScore) < 0) && meta.indexOf(item.remark) < 0) meta.push(item.remark);
 			if(!meta.length && item.sourceName) meta.push(item.sourceName);
 			html.push('<div class="media-card-meta">'+escapeHtml(meta.join(' · '))+'</div></div>');
 			html.push('</div>');
@@ -554,6 +614,7 @@ function loadMediaLibrary(section){
 	currentMediaCategoryId = '';
 	selectMediaSection(section);
 	showMediaBrowse(false);
+	hideMediaSearchFilters();
 	$('#mediaDetail').empty();
 	$('#mediaCategories').addClass('hide');
 	var isHistory = section === 'history';
@@ -584,19 +645,20 @@ function searchMedia(){
 	showMediaBrowse(false);
 	$('#mediaDetail').empty();
 	$('#mediaGrid').html('<div class="media-empty">正在搜索…</div>');
-	var selected = sourceByKey(currentMediaSourceKey);
-	var sourceKey = selected && selected.searchable ? currentMediaSourceKey : '';
-	$.ajax({url:'/media/search', data:{q:q,sourceKey:sourceKey}, dataType:'json', timeout:45000, success:function(data){
+	$.ajax({url:'/media/search', data:{q:q,sourceKey:''}, dataType:'json', timeout:45000, success:function(data){
 		if(data && data.success === false){
+			hideMediaSearchFilters();
 			mediaMessage('搜索失败：'+(data.message || '未知错误'));
 			renderMediaGrid([]);
 			return;
 		}
-		if(data.message) mediaMessage(data.message);
-		else if(data.global) mediaMessage('已从 '+(data.searchedSources || 0)+' 个快速搜索源返回 '+(data.items || []).length+' 条结果。');
-		else mediaMessage((data.sourceName || '当前源')+' · '+(data.items || []).length+' 条搜索结果');
-		renderMediaGrid(data.items || []);
+		var items = data.items || [];
+		mediaSearchStatusBase = data.message || ('已搜索 '+(data.searchedSources || 0)+' 个源，合并为 '+items.length+' 条结果。');
+		renderMediaSearchFilters(items);
+		mediaMessage(mediaSearchStatusBase);
+		renderMediaGrid(items);
 	}, error:function(){
+		hideMediaSearchFilters();
 		mediaMessage('搜索超时，可以换个关键词或稍后重试。');
 		$('#mediaGrid').html('<div class="media-empty">搜索超时，可以换个关键词或稍后重试。</div>');
 	}});
@@ -802,6 +864,7 @@ $('#btnMediaConnect').on('click', function(){
 	}});
 });
 $('#btnMediaSearch').on('click', searchMedia);
+$('#mediaFilterType,#mediaFilterYear').on('change', applyMediaSearchFilters);
 $('#mediaPlaybackSeek').on('input', function(){
 	mediaPlaybackDragging = true;
 	$('#mediaPlaybackCurrent').text(formatPlaybackTime($(this).val()));

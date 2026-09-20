@@ -14,6 +14,7 @@ import com.android.tvremoteime.media.MediaItem;
 import com.android.tvremoteime.media.MediaLibraryStore;
 import com.android.tvremoteime.media.MediaPlaybackManager;
 import com.android.tvremoteime.media.MediaSource;
+import com.android.tvremoteime.media.MediaSourceQualityStore;
 import com.android.tvremoteime.media.Type0SourceAdapter;
 import com.android.tvremoteime.media.Type3SourceAdapter;
 
@@ -22,6 +23,9 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -39,12 +43,14 @@ public class MediaRequestProcesser implements RequestProcesser {
     private final MediaConfigManager configManager;
     private final MediaLibraryStore libraryStore;
     private final MediaPlaybackManager playbackManager;
+    private final MediaSourceQualityStore qualityStore;
 
     public MediaRequestProcesser(Context context) {
         this.context = context;
         this.configManager = new MediaConfigManager(context);
         this.libraryStore = new MediaLibraryStore(context);
         this.playbackManager = MediaPlaybackManager.get(context);
+        this.qualityStore = new MediaSourceQualityStore(context);
     }
 
     @Override
@@ -106,7 +112,15 @@ public class MediaRequestProcesser implements RequestProcesser {
 
         MediaSource selected = configManager.getSource(sourceKey);
         if (selected != null && selected.isSupported() && selected.searchable) {
-            addItems(items, search(selected, keyword, false));
+            List<MediaItem> result;
+            try {
+                result = search(selected, keyword, false);
+                qualityStore.recordSuccess(selected.key);
+            } catch (Exception e) {
+                qualityStore.recordFailure(selected.key);
+                throw e;
+            }
+            addItems(items, rankAndDedupe(result, keyword, 60));
             obj.put("sourceKey", selected.key);
             obj.put("sourceName", selected.name);
             obj.put("searchedSources", 1);
@@ -114,6 +128,8 @@ public class MediaRequestProcesser implements RequestProcesser {
             SearchBatch batch = quickSearch(keyword);
             addItems(items, batch.items);
             obj.put("searchedSources", batch.searchedSources);
+            obj.put("rawMatches", batch.rawMatches);
+            obj.put("dedupedItems", batch.items.size());
             obj.put("global", true);
         }
         obj.put("items", items);
@@ -156,11 +172,19 @@ public class MediaRequestProcesser implements RequestProcesser {
         MediaSource source = requireSource(sourceKey);
         if (source.indexs == 1) throw new Exception("索引源卡片需要按片名搜索，不能直接加载详情");
         if (TextUtils.isEmpty(id)) throw new Exception("媒体源没有返回详情 ID");
-        MediaDetail detail = detail(source, id);
+        MediaDetail detail;
+        try {
+            detail = detail(source, id);
+        } catch (Exception e) {
+            qualityStore.recordFailure(source.key);
+            throw e;
+        }
         if (detail == null) {
+            qualityStore.recordFailure(source.key);
             String displayId = id.length() > 64 ? id.substring(0, 64) + "..." : id;
             throw new Exception("源「" + source.name + "」未返回详情，ID=" + displayId);
         }
+        qualityStore.recordSuccess(source.key);
         if (TextUtils.isEmpty(detail.id)) detail.id = id;
         JSONObject obj = new JSONObject();
         JSONObject item = detail.toJson();
@@ -295,52 +319,149 @@ public class MediaRequestProcesser implements RequestProcesser {
     }
 
     private SearchBatch quickSearch(final String keyword) throws Exception {
-        final List<MediaSource> candidates = new ArrayList<MediaSource>();
+        List<MediaSource> rawCandidates = new ArrayList<MediaSource>();
         for (MediaSource source : configManager.getSources()) {
-            if (source.isSupported() && source.searchable && source.quickSearch) candidates.add(source);
+            if (source.isSupported() && source.searchable) rawCandidates.add(source);
+        }
+        List<MediaSource> rankedCandidates = qualityStore.rank(rawCandidates);
+        final List<MediaSource> candidates = new ArrayList<MediaSource>();
+        for (MediaSource source : rankedCandidates) {
+            if (source.quickSearch) candidates.add(source);
+            if (candidates.size() >= 18) break;
+        }
+        if (candidates.size() < 18) {
+            for (MediaSource source : rankedCandidates) {
+                if (source.quickSearch || candidates.contains(source)) continue;
+                candidates.add(source);
+                if (candidates.size() >= 18) break;
+            }
         }
         SearchBatch batch = new SearchBatch();
         if (candidates.isEmpty()) return batch;
 
         ExecutorService executor = Executors.newFixedThreadPool(Math.min(6, candidates.size()));
-        CompletionService<List<MediaItem>> completion = new ExecutorCompletionService<List<MediaItem>>(executor);
-        List<Future<List<MediaItem>>> futures = new ArrayList<Future<List<MediaItem>>>();
+        CompletionService<SourceSearchResult> completion = new ExecutorCompletionService<SourceSearchResult>(executor);
+        List<Future<SourceSearchResult>> futures = new ArrayList<Future<SourceSearchResult>>();
         for (final MediaSource source : candidates) {
-            futures.add(completion.submit(new Callable<List<MediaItem>>() {
+            futures.add(completion.submit(new Callable<SourceSearchResult>() {
                 @Override
-                public List<MediaItem> call() throws Exception {
-                    return search(source, keyword, true);
+                public SourceSearchResult call() {
+                    SourceSearchResult result = new SourceSearchResult(source);
+                    try {
+                        result.items = search(source, keyword, true);
+                        qualityStore.recordSuccess(source.key);
+                    } catch (Exception e) {
+                        qualityStore.recordFailure(source.key);
+                    }
+                    return result;
                 }
             }));
         }
 
+        List<MediaItem> rawItems = new ArrayList<MediaItem>();
         long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(30);
         try {
             for (int i = 0; i < candidates.size(); i++) {
                 long remaining = deadline - System.currentTimeMillis();
-                if (remaining <= 0 || batch.items.size() >= 60) break;
-                Future<List<MediaItem>> future = completion.poll(remaining, TimeUnit.MILLISECONDS);
+                if (remaining <= 0 || rawItems.size() >= 180) break;
+                Future<SourceSearchResult> future = completion.poll(remaining, TimeUnit.MILLISECONDS);
                 if (future == null) break;
                 batch.searchedSources++;
                 try {
-                    List<MediaItem> result = future.get();
-                    for (MediaItem item : result) {
-                        batch.items.add(item);
-                        if (batch.items.size() >= 60) break;
+                    SourceSearchResult result = future.get();
+                    if (result != null && result.items != null) {
+                        for (MediaItem item : result.items) {
+                            rawItems.add(item);
+                            if (rawItems.size() >= 180) break;
+                        }
                     }
                 } catch (Exception ignored) {
                 }
             }
         } finally {
-            for (Future<List<MediaItem>> future : futures) future.cancel(true);
+            for (Future<SourceSearchResult> future : futures) future.cancel(true);
             executor.shutdownNow();
         }
+        batch.rawMatches = rawItems.size();
+        batch.items.addAll(rankAndDedupe(rawItems, keyword, 60));
         return batch;
+    }
+
+    private List<MediaItem> rankAndDedupe(List<MediaItem> input, final String keyword, int limit) {
+        List<RankedItem> ranked = new ArrayList<RankedItem>();
+        for (MediaItem item : input) {
+            if (item == null || TextUtils.isEmpty(item.name)) continue;
+            ranked.add(new RankedItem(item, searchScore(item, keyword)));
+        }
+        Collections.sort(ranked, new Comparator<RankedItem>() {
+            @Override
+            public int compare(RankedItem left, RankedItem right) {
+                if (left.score != right.score) return right.score - left.score;
+                return safe(left.item.name).compareToIgnoreCase(safe(right.item.name));
+            }
+        });
+
+        LinkedHashMap<String, MediaItem> deduped = new LinkedHashMap<String, MediaItem>();
+        for (RankedItem rankedItem : ranked) {
+            MediaItem item = rankedItem.item;
+            String titleKey = normalize(item.name);
+            if (TextUtils.isEmpty(titleKey)) titleKey = safe(item.sourceKey) + ":" + safe(item.id);
+            String key = titleKey;
+            MediaItem existing = deduped.get(key);
+            if (existing != null && !TextUtils.isEmpty(existing.year) && !TextUtils.isEmpty(item.year)
+                    && !TextUtils.equals(existing.year, item.year)) {
+                key = titleKey + "|" + item.year;
+            }
+            if (!deduped.containsKey(key)) deduped.put(key, item);
+            if (deduped.size() >= limit) break;
+        }
+        return new ArrayList<MediaItem>(deduped.values());
+    }
+
+    private int searchScore(MediaItem item, String keyword) {
+        String query = normalize(keyword);
+        String name = normalize(item.name);
+        int score = 0;
+        if (!TextUtils.isEmpty(query) && query.equals(name)) score += 10000;
+        else if (!TextUtils.isEmpty(query) && name.startsWith(query)) score += 8000;
+        else if (!TextUtils.isEmpty(query) && name.contains(query)) score += 6500;
+        else if (!TextUtils.isEmpty(name) && query.contains(name)) score += 6000;
+        else score += 1000;
+        score += Math.max(-500, Math.min(500, qualityStore.score(item.sourceKey) * 10));
+        if (!TextUtils.isEmpty(item.pic)) score += 40;
+        if (!TextUtils.isEmpty(item.year) && safe(keyword).contains(item.year)) score += 120;
+        if (!TextUtils.isEmpty(item.score)) score += 10;
+        return score;
+    }
+
+    private static String normalize(String value) {
+        if (value == null) return "";
+        return value.toLowerCase().replaceAll("[\\s\\p{Punct}·•，。！？：；、【】（）《》]+", "");
     }
 
     private static class SearchBatch {
         final List<MediaItem> items = new ArrayList<MediaItem>();
         int searchedSources;
+        int rawMatches;
+    }
+
+    private static class SourceSearchResult {
+        final MediaSource source;
+        List<MediaItem> items = new ArrayList<MediaItem>();
+
+        SourceSearchResult(MediaSource source) {
+            this.source = source;
+        }
+    }
+
+    private static class RankedItem {
+        final MediaItem item;
+        final int score;
+
+        RankedItem(MediaItem item, int score) {
+            this.item = item;
+            this.score = score;
+        }
     }
 
     private NanoHTTPD.Response ok(JSONObject obj) {

@@ -40,6 +40,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
     private final SharedPreferences preferences;
     private final MediaConfigManager configManager;
     private final MediaLibraryStore libraryStore;
+    private final MediaSourceQualityStore qualityStore;
 
     private JSONObject session;
     private long lastHistoryWrite;
@@ -51,6 +52,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
         this.preferences = this.context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         this.configManager = new MediaConfigManager(this.context);
         this.libraryStore = new MediaLibraryStore(this.context);
+        this.qualityStore = new MediaSourceQualityStore(this.context);
         this.session = readSession();
         XLVideoPlayActivity.setPlaybackLifecycleListener(this);
     }
@@ -171,6 +173,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
             awaitingPrepared = false;
             if (session.length() == 0) return 0;
             try {
+                qualityStore.recordSuccess(session.optString("sourceKey"));
                 session.put("duration", Math.max(0, durationMs));
                 long opening = Math.max(0, session.optLong("opening", 0));
                 long resume = Math.max(0, session.optLong("resumePosition", 0));
@@ -230,6 +233,7 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
     public boolean onPlaybackError() {
         synchronized (this) {
             if (session.length() == 0 || advancing || TextUtils.isEmpty(session.optString("mediaName"))) return false;
+            qualityStore.recordFailure(session.optString("sourceKey"));
             advancing = true;
         }
         new Thread(new Runnable() {
@@ -468,11 +472,12 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
     private PlaybackTarget findFallback(final String title, final String episodeName, final int episodeIndex,
                                         String excludeSourceKey) throws Exception {
         if (TextUtils.isEmpty(title)) return null;
-        final List<MediaSource> candidates = new ArrayList<MediaSource>();
+        List<MediaSource> rawCandidates = new ArrayList<MediaSource>();
         for (MediaSource source : configManager.getSources()) {
             if (!source.isSupported() || !source.searchable || TextUtils.equals(source.key, excludeSourceKey)) continue;
-            candidates.add(source);
+            rawCandidates.add(source);
         }
+        final List<MediaSource> candidates = qualityStore.rank(rawCandidates);
         if (candidates.isEmpty()) return null;
 
         ExecutorService executor = Executors.newFixedThreadPool(Math.min(4, candidates.size()));

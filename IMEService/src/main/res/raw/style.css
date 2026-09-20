@@ -349,6 +349,25 @@ body {
 	line-height: 18px;
 }
 
+.media-filter-row {
+	display: flex;
+	gap: 7px;
+	margin: 0 0 9px;
+}
+
+.media-filter-row select {
+	min-width: 0;
+	max-width: 160px;
+	height: 30px;
+	padding: 0 28px 0 9px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-sm);
+	background: var(--color-card-bg);
+	color: var(--color-text-secondary);
+	font: inherit;
+	font-size: 12px;
+}
+
 .media-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(126px, 1fr));
@@ -770,6 +789,11 @@ body {
 	.media-playback-actions,
 	.media-skip-actions {
 		flex-wrap: wrap;
+	}
+
+	.media-filter-row select {
+		flex: 1;
+		max-width: none;
 	}
 
 	.media-grid {
