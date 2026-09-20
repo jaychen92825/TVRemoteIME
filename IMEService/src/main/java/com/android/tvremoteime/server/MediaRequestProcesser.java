@@ -189,6 +189,8 @@ public class MediaRequestProcesser implements RequestProcesser {
         JSONObject obj = new JSONObject();
         JSONObject item = detail.toJson();
         item.put("favorite", libraryStore.isFavorite(source.key, detail.id));
+        JSONObject history = libraryStore.getHistoryItem(source.key, detail.id);
+        if (history != null) item.put("history", history);
         obj.put("item", item);
         return ok(obj);
     }

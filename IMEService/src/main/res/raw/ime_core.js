@@ -366,6 +366,20 @@ function mediaPoster(item, overlay){
 	var progressHtml = progress > 0 ? '<span class="media-progress-track"><span class="media-progress-fill" style="width:'+progress.toFixed(1)+'%"></span></span>' : '';
 	return '<div class="media-poster-wrap">'+poster+(score ? '<span class="media-score">'+escapeHtml(score)+'</span>' : '')+progressHtml+'</div>';
 }
+function mediaHistoryProgress(history){
+	if(!history) return 0;
+	var duration = Math.max(0, Number(history.duration) || 0);
+	var position = Math.max(0, Number(history.position) || 0);
+	return duration > 0 ? Math.max(0, Math.min(100, position * 100 / duration)) : 0;
+}
+function mediaFindEpisode(item, playId, flag){
+	var episodes = item && item.episodes ? item.episodes : [];
+	for(var i=0;i<episodes.length;i++){
+		var ep = episodes[i];
+		if(String(ep.playId || '') === String(playId || '') && (!flag || String(ep.flag || '') === String(flag))) return ep;
+	}
+	return null;
+}
 function renderMediaSources(data){
 	mediaSources = data.sources || [];
 	$('#mediaConfigUrl').val(data.url || '');
@@ -701,6 +715,9 @@ function loadMediaDetail(sourceKey, id){
 		}
 		currentMediaDetail = item;
 		mediaMessage((item.sourceName || '当前源')+' · 选择剧集播放');
+		var history = item.history || null;
+		var historyEpisode = history ? mediaFindEpisode(item, history.playId, history.flag) : null;
+		var historyProgress = mediaHistoryProgress(history);
 		var html = [];
 		html.push(mediaDetailHeader());
 		html.push('<div class="media-detail-layout">');
@@ -708,7 +725,12 @@ function loadMediaDetail(sourceKey, id){
 		html.push('<div class="media-detail-main">');
 		html.push('<div class="media-detail-title">'+escapeHtml(item.name)+'</div>');
 		html.push('<div class="media-card-meta">'+escapeHtml(item.sourceName || '')+(item.year ? ' · '+escapeHtml(item.year) : '')+(item.remark ? ' · '+escapeHtml(item.remark) : '')+'</div>');
+		html.push('<div class="media-detail-actions">');
+		if(history && historyEpisode && historyProgress > 0 && historyProgress < 95){
+			html.push('<button type="button" class="media-resume-btn" id="btnMediaContinue" data-source="'+escapeHtml(item.sourceKey)+'" data-playid="'+escapeHtml(historyEpisode.playId || '')+'" data-flag="'+escapeHtml(historyEpisode.flag || '')+'" data-title="'+escapeHtml(item.name || '')+'" data-episode="'+escapeHtml(historyEpisode.name || history.episode || '')+'">继续观看 · '+escapeHtml(historyEpisode.name || history.episode || '上次位置')+' · '+Math.round(historyProgress)+'%</button>');
+		}
 		html.push('<button type="button" class="media-favorite-btn'+(item.favorite ? ' active' : '')+'" id="btnMediaFavorite" aria-label="'+(item.favorite ? '取消收藏' : '收藏')+'"><span class="media-favorite-icon">'+(item.favorite ? '★' : '☆')+'</span><span>'+(item.favorite ? '已收藏' : '收藏')+'</span></button>');
+		html.push('</div>');
 		if(item.desc) html.push('<div class="media-desc">'+escapeHtml(item.desc)+'</div>');
 		html.push('</div></div>');
 		var groups = mediaEpisodeGroups(item.episodes || []);
@@ -722,7 +744,9 @@ function loadMediaDetail(sourceKey, id){
 		for(var groupIndex=0;groupIndex<groups.length;groupIndex++){
 			for(var i=0;i<groups[groupIndex].episodes.length;i++){
 				var ep = groups[groupIndex].episodes[i];
-				html.push('<button type="button" class="media-episode'+(groupIndex === 0 ? '' : ' hide')+'" data-route="'+groupIndex+'" data-source="'+escapeHtml(item.sourceKey)+'" data-playid="'+escapeHtml(ep.playId)+'" data-flag="'+escapeHtml(ep.flag || '')+'" data-title="'+escapeHtml(item.name || '')+'" data-episode="'+escapeHtml(ep.name || '')+'">'+escapeHtml(ep.name || '播放')+'</button>');
+				var isResumeEpisode = !!(historyEpisode && String(ep.playId || '') === String(historyEpisode.playId || '') && String(ep.flag || '') === String(historyEpisode.flag || ''));
+				var progressText = isResumeEpisode && historyProgress > 0 && historyProgress < 95 ? '<span class="media-episode-progress">'+Math.round(historyProgress)+'%</span>' : '';
+				html.push('<button type="button" class="media-episode'+(groupIndex === 0 ? '' : ' hide')+(isResumeEpisode ? ' resume' : '')+'" data-route="'+groupIndex+'" data-source="'+escapeHtml(item.sourceKey)+'" data-playid="'+escapeHtml(ep.playId)+'" data-flag="'+escapeHtml(ep.flag || '')+'" data-title="'+escapeHtml(item.name || '')+'" data-episode="'+escapeHtml(ep.name || '')+'"><span>'+escapeHtml(ep.name || '播放')+'</span>'+progressText+'</button>');
 			}
 		}
 		if(!groups.length) html.push('<div class="media-empty">这个 source 没有返回可播放剧集。</div>');
@@ -964,6 +988,9 @@ $('#mediaGrid').on('click', '.media-card-unfavorite', function(e){
 $('#mediaDetail').on('click', '.media-episode', function(){
 	$('#mediaDetail .media-episode').removeClass('playing');
 	$(this).addClass('playing');
+	playMediaEpisode($(this).attr('data-source'), $(this).attr('data-flag'), $(this).attr('data-playid'), $(this).attr('data-title'), $(this).attr('data-episode'));
+});
+$('#mediaDetail').on('click', '#btnMediaContinue', function(){
 	playMediaEpisode($(this).attr('data-source'), $(this).attr('data-flag'), $(this).attr('data-playid'), $(this).attr('data-title'), $(this).attr('data-episode'));
 });
 $('#mediaDetail').on('click', '#btnMediaFavorite', function(){
