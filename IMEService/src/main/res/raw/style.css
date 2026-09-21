@@ -1579,7 +1579,11 @@ body {
 		position: relative;
 		display: flex;
 		align-items: center;
+		justify-content: flex-start;
+		width: 100%;
+		max-width: 100%;
 		min-width: 0;
+		overflow: hidden;
 		padding: 5px 23px 6px 10px;
 		border: 0;
 		background: transparent;
