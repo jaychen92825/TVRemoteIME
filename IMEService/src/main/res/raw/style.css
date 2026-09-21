@@ -1560,14 +1560,14 @@ body {
 	}
 
 	.container.media-has-global-playback {
-		padding-bottom: calc(126px + env(safe-area-inset-bottom));
+		padding-bottom: calc(112px + env(safe-area-inset-bottom));
 	}
 
 	.media-playback-compact {
 		position: relative;
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) 52px;
-		min-height: 58px;
+		grid-template-columns: minmax(0, 1fr) 44px;
+		min-height: 48px;
 		background: var(--color-card-bg);
 	}
 
@@ -1580,7 +1580,7 @@ body {
 		display: flex;
 		align-items: center;
 		min-width: 0;
-		padding: 8px 28px 10px 12px;
+		padding: 6px 25px 7px 11px;
 		border: 0;
 		background: transparent;
 		color: var(--color-text);
@@ -1595,8 +1595,8 @@ body {
 			"title title"
 			"label episode";
 		align-items: center;
-		column-gap: 8px;
-		row-gap: 2px;
+		column-gap: 6px;
+		row-gap: 0;
 		min-width: 0;
 		width: 100%;
 	}
@@ -1606,7 +1606,7 @@ body {
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		font-size: 11px;
+		font-size: 10px;
 		font-weight: 500;
 		color: var(--color-text-secondary);
 		white-space: nowrap;
@@ -1618,14 +1618,14 @@ body {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		font-size: 14px;
+		font-size: 13px;
 		font-weight: 700;
-		line-height: 18px;
+		line-height: 17px;
 	}
 
 	.media-playback-compact-episode {
 		grid-area: episode;
-		font-size: 11px;
+		font-size: 10px;
 		font-weight: 500;
 		color: var(--color-text-secondary);
 		white-space: nowrap;
@@ -1634,7 +1634,7 @@ body {
 	.media-playback-chevron {
 		display: block;
 		position: absolute;
-		right: 5px;
+		right: 4px;
 		top: 50%;
 		margin: 0;
 		color: var(--color-text-secondary);
@@ -1651,8 +1651,8 @@ body {
 		align-items: center;
 		justify-content: center;
 		width: auto;
-		min-height: 44px;
-		margin: 7px 8px 7px 0;
+		min-height: 40px;
+		margin: 4px 4px 4px 0;
 		border: 0;
 		background: transparent;
 		color: var(--color-primary);
@@ -1667,10 +1667,10 @@ body {
 	.media-playback-compact-progress {
 		display: block;
 		position: absolute;
-		left: 12px;
-		right: 12px;
+		left: 10px;
+		right: 10px;
 		bottom: 0;
-		height: 3px;
+		height: 2px;
 		border-radius: 3px;
 		background: var(--color-border);
 		overflow: hidden;
@@ -1686,7 +1686,7 @@ body {
 	.media-playback-expanded {
 		display: none;
 		max-height: calc(100dvh - 150px - env(safe-area-inset-bottom));
-		padding: 10px 12px 14px;
+		padding: 7px 10px 10px;
 		overflow-y: auto;
 		overscroll-behavior: contain;
 		border-top: 1px solid var(--color-border);
@@ -1702,8 +1702,8 @@ body {
 
 	.media-playback-controls.expanded .media-playback-compact-main {
 		width: auto;
-		min-height: 54px;
-		padding: 8px 28px 8px 12px;
+		min-height: 46px;
+		padding: 6px 25px 6px 11px;
 	}
 
 	.media-playback-controls.expanded .media-playback-compact-action {
@@ -1718,20 +1718,20 @@ body {
 	.media-playback-actions {
 		display: flex;
 		justify-content: center;
-		grid-column: 1 / -1;
+		grid-column: 2;
 		grid-row: 1;
-		gap: 18px;
+		gap: 10px;
 	}
 
 	.media-playback-actions .media-control-btn {
-		width: 46px;
-		height: 46px;
+		width: 40px;
+		height: 40px;
 		padding: 0;
 	}
 
 	.media-playback-actions .media-control-icon.media-control-primary {
-		width: 54px;
-		height: 54px;
+		width: 44px;
+		height: 44px;
 	}
 
 	.media-playback-actions .media-control-icon {
@@ -1749,97 +1749,97 @@ body {
 	}
 
 	.media-playback-command-row {
-		grid-template-columns: minmax(0, 1fr);
-		grid-template-rows: auto auto;
-		row-gap: 6px;
+		grid-template-columns: 64px minmax(0, 1fr) 64px;
+		grid-template-rows: auto;
+		row-gap: 0;
 		min-height: 0;
-		margin: 6px 0 8px;
+		margin: 3px 0 5px;
 	}
 
 	.media-playback-command-row .media-speed-control {
-		grid-column: 1 / -1;
-		grid-row: 2;
+		grid-column: 3;
+		grid-row: 1;
 		justify-self: end;
-		gap: 6px;
-		min-height: 38px;
+		gap: 0;
+		min-height: 34px;
 	}
 
 	.media-speed-control > span {
-		display: inline;
+		display: none;
 	}
 
 	.media-speed-control select {
-		height: 38px;
-		min-width: 54px;
-		padding: 0 6px;
+		height: 34px;
+		min-width: 58px;
+		padding: 0 5px;
 		background: var(--color-bg);
 	}
 
 	.media-playback-device-controls {
-		grid-template-columns: minmax(0, 1fr) 42px;
-		gap: 10px;
-		margin-top: 8px;
-		padding-top: 10px;
+		grid-template-columns: minmax(0, 1fr) 36px;
+		gap: 7px;
+		margin-top: 5px;
+		padding-top: 7px;
 	}
 
 	.media-volume-control {
 		grid-column: 1;
-		gap: 8px;
+		gap: 6px;
 	}
 
 	.media-volume-control .media-control-icon {
-		width: 40px;
-		height: 40px;
+		width: 34px;
+		height: 34px;
 	}
 
 	.media-stop-control {
 		grid-column: 2;
 		grid-row: 1;
-		width: 42px;
-		height: 42px;
+		width: 36px;
+		height: 36px;
 	}
 
 	.media-track-controls {
 		grid-column: 1 / -1;
 		width: 100%;
-		gap: 8px;
-		margin-top: 4px;
+		gap: 6px;
+		margin-top: 3px;
 	}
 
 	.media-track-control {
 		flex: 1;
-		height: 42px;
-		padding-left: 9px;
+		height: 34px;
+		padding-left: 7px;
 	}
 
 	.media-track-control select {
 		width: 100%;
 		max-width: none;
-		height: 42px;
+		height: 34px;
 	}
 
 	.media-playback-switchers {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 8px;
-		margin-top: 10px;
-		padding-top: 10px;
+		gap: 6px;
+		margin-top: 7px;
+		padding-top: 7px;
 		border-top: 1px solid var(--color-border);
 	}
 
 	.media-playback-switchers label {
 		display: grid;
 		grid-template-columns: 1fr;
-		gap: 4px;
+		gap: 2px;
 		min-width: 0;
 	}
 
 	.media-playback-switchers label > span {
-		font-size: 10px;
-		line-height: 14px;
+		font-size: 9px;
+		line-height: 12px;
 	}
 
 	.media-playback-switchers select {
-		height: 42px;
+		height: 34px;
 		min-width: 0;
 		padding: 0 8px;
 		white-space: nowrap;
@@ -1847,19 +1847,19 @@ body {
 	}
 
 	.media-playback-progress {
-		grid-template-columns: 1fr 1fr;
+		grid-template-columns: auto minmax(0, 1fr) auto;
 		grid-template-areas:
-			"seek seek"
-			"current duration";
-		gap: 2px 8px;
+			"current seek duration";
+		gap: 0 7px;
 		margin: 0;
-		padding: 2px 0 4px;
+		padding: 0 0 2px;
+		align-items: center;
 	}
 
 	.media-playback-progress input[type="range"] {
 		grid-area: seek;
 		width: 100%;
-		height: 28px;
+		height: 24px;
 	}
 
 	#mediaPlaybackCurrent {
@@ -1874,8 +1874,8 @@ body {
 
 	#mediaPlaybackCurrent,
 	#mediaPlaybackDuration {
-		font-size: 10px;
-		line-height: 14px;
+		font-size: 9px;
+		line-height: 12px;
 	}
 
 	.media-skip-btn,
@@ -1884,17 +1884,17 @@ body {
 	}
 
 	.media-playback-tools summary {
-		min-height: 40px;
+		min-height: 34px;
 	}
 
 	.media-playback-tools {
-		margin-top: 10px;
-		padding-top: 6px;
+		margin-top: 7px;
+		padding-top: 4px;
 	}
 
 	.media-skip-actions {
-		gap: 7px;
-		margin-top: 8px;
+		gap: 5px;
+		margin-top: 5px;
 	}
 
 	.media-skip-group {
@@ -2104,7 +2104,7 @@ body {
 	}
 
 	.media-playback-compact {
-		grid-template-columns: minmax(0, 1fr) 50px;
+		grid-template-columns: minmax(0, 1fr) 44px;
 	}
 
 	.media-playback-compact-main {
@@ -2113,11 +2113,11 @@ body {
 	}
 
 	.media-playback-compact-copy {
-		grid-template-columns: minmax(0, 1fr);
+		grid-template-columns: minmax(0, 1fr) auto;
 		grid-template-areas:
-			"title"
-			"episode";
-		row-gap: 2px;
+			"title episode";
+		column-gap: 6px;
+		row-gap: 0;
 	}
 
 	.media-playback-compact-label {
@@ -2125,25 +2125,51 @@ body {
 	}
 
 	.media-playback-compact-episode {
-		justify-self: start;
-		max-width: 100%;
+		justify-self: end;
+		max-width: 92px;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 
 	.media-playback-expanded {
-		padding-left: 10px;
-		padding-right: 10px;
+		padding-left: 9px;
+		padding-right: 9px;
 	}
 
 	.media-playback-actions {
-		gap: 14px;
+		gap: 8px;
+	}
+
+	.media-track-controls {
+		display: flex;
+		gap: 6px;
+	}
+
+	.media-track-control {
+		width: 100%;
+	}
+
+	.media-playback-switchers {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 6px;
+	}
+
+	.media-skip-group {
+		flex-basis: 0;
+		min-width: 0;
+	}
+
+}
+
+@media (max-width: 340px) {
+	.media-playback-command-row {
+		grid-template-columns: 54px minmax(0, 1fr) 58px;
 	}
 
 	.media-track-controls {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
-		gap: 7px;
+		gap: 5px;
 	}
 
 	.media-track-control {
@@ -2152,14 +2178,8 @@ body {
 
 	.media-playback-switchers {
 		grid-template-columns: minmax(0, 1fr);
-		gap: 7px;
+		gap: 5px;
 	}
-
-	.media-skip-group {
-		flex-basis: 100%;
-		min-width: 0;
-	}
-
 }
 
 @media (max-width: 360px) {
