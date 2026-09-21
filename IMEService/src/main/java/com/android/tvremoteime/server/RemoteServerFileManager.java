@@ -143,7 +143,7 @@ public class RemoteServerFileManager implements NanoHTTPD.TempFileManager {
     public static void clearAllFiles(){
         try{
             if(filesDir.exists()) deleteDirFiles(filesDir);
-            if(tmpDataDir.exists()) deleteDirFiles(filesDir);
+            if(tmpDataDir.exists()) deleteDirFiles(tmpDataDir);
             if(playerCacheDir != null && playerCacheDir.exists()) deleteDirFiles(playerCacheDir);
             File torrentFile = getPlayTorrentFile();
             if(torrentFile.exists()) torrentFile.delete();
@@ -210,17 +210,28 @@ public class RemoteServerFileManager implements NanoHTTPD.TempFileManager {
     }
     private static void copyFileImpl(File sourceFile, File targetFile){
         if(targetFile.exists()) return;
+        FileInputStream ins = null;
+        FileOutputStream out = null;
         try {
-            FileInputStream ins = new FileInputStream(sourceFile);
-            FileOutputStream out = new FileOutputStream(targetFile);
+            ins = new FileInputStream(sourceFile);
+            out = new FileOutputStream(targetFile);
             byte[] b = new byte[1024];
-            int n = 0;
+            int n;
             while ((n = ins.read(b)) != -1) {
                 out.write(b, 0, n);
             }
-            ins.close();
-            out.close();
         }catch (Exception ignored) {
+        }finally {
+            //之前ins/out只在try块正常走完时才关闭：read()/write()中途抛异常
+            //(比如磁盘写满、目标是可移动存储被拔出)的话，这两个流就会一直
+            //开着不释放，属于资源泄漏。挪到finally里各自单独try一次，保证
+            //不管中间成功与否都会尝试关闭。
+            if(ins != null){
+                try { ins.close(); } catch (IOException ignored) {}
+            }
+            if(out != null){
+                try { out.close(); } catch (IOException ignored) {}
+            }
         }
     }
 }

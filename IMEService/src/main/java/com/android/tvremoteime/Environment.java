@@ -2,7 +2,6 @@ package com.android.tvremoteime;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.nfc.Tag;
 import android.os.Handler;
 import android.provider.Settings;
 import android.util.Log;
@@ -176,7 +175,6 @@ public class Environment {
         try {
             InputMethodManager imm = (InputMethodManager)context.getSystemService(Context.INPUT_METHOD_SERVICE);
             List<InputMethodInfo> inputs = imm.getEnabledInputMethodList();
-            boolean flag = false;
             for(InputMethodInfo input : inputs){
                 if(input.getPackageName().equals(IMEService.class.getPackage().getName())){
                     return true;

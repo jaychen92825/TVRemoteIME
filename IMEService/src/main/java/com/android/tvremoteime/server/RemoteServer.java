@@ -18,13 +18,12 @@ import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import fi.iki.elonen.*;
@@ -111,28 +110,32 @@ public class RemoteServer extends NanoHTTPD
     public static String getLocalIPAddress(Context context){
         WifiManager wifiManager = (WifiManager)context.getSystemService(Context.WIFI_SERVICE);
         int ipAddress = wifiManager.getConnectionInfo().getIpAddress();
-        if(ipAddress == 0){
-            try {
-                Enumeration<NetworkInterface> enumerationNi = NetworkInterface.getNetworkInterfaces();
-                while (enumerationNi.hasMoreElements()) {
-                    NetworkInterface networkInterface = enumerationNi.nextElement();
-                    String interfaceName = networkInterface.getDisplayName();
-                    if (interfaceName.equals("eth0") || interfaceName.equals("wlan0")) {
-                        Enumeration<InetAddress> enumIpAddr = networkInterface.getInetAddresses();
-
-                        while (enumIpAddr.hasMoreElements()) {
-                            InetAddress inetAddress = enumIpAddr.nextElement();
-                            if (!inetAddress.isLoopbackAddress() && inetAddress instanceof Inet4Address) {
-                                return inetAddress.getHostAddress();
-                            }
-                        }
+        if(ipAddress != 0){
+            return String.format("%d.%d.%d.%d", (ipAddress & 0xff), (ipAddress >> 8 & 0xff), (ipAddress >> 16 & 0xff), (ipAddress >> 24 & 0xff));
+        }
+        //WifiManager.getConnectionInfo().getIpAddress()在Android 10+上经常因为
+        //隐私限制拿不到真实值(直接返回0)，需要退回遍历网络接口。之前这里只认
+        //"eth0"/"wlan0"这两个固定接口名，不同电视盒子厂商/系统版本的接口命名
+        //并不统一(见过wlan1、eth1这类编号不同的情况)，名字对不上就会两条路
+        //都拿不到，直接退化成"0.0.0.0"。改成不按名字过滤，遍历所有网络接口，
+        //拿第一个非回环、非虚拟(排除掉多数虚拟网卡都会启用的isUp但通常也需要
+        //排除本机永远访问不到的场景，这里保留最基本的判断)的IPv4地址——这台
+        //设备参与组网的接口本来也不会太多，没必要靠猜名字去限定范围。
+        try {
+            Enumeration<NetworkInterface> enumerationNi = NetworkInterface.getNetworkInterfaces();
+            while (enumerationNi.hasMoreElements()) {
+                NetworkInterface networkInterface = enumerationNi.nextElement();
+                if(!networkInterface.isUp() || networkInterface.isLoopback() || networkInterface.isVirtual()) continue;
+                Enumeration<InetAddress> enumIpAddr = networkInterface.getInetAddresses();
+                while (enumIpAddr.hasMoreElements()) {
+                    InetAddress inetAddress = enumIpAddr.nextElement();
+                    if (!inetAddress.isLoopbackAddress() && inetAddress instanceof Inet4Address) {
+                        return inetAddress.getHostAddress();
                     }
                 }
-            } catch (SocketException e) {
-                Log.e(IMEService.TAG, "获取本地IP出错", e);
             }
-        }else {
-            return String.format("%d.%d.%d.%d", (ipAddress & 0xff), (ipAddress >> 8 & 0xff), (ipAddress >> 16 & 0xff), (ipAddress >> 24 & 0xff));
+        } catch (SocketException e) {
+            Log.e(IMEService.TAG, "获取本地IP出错", e);
         }
         return "0.0.0.0";
     }
@@ -189,8 +192,21 @@ public class RemoteServer extends NanoHTTPD
     //扫二维码免密登录用的会话口令，登录成功后种一个cookie，服务重启（进程内存清空）
     //后所有会话失效，需要重新扫码或手动输入口令——不做持久化存储，简单换取安全。
     private static final String SESSION_COOKIE_NAME = "tvrc_auth";
-    private static final Set<String> validSessionTokens =
-            Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+    //value是这个token的生成时间，用来惰性淘汰过期token(见pruneExpiredSessionTokens)。
+    //之前是个只增不减的Set，进程存活期间每扫码登录一次就永久多一条记录，从不清理——
+    //量级对个人使用来说不算大问题，但原则上是个无界增长。改成记录生成时间，跟
+    //下面Set-Cookie的Max-Age(30天)保持一致的过期时间，每次登录时顺带清一遍过期的。
+    private static final long SESSION_TOKEN_TTL_MS = 30L * 24 * 60 * 60 * 1000;
+    private static final Map<String, Long> validSessionTokens = new ConcurrentHashMap<>();
+
+    private static void pruneExpiredSessionTokens(){
+        long now = System.currentTimeMillis();
+        for(Map.Entry<String, Long> entry : validSessionTokens.entrySet()){
+            if(now - entry.getValue() > SESSION_TOKEN_TTL_MS){
+                validSessionTokens.remove(entry.getKey());
+            }
+        }
+    }
 
     private static String stripQuery(String uri){
         if(uri == null) return "";
@@ -211,8 +227,11 @@ public class RemoteServer extends NanoHTTPD
         if(TextUtils.isEmpty(cookieHeader)) return false;
         for(String part : cookieHeader.split(";")){
             String[] kv = part.trim().split("=", 2);
-            if(kv.length == 2 && SESSION_COOKIE_NAME.equals(kv[0]) && validSessionTokens.contains(kv[1])){
-                return true;
+            if(kv.length == 2 && SESSION_COOKIE_NAME.equals(kv[0])){
+                Long createdAt = validSessionTokens.get(kv[1]);
+                if(createdAt != null && System.currentTimeMillis() - createdAt <= SESSION_TOKEN_TTL_MS){
+                    return true;
+                }
             }
         }
         return false;
@@ -234,7 +253,8 @@ public class RemoteServer extends NanoHTTPD
             return createPlainTextResponse(Response.Status.FORBIDDEN, "口令错误，请重新扫码或在应用主界面查看当前口令。");
         }
         String token = generateSessionToken();
-        validSessionTokens.add(token);
+        pruneExpiredSessionTokens();
+        validSessionTokens.put(token, System.currentTimeMillis());
         noteClientActiveAndRefreshKeyboardView();
         Response resp = newFixedLengthResponse(Response.Status.OK, NanoHTTPD.MIME_HTML,
                 "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>location.replace('/');</script></head><body>登录成功，正在跳转…</body></html>");
@@ -262,7 +282,12 @@ public class RemoteServer extends NanoHTTPD
                 String credentials = new String(decoded, "UTF-8");
                 int idx = credentials.indexOf(':');
                 String password = idx >= 0 ? credentials.substring(idx + 1) : credentials;
-                if (accessCode.equals(password)) {
+                //用MessageDigest.isEqual做常量时间比较，不用String.equals()——
+                //后者一旦发现某个字符不匹配就立即返回，比较耗时会跟着"前面
+                //匹配了多少个字符"变化，理论上给了个基于响应时间的侧信道。
+                //对局域网内的小工具来说风险很低，但改起来成本也很低。
+                if (MessageDigest.isEqual(
+                        accessCode.getBytes("UTF-8"), password.getBytes("UTF-8"))) {
                     return null;
                 }
             } catch (IllegalArgumentException | UnsupportedEncodingException ignored) {
