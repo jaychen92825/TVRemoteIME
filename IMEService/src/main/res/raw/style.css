@@ -1538,14 +1538,14 @@ body {
 	.media-playback-controls {
 		position: fixed;
 		z-index: 990;
-		left: 12px;
-		right: 12px;
+		left: 10px;
+		right: 10px;
 		bottom: calc(64px + env(safe-area-inset-bottom));
 		width: auto;
 		margin: 0;
 		padding: 0;
 		border-radius: 8px;
-		box-shadow: 0 -2px 12px rgba(0,0,0,.12);
+		box-shadow: 0 8px 28px rgba(0,0,0,.16);
 		overflow: hidden;
 	}
 
@@ -1556,8 +1556,8 @@ body {
 	.media-playback-compact {
 		position: relative;
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) 44px;
-		min-height: 54px;
+		grid-template-columns: minmax(0, 1fr) 48px;
+		min-height: 58px;
 		background: var(--color-card-bg);
 	}
 
@@ -1569,7 +1569,7 @@ body {
 		display: flex;
 		align-items: center;
 		min-width: 0;
-		padding: 7px 8px 9px 10px;
+		padding: 8px 6px 10px 12px;
 		border: 0;
 		background: transparent;
 		color: var(--color-text);
@@ -1581,19 +1581,22 @@ body {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) auto;
 		grid-template-areas:
-			"title episode"
-			"label label";
+			"title title"
+			"label episode";
 		align-items: center;
-		column-gap: 6px;
-		row-gap: 1px;
+		column-gap: 8px;
+		row-gap: 2px;
 		min-width: 0;
 		width: 100%;
 	}
 
 	.media-playback-compact-label {
 		grid-area: label;
-		font-size: 10px;
-		font-weight: 600;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		font-size: 11px;
+		font-weight: 500;
 		color: var(--color-text-secondary);
 		white-space: nowrap;
 	}
@@ -1604,13 +1607,15 @@ body {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		font-size: 13px;
-		font-weight: 600;
+		font-size: 14px;
+		font-weight: 700;
+		line-height: 18px;
 	}
 
 	.media-playback-compact-episode {
 		grid-area: episode;
 		font-size: 11px;
+		font-weight: 500;
 		color: var(--color-text-secondary);
 		white-space: nowrap;
 	}
@@ -1618,7 +1623,8 @@ body {
 	.media-playback-chevron {
 		display: block;
 		flex: 0 0 auto;
-		margin-left: 5px;
+		margin-left: 7px;
+		color: var(--color-text-secondary);
 		transform: none;
 		transition: transform .16s ease;
 	}
@@ -1631,25 +1637,30 @@ body {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 44px;
-		min-height: 44px;
+		width: 48px;
+		min-height: 48px;
 		margin: 5px 5px 5px 0;
 		border: 0;
-		border-left: 1px solid var(--color-border);
 		background: transparent;
-		color: var(--color-primary-dark);
+		color: var(--color-primary);
 		font: inherit;
 		font-size: 16px;
+	}
+
+	.media-playback-compact-action:active {
+		background: var(--color-primary-soft);
 	}
 
 	.media-playback-compact-progress {
 		display: block;
 		position: absolute;
-		left: 0;
-		right: 0;
+		left: 12px;
+		right: 12px;
 		bottom: 0;
-		height: 2px;
+		height: 3px;
+		border-radius: 3px;
 		background: var(--color-border);
+		overflow: hidden;
 	}
 
 	.media-playback-compact-progress span {
@@ -1661,9 +1672,10 @@ body {
 
 	.media-playback-expanded {
 		display: none;
-		max-height: calc(100dvh - 142px - env(safe-area-inset-bottom));
-		padding: 12px;
+		max-height: calc(100dvh - 150px - env(safe-area-inset-bottom));
+		padding: 12px 14px 14px;
 		overflow-y: auto;
+		overscroll-behavior: contain;
 		border-top: 1px solid var(--color-border);
 	}
 
@@ -1687,13 +1699,18 @@ body {
 	.media-playback-actions {
 		display: flex;
 		justify-content: center;
-		gap: 12px;
+		gap: 14px;
 	}
 
 	.media-playback-actions .media-control-btn {
-		width: 44px;
-		height: 44px;
+		width: 46px;
+		height: 46px;
 		padding: 0;
+	}
+
+	.media-playback-actions .media-control-icon.media-control-primary {
+		width: 54px;
+		height: 54px;
 	}
 
 	.media-playback-actions .media-control-icon {
@@ -1710,18 +1727,29 @@ body {
 		padding: 0 14px;
 	}
 
+	.media-playback-command-row {
+		grid-template-columns: minmax(44px, 1fr) auto minmax(44px, 1fr);
+		min-height: 56px;
+		margin: 6px 0 4px;
+	}
+
 	.media-speed-control select {
 		height: 36px;
-		min-width: 48px;
+		min-width: 54px;
+		padding: 0 6px;
+		background: var(--color-bg);
 	}
 
 	.media-playback-device-controls {
 		grid-template-columns: minmax(0, 1fr) 40px;
-		gap: 8px;
+		gap: 10px;
+		margin-top: 10px;
+		padding-top: 10px;
 	}
 
 	.media-volume-control {
 		grid-column: 1;
+		gap: 8px;
 	}
 
 	.media-stop-control {
@@ -1734,24 +1762,80 @@ body {
 	.media-track-controls {
 		grid-column: 1 / -1;
 		width: 100%;
+		gap: 8px;
+		margin-top: 2px;
 	}
 
 	.media-track-control {
 		flex: 1;
+		height: 38px;
+		padding-left: 9px;
 	}
 
 	.media-track-control select {
 		width: 100%;
 		max-width: none;
+		height: 38px;
 	}
 
 	.media-playback-switchers {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px;
+		margin-top: 10px;
+		padding-top: 10px;
+		border-top: 1px solid var(--color-border);
+	}
+
+	.media-playback-switchers label {
+		display: grid;
 		grid-template-columns: 1fr;
+		gap: 4px;
+		min-width: 0;
+	}
+
+	.media-playback-switchers label > span {
+		font-size: 10px;
+		line-height: 14px;
+	}
+
+	.media-playback-switchers select {
+		height: 38px;
+		min-width: 0;
+		padding: 0 8px;
+		white-space: nowrap;
+		text-overflow: ellipsis;
 	}
 
 	.media-playback-progress {
-		grid-template-columns: 38px minmax(0, 1fr) 38px;
-		gap: 6px;
+		grid-template-columns: 1fr 1fr;
+		grid-template-areas:
+			"seek seek"
+			"current duration";
+		gap: 2px 8px;
+		margin: 0;
+		padding: 2px 0 4px;
+	}
+
+	.media-playback-progress input[type="range"] {
+		grid-area: seek;
+		width: 100%;
+		height: 28px;
+	}
+
+	#mediaPlaybackCurrent {
+		grid-area: current;
+		justify-self: start;
+	}
+
+	#mediaPlaybackDuration {
+		grid-area: duration;
+		justify-self: end;
+	}
+
+	#mediaPlaybackCurrent,
+	#mediaPlaybackDuration {
+		font-size: 10px;
+		line-height: 14px;
 	}
 
 	.media-skip-btn,
@@ -1760,7 +1844,31 @@ body {
 	}
 
 	.media-playback-tools summary {
-		min-height: 38px;
+		min-height: 40px;
+	}
+
+	.media-playback-tools {
+		margin-top: 10px;
+		padding-top: 6px;
+	}
+
+	.media-skip-actions {
+		gap: 7px;
+		margin-top: 8px;
+	}
+
+	.media-skip-group {
+		flex: 1 1 0;
+		min-width: 132px;
+	}
+
+	.media-skip-group .media-skip-btn {
+		flex: 1;
+		min-width: 0;
+	}
+
+	#btnMediaClearMarkers {
+		flex: 1 1 100%;
 	}
 
 	.media-state {
