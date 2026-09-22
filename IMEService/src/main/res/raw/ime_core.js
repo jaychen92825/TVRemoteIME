@@ -73,6 +73,8 @@ function formatSize(size){
 	}
 }
 function parseTVData(text){
+	if(/^\s*\uFEFF?#EXTM3U/i.test(text || '')) return parseTVM3UData(text);
+
 	var tv = [];
 	var lines = text.split('\n');
 	var offset = 0;
@@ -103,6 +105,60 @@ function parseTVData(text){
 			if(urls.length)tv.push({"name":name, "urls":urls});
 		}else{
 			offset ++;
+		}
+	}
+	return tv;
+}
+function parseTVM3UData(text){
+	var tv = [];
+	var byName = {};
+	var lines = String(text || '').replace(/\r/g, '').split('\n');
+	var pending = null;
+
+	function attr(line, name){
+		var match = line.match(new RegExp('(?:^|\\s)' + name + '="([^"]*)"', 'i'));
+		return match ? match[1].trim() : '';
+	}
+	function add(key, name, sourceName, url){
+		key = (key || name || '').trim().toLowerCase();
+		name = (name || '').trim();
+		sourceName = (sourceName || '').trim();
+		url = (url || '').trim();
+		if(!key || !name || !url) return;
+		var item = byName[key];
+		if(!item){
+			item = {"name":name, "urls":[]};
+			byName[key] = item;
+			tv.push(item);
+		}
+		for(var i=0;i<item.urls.length;i++){
+			if(item.urls[i].url === url) return;
+		}
+		item.urls.push({"name":sourceName || ("线路 " + (item.urls.length + 1)), "url":url});
+	}
+
+	for(var i=0;i<lines.length;i++){
+		var line = lines[i].trim();
+		if(!line) continue;
+		if(/^#EXTINF:/i.test(line)){
+			var comma = line.indexOf(',');
+			var displayName = comma >= 0 ? line.substring(comma + 1).trim() : '';
+			var tvgId = attr(line, 'tvg-id');
+			var canonicalName = displayName
+				.replace(/\s+\((?:\d+[pi]|[48]K)\)\s*$/i, '')
+				.replace(/\s+\[(?:Geo-blocked|Not 24\/7)\]\s*$/i, '')
+				.trim();
+			pending = {
+				key: tvgId ? tvgId.replace(/@[^@]+$/, '') : canonicalName,
+				name: attr(line, 'tvg-name') || canonicalName || tvgId || '未命名频道',
+				sourceName: displayName
+			};
+			continue;
+		}
+		if(line.charAt(0) === '#') continue;
+		if(pending){
+			add(pending.key, pending.name, pending.sourceName, line);
+			pending = null;
 		}
 	}
 	return tv;
