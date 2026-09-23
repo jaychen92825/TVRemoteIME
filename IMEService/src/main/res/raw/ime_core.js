@@ -1244,10 +1244,12 @@ function toggleMediaPlayback(){
 function renderMediaPlaybackStatus(data){
 	var active = !!(data && data.active);
 	var hasSession = !!(data && data.hasSession);
+	var directStream = !!(data && data.directStream);
 	var playing = !!(data && data.playing);
 	mediaPlaybackActive = active;
 	mediaPlaybackHasSession = hasSession;
 	$('#mediaPlaybackControls').toggleClass('hide', !(active || hasSession));
+	$('#mediaPlaybackControls').toggleClass('direct-stream', directStream);
 	$('.container').toggleClass('media-has-global-playback', active || hasSession);
 	if(!(active || hasSession)){
 		mediaPlaybackDragging = false;
@@ -1265,9 +1267,9 @@ function renderMediaPlaybackStatus(data){
 	if(!mediaPlaybackDragging) $seek.val(position);
 	$('#mediaPlaybackCurrent').text(formatPlaybackTime(mediaPlaybackDragging ? $seek.val() : position));
 	$('#mediaPlaybackDuration').text(duration > 0 ? formatPlaybackTime(duration) : '--:--');
-	$('#mediaPlaybackCompactLabel').text(active ? (playing ? '电视播放中' : '电视已暂停') : '继续观看');
+	$('#mediaPlaybackCompactLabel').text(active ? (directStream ? (playing ? '网页视频播放中' : '网页视频已暂停') : (playing ? '电视播放中' : '电视已暂停')) : '继续观看');
 	$('#mediaPlaybackCompactTitle').text(data.mediaName || '');
-	$('#mediaPlaybackCompactEpisode').text(data.episode || '');
+	$('#mediaPlaybackCompactEpisode').text(hasSession ? (data.episode || '') : '');
 	$('#mediaPlaybackCompactProgress').css('width', duration > 0 ? Math.max(0, Math.min(100, position * 100 / duration))+'%' : '0%');
 	setMediaPlaybackPlayingUi(active, playing);
 
@@ -1289,17 +1291,18 @@ function renderMediaPlaybackStatus(data){
 	renderMediaPlaybackTracks(data, active);
 	$('#btnMediaStop').prop('disabled', !active);
 	$('#btnMediaResume').toggleClass('hide', active);
-	$('#btnMediaPrevEpisode').prop('disabled', !data.canPrev);
-	$('#btnMediaNextEpisode').prop('disabled', !data.canNext);
-	renderMediaPlaybackSwitchers(data);
+	$('#btnMediaPrevEpisode').toggleClass('hide', !hasSession).prop('disabled', !hasSession || !data.canPrev);
+	$('#btnMediaNextEpisode').toggleClass('hide', !hasSession).prop('disabled', !hasSession || !data.canNext);
+	renderMediaPlaybackSwitchers(data, hasSession);
 	var queue = data.queue || [];
 	var queueHtml = [];
 	for(var i=0;i<queue.length;i++){
 		queueHtml.push('<button type="button" class="media-queue-item'+(queue[i].current ? ' current' : '')+'" data-index="'+Number(queue[i].index)+'"'+(queue[i].current ? ' disabled' : '')+'>'+escapeHtml(queue[i].name || ('第 '+(Number(queue[i].index)+1)+' 集'))+'</button>');
 	}
 	$('#mediaQueueItems').html(queueHtml.join(''));
-	$('#mediaPlaybackQueue').toggleClass('hide', queue.length <= 1);
+	$('#mediaPlaybackQueue').toggleClass('hide', !hasSession || queue.length <= 1);
 	$('#btnMediaNextEpisode').attr('title', data.nextEpisode ? '下一集：'+data.nextEpisode : '下一集');
+	$('.media-playback-tools').toggleClass('hide', !hasSession);
 	$('#btnMediaMarkOpening,#btnMediaMarkEnding,.media-skip-adjust').prop('disabled', !active || duration <= 0);
 	var skip = [];
 	if(Number(data.opening) > 0) skip.push('片头跳过 '+formatPlaybackTime(data.opening));
@@ -1343,8 +1346,13 @@ function renderMediaPlaybackTracks(data, active){
 	$subtitle.closest('.media-track-control').toggleClass('media-track-unavailable', !subtitles.length);
 }
 
-function renderMediaPlaybackSwitchers(data){
+function renderMediaPlaybackSwitchers(data, hasSession){
 	data = data || {};
+	if(!hasSession){
+		$('#mediaPlaybackSource,#mediaPlaybackRoute').html('');
+		$('#mediaPlaybackSwitchers').addClass('hide');
+		return;
+	}
 	var sourceOptions = [];
 	var currentSourceKey = String(data.sourceKey || '');
 	var hasCurrentSourceOption = false;
