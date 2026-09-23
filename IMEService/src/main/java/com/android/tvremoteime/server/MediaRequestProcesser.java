@@ -17,6 +17,7 @@ import com.android.tvremoteime.media.MediaSource;
 import com.android.tvremoteime.media.MediaSourceQualityStore;
 import com.android.tvremoteime.media.Type0SourceAdapter;
 import com.android.tvremoteime.media.Type3SourceAdapter;
+import com.android.tvremoteime.media.WebVideoSniffer;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -44,6 +45,7 @@ public class MediaRequestProcesser implements RequestProcesser {
     private final MediaLibraryStore libraryStore;
     private final MediaPlaybackManager playbackManager;
     private final MediaSourceQualityStore qualityStore;
+    private final WebVideoSniffer webVideoSniffer;
 
     public MediaRequestProcesser(Context context) {
         this.context = context;
@@ -51,6 +53,7 @@ public class MediaRequestProcesser implements RequestProcesser {
         this.libraryStore = new MediaLibraryStore(context);
         this.playbackManager = MediaPlaybackManager.get(context);
         this.qualityStore = new MediaSourceQualityStore(context);
+        this.webVideoSniffer = WebVideoSniffer.get(context);
     }
 
     @Override
@@ -71,6 +74,7 @@ public class MediaRequestProcesser implements RequestProcesser {
                 if ("/media/history".equals(fileName)) return libraryResponse(libraryStore.getHistory());
                 if ("/media/favorites".equals(fileName)) return libraryResponse(libraryStore.getFavorites());
                 if ("/media/session".equals(fileName)) return ok(playbackManager.snapshot());
+                if ("/media/web/session".equals(fileName)) return ok(webVideoSniffer.snapshot(params.get("sessionId")));
             } else if (session.getMethod() == NanoHTTPD.Method.POST) {
                 if ("/media/config".equals(fileName)) return saveConfigResponse(params.get("url"));
                 if ("/media/play".equals(fileName)) return playResponse(params);
@@ -90,6 +94,8 @@ public class MediaRequestProcesser implements RequestProcesser {
                 if ("/media/marker".equals(fileName)) return ok(playbackManager.updateMarker(params.get("action"), params.get("delta")));
                 if ("/media/favorite".equals(fileName)) return favoriteResponse(params);
                 if ("/media/history/clear".equals(fileName)) return clearHistoryResponse();
+                if ("/media/web/sniff".equals(fileName)) return ok(webVideoSniffer.start(params.get("url")));
+                if ("/media/web/play".equals(fileName)) return ok(webVideoSniffer.play(params.get("sessionId"), params.get("candidateId")));
             }
             return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.NOT_FOUND, "Error 404, file not found.");
         } catch (Exception e) {
