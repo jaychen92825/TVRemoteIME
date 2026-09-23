@@ -24,6 +24,8 @@ var mediaFolderStack = [];
 var currentMediaCategoryId = '';
 var mediaDisplayMode = 'grid';
 var mediaPlaybackPollTimer = null;
+var mediaPlaybackPollInFlight = false;
+var mediaPlaybackStatusFailures = 0;
 var mediaPlaybackDragging = false;
 var mediaVolumeDragging = false;
 var mediaPlaybackActive = false;
@@ -1245,7 +1247,13 @@ function renderMediaPlaybackStatus(data){
 	mediaPlaybackHasSession = hasSession;
 	$('#mediaPlaybackControls').toggleClass('hide', !(active || hasSession));
 	$('.container').toggleClass('media-has-global-playback', active || hasSession);
-	if(!(active || hasSession)) return;
+	if(!(active || hasSession)){
+		mediaPlaybackDragging = false;
+		mediaVolumeDragging = false;
+		setMediaPlaybackPlayingUi(false, false);
+		setMediaPlaybackTogglePending(false);
+		return;
+	}
 
 	var duration = Math.max(0, Number(data.duration) || 0);
 	var position = Math.max(0, Number(data.position) || 0);
@@ -1419,7 +1427,24 @@ function mediaMarkerAction(action, delta){
 }
 
 function refreshMediaPlaybackStatus(){
-	$.ajax({url:'/player/status', type:'POST', dataType:'json', timeout:2500, success:renderMediaPlaybackStatus});
+	if(mediaPlaybackPollInFlight) return;
+	mediaPlaybackPollInFlight = true;
+	$.ajax({
+		url:'/player/status',
+		type:'POST',
+		dataType:'json',
+		timeout:2500,
+		cache:false,
+		success:function(data){
+			mediaPlaybackStatusFailures = 0;
+			renderMediaPlaybackStatus(data || {});
+		},
+		error:function(){
+			mediaPlaybackStatusFailures++;
+			if(mediaPlaybackStatusFailures >= 3) renderMediaPlaybackStatus({active:false, hasSession:false});
+		},
+		complete:function(){ mediaPlaybackPollInFlight = false; }
+	});
 }
 
 function updateMediaPlaybackPolling(){

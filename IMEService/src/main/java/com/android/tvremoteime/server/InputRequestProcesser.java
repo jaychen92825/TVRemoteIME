@@ -179,6 +179,10 @@ public class InputRequestProcesser implements RequestProcesser {
         JSONObject result = new JSONObject();
         try {
             result.put("active", status.active);
+            result.put("directStream", status.directStream);
+            if (status.active && status.title != null && !status.title.isEmpty()) {
+                result.put("mediaName", status.title);
+            }
             result.put("position", status.position);
             result.put("duration", status.duration);
             result.put("playing", status.playing);

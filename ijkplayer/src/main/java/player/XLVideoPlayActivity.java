@@ -372,6 +372,8 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
     public static final class WebPlaybackStatus {
         public final boolean active;
+        public final String title;
+        public final boolean directStream;
         public final int position;
         public final int duration;
         public final boolean playing;
@@ -382,11 +384,14 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         public final WebTrackInfo[] audioTracks;
         public final WebTrackInfo[] subtitleTracks;
 
-        private WebPlaybackStatus(boolean active, int position, int duration,
+        private WebPlaybackStatus(boolean active, String title, boolean directStream,
+                                  int position, int duration,
                                   boolean playing, float speed, boolean speedSupported,
                                   int volume, boolean muted,
                                   WebTrackInfo[] audioTracks, WebTrackInfo[] subtitleTracks) {
             this.active = active;
+            this.title = title;
+            this.directStream = directStream;
             this.position = position;
             this.duration = duration;
             this.playing = playing;
@@ -416,7 +421,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     public static WebPlaybackStatus getWebPlaybackStatus() {
         XLVideoPlayActivity activity = runningInstance;
         if (!isRunning || activity == null || activity.isFinishing()) {
-            return new WebPlaybackStatus(false, 0, 0, false, 1.0f, false,
+            return new WebPlaybackStatus(false, "", false, 0, 0, false, 1.0f, false,
                     0, false, new WebTrackInfo[0], new WebTrackInfo[0]);
         }
         int position = activity.webPlaybackPosition;
@@ -453,7 +458,10 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         }
         int volume = activity.getWebVolumePercent();
         WebTrackInfo[][] tracks = activity.getWebTracks();
-        return new WebPlaybackStatus(true, Math.max(0, position), Math.max(0, duration),
+        return new WebPlaybackStatus(true,
+                activity.mVideoTitle == null ? "" : activity.mVideoTitle,
+                activity.mDirectStream,
+                Math.max(0, position), Math.max(0, duration),
                 playing, activity.webPlaybackSpeed, activity.webPlaybackSpeedSupported,
                 volume, volume <= 0, tracks[0], tracks[1]);
     }
