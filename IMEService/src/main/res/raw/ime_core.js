@@ -478,7 +478,7 @@ function mediaWebTypeLabel(type){
 	return value ? value.toUpperCase() : '视频';
 }
 
-function renderMediaWebCandidates(items){
+function renderMediaWebCandidates(items, recommendedCandidateId){
 	items = items || [];
 	mediaWebLastCandidates = items;
 	if(!items.length){
@@ -486,14 +486,16 @@ function renderMediaWebCandidates(items){
 		return;
 	}
 	var html = [];
+	var recommendedId = String(recommendedCandidateId || (items[0] && items[0].id) || '');
 	for(var i=0;i<items.length;i++){
 		var item = items[i] || {};
-		html.push('<div class="media-web-candidate" data-candidate="'+escapeHtml(item.id || '')+'">');
+		var recommended = String(item.id || '') === recommendedId;
+		html.push('<div class="media-web-candidate'+(recommended ? ' recommended' : '')+'" data-candidate="'+escapeHtml(item.id || '')+'">');
 		html.push('<div class="media-web-candidate-copy">');
-		html.push('<div class="media-web-candidate-head"><span class="media-web-type">'+escapeHtml(mediaWebTypeLabel(item.type))+'</span><span class="media-web-host">'+escapeHtml(item.host || '未知来源')+'</span>'+(i === 0 ? '<span class="media-web-best">优先</span>' : '')+'</div>');
+		html.push('<div class="media-web-candidate-head"><span class="media-web-type">'+escapeHtml(mediaWebTypeLabel(item.type))+'</span><span class="media-web-host">'+escapeHtml(item.host || '未知来源')+'</span>'+(recommended ? '<span class="media-web-best">推荐</span>' : '')+'</div>');
 		html.push('<div class="media-web-url" title="'+escapeHtml(item.displayUrl || '')+'">'+escapeHtml(item.displayUrl || '')+'</div>');
 		html.push('</div>');
-		html.push('<button type="button" class="media-web-play-btn" data-candidate="'+escapeHtml(item.id || '')+'" aria-label="在电视播放"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" fill="currentColor"/></svg><span>电视播放</span></button>');
+		html.push('<button type="button" class="media-web-play-btn'+(recommended ? ' primary' : '')+'" data-candidate="'+escapeHtml(item.id || '')+'" aria-label="'+(recommended ? '播放推荐视频' : '在电视播放')+'"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" fill="currentColor"/></svg><span>'+(recommended ? '推荐播放' : '电视播放')+'</span></button>');
 		html.push('</div>');
 	}
 	$('#mediaWebResults').html(html.join(''));
@@ -512,7 +514,7 @@ function renderMediaWebSession(data){
 	}
 	mediaWebSessionId = data.sessionId || mediaWebSessionId;
 	var items = data.candidates || [];
-	renderMediaWebCandidates(items);
+	renderMediaWebCandidates(items, data.recommendedCandidateId || '');
 	var status = String(data.status || '');
 	var title = String(data.pageTitle || '').trim();
 	var message = data.message || (status === 'ready' ? '嗅探完成' : '正在寻找可播放视频…');
@@ -561,7 +563,7 @@ function startMediaWebSniff(){
 	mediaWebLastCandidates = [];
 	setMediaWebSniffBusy(true);
 	setMediaWebMeta('正在让电视打开网页并寻找视频…', 'loading');
-	renderMediaWebCandidates([]);
+	renderMediaWebCandidates([], '');
 	try { localStorage.setItem('mediaWebLastUrl', url); } catch(e) {}
 	$.ajax({url:'/media/web/sniff', type:'POST', data:{url:url}, dataType:'json', timeout:12000, success:function(data){
 		if(data && data.success === false){

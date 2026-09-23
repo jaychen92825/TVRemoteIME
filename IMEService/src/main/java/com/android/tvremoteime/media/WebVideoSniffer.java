@@ -108,6 +108,7 @@ public final class WebVideoSniffer {
             });
             for (Candidate candidate : ranked) items.put(candidate.toPublicJson());
             obj.put("candidates", items);
+            obj.put("recommendedCandidateId", ranked.isEmpty() ? "" : ranked.get(0).id);
             return obj;
         }
     }

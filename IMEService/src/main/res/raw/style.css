@@ -1209,6 +1209,14 @@ body {
 	border-bottom: 1px solid var(--color-border);
 }
 
+.media-web-candidate.recommended {
+	margin: 6px 0;
+	padding: 10px 10px;
+	border: 1px solid rgba(37, 99, 235, .24);
+	border-radius: 8px;
+	background: rgba(37, 99, 235, .035);
+}
+
 .media-web-candidate-copy {
 	min-width: 0;
 }
@@ -1239,9 +1247,15 @@ body {
 }
 
 .media-web-best {
-	background: var(--color-bg);
-	color: var(--color-text-secondary);
-	border: 1px solid var(--color-border);
+	background: var(--color-primary);
+	color: #fff;
+	border: 1px solid var(--color-primary);
+}
+
+.media-web-play-btn.primary {
+	background: var(--color-primary);
+	border-color: var(--color-primary);
+	color: #fff;
 }
 
 .media-web-host {
@@ -1812,6 +1826,11 @@ body {
 		gap: 8px;
 		min-height: 56px;
 		padding: 8px 1px;
+	}
+
+	.media-web-candidate.recommended {
+		margin: 5px 0;
+		padding: 8px;
 	}
 
 	.media-web-candidate-head {
