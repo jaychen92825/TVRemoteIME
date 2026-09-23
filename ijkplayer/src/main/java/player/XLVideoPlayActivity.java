@@ -52,6 +52,9 @@ import xllib.PlayListItem;
 import xllib.PlayListItemAdapter;
 import xllib.views.FocusFixedLinearLayoutManager;
 
+import java.util.HashMap;
+import java.util.Map;
+
 
 public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPreparedListener,
         IMediaPlayer.OnCompletionListener,
@@ -71,6 +74,8 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     private static volatile boolean isForeground = false;
     private static volatile XLVideoPlayActivity runningInstance = null;
     private static volatile PlaybackLifecycleListener playbackLifecycleListener = null;
+    private static final String EXTRA_DIRECT_STREAM = "directStream";
+    private static final String EXTRA_DIRECT_HEADERS = "directHeaders";
 
     public interface PlaybackLifecycleListener {
         int onPrepared(int durationMs);
@@ -99,6 +104,8 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     private String mVideoTitle;
     private int mVideoIndex;
     private Uri mVideoUri;
+    private boolean mDirectStream;
+    private Map<String, String> mDirectHeaders = new HashMap<>();
 
     protected IjkVideoView mVideoView;
     private TableLayout mHudView;
@@ -231,7 +238,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     }
     public static <T extends XLVideoPlayActivity> void intentTo(Class<T> cls, Context context, String videoPath, String videoTitle, int videoIndex) {
         if(isRunning && runningInstance != null){
-            if(runningInstance.getClass() == cls) {
+            if(runningInstance.getClass() == cls && !runningInstance.mDirectStream) {
                 runningInstance.resetVideoPath(videoPath, videoIndex);
             }else{
                 runningInstance.finish();
@@ -241,6 +248,30 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         else {
             context.startActivity(newIntent(cls, context, videoPath, videoTitle, videoIndex));
         }
+    }
+
+    public static <T extends XLVideoPlayActivity> Intent newDirectStreamIntent(
+            Class<T> cls, Context context, String videoUrl, String videoTitle,
+            Map<String, String> headers) {
+        Intent intent = newIntent(cls, context, videoUrl, videoTitle, 0);
+        intent.putExtra(EXTRA_DIRECT_STREAM, true);
+        Bundle headerBundle = new Bundle();
+        if (headers != null) {
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                if (!TextUtils.isEmpty(entry.getKey()) && entry.getValue() != null) {
+                    headerBundle.putString(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+        intent.putExtra(EXTRA_DIRECT_HEADERS, headerBundle);
+        return intent;
+    }
+
+    public static <T extends XLVideoPlayActivity> void intentToDirectStream(
+            Class<T> cls, Context context, String videoUrl, String videoTitle,
+            Map<String, String> headers) {
+        if (isRunning && runningInstance != null) runningInstance.finish();
+        context.startActivity(newDirectStreamIntent(cls, context, videoUrl, videoTitle, headers));
     }
 
     public static boolean dispatchRemoteKeyEvent(int keyCode, int action) {
@@ -926,7 +957,16 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_xl_play_video);
 
-        xlDownloadManager.init(getApplicationContext());
+        Intent intent = getIntent();
+        mDirectStream = intent.getBooleanExtra(EXTRA_DIRECT_STREAM, false);
+        Bundle directHeaderBundle = intent.getBundleExtra(EXTRA_DIRECT_HEADERS);
+        if (directHeaderBundle != null) {
+            for (String key : directHeaderBundle.keySet()) {
+                String value = directHeaderBundle.getString(key);
+                if (!TextUtils.isEmpty(key) && value != null) mDirectHeaders.put(key, value);
+            }
+        }
+        if (!mDirectStream) xlDownloadManager.init(getApplicationContext());
 
 //        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
 //        mWakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE, TAG);
@@ -938,7 +978,6 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         mVideoTitle = getIntent().getStringExtra("videoTitle");
         mVideoIndex = getIntent().getIntExtra("videoIndex", 0);
 
-        Intent intent = getIntent();
         String intentAction = intent.getAction();
         if (!TextUtils.isEmpty(intentAction)) {
             if (intentAction.equals(Intent.ACTION_VIEW)) {
@@ -976,22 +1015,28 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             return;
         }
 
-        startDownloadTask(mVideoPath, mVideoIndex);
+        if (!mDirectStream) startDownloadTask(mVideoPath, mVideoIndex);
 
         playListView = (RecyclerView)findViewById(R.id.play_list_view);
-        playListView.setLayoutManager(new FocusFixedLinearLayoutManager(this));
-        playListView.setItemAnimator(new DefaultItemAnimator());
-        playListView.addItemDecoration(new DividerItemDecoration(this,DividerItemDecoration.VERTICAL));
-        playListItemAdapter = new PlayListItemAdapter();
-        playListItemAdapter.setOnPlayListItemClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                playListView.setVisibility(View.GONE);
-                int index = ((PlayListItem)view.getTag()).getIndex();
-                resetVideoIndex(index);
-            }
-        });
-        playListView.setAdapter(playListItemAdapter);
+        if (mDirectStream) {
+            playListView.setVisibility(View.GONE);
+            View playListButton = findViewById(R.id.app_play_btn_play_list);
+            if (playListButton != null) playListButton.setVisibility(View.GONE);
+        } else {
+            playListView.setLayoutManager(new FocusFixedLinearLayoutManager(this));
+            playListView.setItemAnimator(new DefaultItemAnimator());
+            playListView.addItemDecoration(new DividerItemDecoration(this,DividerItemDecoration.VERTICAL));
+            playListItemAdapter = new PlayListItemAdapter();
+            playListItemAdapter.setOnPlayListItemClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    playListView.setVisibility(View.GONE);
+                    int index = ((PlayListItem)view.getTag()).getIndex();
+                    resetVideoIndex(index);
+                }
+            });
+            playListView.setAdapter(playListItemAdapter);
+        }
 
         // init player
         IjkMediaPlayer.loadLibrariesOnce(null);
@@ -1031,17 +1076,22 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
         screenWidthPixels = getResources().getDisplayMetrics().widthPixels;
 
-        handler.sendEmptyMessageDelayed(XLVideoPlayActivity.MESSAGE_RESTART_PLAY, 2000);
-
         isRunning = true;
         runningInstance = this;
+
+        if (mDirectStream) {
+            $.id(R.id.app_video_loading).visible();
+            mVideoView.setVideoURI(Uri.parse(mVideoPath), mDirectHeaders);
+        } else {
+            handler.sendEmptyMessageDelayed(XLVideoPlayActivity.MESSAGE_RESTART_PLAY, 2000);
+        }
     }
 
     @Override
     public void onCompletion(IMediaPlayer iMediaPlayer) {
         if (runningInstance != this) return;
         notifyPlaybackProgress();
-        PlaybackLifecycleListener listener = playbackLifecycleListener;
+        PlaybackLifecycleListener listener = mDirectStream ? null : playbackLifecycleListener;
         if (listener != null && listener.onCompletion()) return;
         finish();
     }
@@ -1049,7 +1099,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     @Override
     public boolean onError(IMediaPlayer iMediaPlayer, int i, int i1) {
         if (runningInstance != this) return true;
-        PlaybackLifecycleListener listener = playbackLifecycleListener;
+        PlaybackLifecycleListener listener = mDirectStream ? null : playbackLifecycleListener;
         if (listener != null && listener.onPlaybackError()) return true;
         return false;
     }
@@ -1100,7 +1150,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             webPlaybackSpeed = mVideoView.getPlaybackSpeed();
         }
 
-        PlaybackLifecycleListener listener = playbackLifecycleListener;
+        PlaybackLifecycleListener listener = mDirectStream ? null : playbackLifecycleListener;
         if (listener != null && duration > 0) {
             int startPosition = listener.onPrepared(duration);
             if (startPosition > 0 && startPosition < duration) seekTo(startPosition);
@@ -1514,7 +1564,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     }
 
     private void notifyPlaybackProgress() {
-        if (runningInstance != this) return;
+        if (runningInstance != this || mDirectStream) return;
         PlaybackLifecycleListener listener = playbackLifecycleListener;
         if (listener == null || mVideoView == null) return;
         int position = Math.max(0, mVideoView.getCurrentPosition());
@@ -1677,6 +1727,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                     }
                     break;
                 case MESSAGE_RESTART_PLAY:
+                    if (mDirectStream) break;
                     if(mVideoView.isPlaying()){
                         stop();
                     }
@@ -1753,7 +1804,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     protected void onDestroy() {
         boolean ownsPlaybackSession = runningInstance == this;
         notifyPlaybackProgress();
-        PlaybackLifecycleListener listener = playbackLifecycleListener;
+        PlaybackLifecycleListener listener = mDirectStream ? null : playbackLifecycleListener;
         if (ownsPlaybackSession && listener != null) listener.onStopped(webPlaybackPosition, webPlaybackDuration);
         handler.removeMessages(MESSAGE_SESSION_PROGRESS);
         super.onDestroy();
@@ -1768,7 +1819,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         }
 
         if(mVideoView != null) stop();
-        xlDownloadManager.taskInstance().stopTask();
+        if (!mDirectStream) xlDownloadManager.taskInstance().stopTask();
     }
 
     @Override

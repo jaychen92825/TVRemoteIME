@@ -10,11 +10,18 @@ import player.XLVideoPlayActivity;
 import xllib.DownloadManager;
 import xllib.FileUtils;
 
+import java.util.Map;
+
 /**
  * Created by kingt on 2018/2/22.
  */
 
 public class VideoPlayHelper {
+    public static void playDirectStream(Context context, String url, String title, Map<String, String> headers) {
+        XLVideoPlayActivity.intentToDirectStream(XLVideoPlayActivity.class, context, url,
+                TextUtils.isEmpty(title) ? url : title, headers);
+    }
+
     public static void playUrl(Context context, String url, int videoIndex, boolean useSystem){
         playUrl(context, url, videoIndex, useSystem, null);
     }
