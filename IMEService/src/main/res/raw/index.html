@@ -173,6 +173,7 @@
 					<button type="button" class="media-library-tab active" data-section="browse">浏览</button>
 					<button type="button" class="media-library-tab" data-section="history">历史</button>
 					<button type="button" class="media-library-tab" data-section="favorites">收藏</button>
+					<button type="button" class="media-library-tab" data-section="web">网页视频</button>
 				</div>
 				<div class="media-search-control" id="mediaSearchControl">
 					<input type="text" id="mediaSearchInput" placeholder="搜索电影、电视剧" />
@@ -301,6 +302,26 @@
 						<div class="btn" id="btnMediaConnect">连接</div>
 					</div>
 					<div class="media-status" id="mediaConfigStatus">未加载配置</div>
+				</div>
+			</div>
+			<div class="media-web-view hide" id="mediaWebView">
+				<div class="media-web-input-row">
+					<div class="media-web-url-control">
+						<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M10.5 13.5a4 4 0 0 0 5.66 0l2-2a4 4 0 0 0-5.66-5.66l-1.15 1.15M13.5 10.5a4 4 0 0 0-5.66 0l-2 2a4 4 0 0 0 5.66 5.66l1.15-1.15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+						<input type="url" id="mediaWebUrl" inputmode="url" autocomplete="url" placeholder="粘贴包含视频的网页地址" aria-label="网页地址" />
+					</div>
+					<button type="button" class="media-web-sniff-btn" id="btnMediaWebSniff" aria-label="开始嗅探网页视频">
+						<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><circle cx="11" cy="11" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4 4M8.5 11h5M11 8.5v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+						<span>开始嗅探</span>
+					</button>
+				</div>
+				<div class="media-web-meta" id="mediaWebMeta" aria-live="polite">粘贴网页链接，电视会在后台打开页面并寻找可播放视频。</div>
+				<div class="media-web-results" id="mediaWebResults">
+					<div class="media-web-empty">
+						<div class="media-web-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="28" height="28"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m10 9 5 3-5 3V9Z" fill="currentColor"/></svg></div>
+						<div class="media-web-empty-title">从网页发送视频到电视</div>
+						<div class="media-web-empty-copy">适合普通网页中的 HLS、DASH 和直链视频。登录、DRM 或站点专用播放器可能无法直接解析。</div>
+					</div>
 				</div>
 			</div>
 			<section class="media-continue hide" id="mediaContinue" aria-label="继续观看">

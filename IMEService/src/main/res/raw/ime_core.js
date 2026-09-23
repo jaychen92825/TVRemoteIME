@@ -42,6 +42,10 @@ var mediaHasMore = false;
 var mediaPaginationObserver = null;
 var mediaContinueItems = [];
 var mediaContinueRequestVersion = 0;
+var mediaWebSessionId = '';
+var mediaWebPollTimer = null;
+var mediaWebPollFailures = 0;
+var mediaWebLastCandidates = [];
 try {
 	mediaDisplayMode = localStorage.getItem('mediaDisplayMode') === 'list' ? 'list' : 'grid';
 } catch(e) {}
@@ -400,13 +404,14 @@ function hideMediaContinue(cancelPending){
 	$('#mediaContinue').addClass('hide');
 }
 function showMediaBrowse(restorePosition){
+	clearMediaWebPoll();
 	mediaView = 'browse';
-	$('.media-panel').removeClass('media-detail-active media-settings-active');
-	$('#mediaToolbar,#mediaLibraryNav,#mediaStatus,#mediaCategories,#mediaGrid').removeClass('hide');
+	$('.media-panel').removeClass('media-detail-active media-settings-active media-web-active');
+	$('#mediaToolbar,#mediaLibraryNav,#mediaSearchControl,.media-toolbar-actions,#mediaStatus,#mediaCategories,#mediaGrid').removeClass('hide');
 	$('#mediaPagination').toggleClass('hide', !mediaHasMore);
 	$('#mediaCategories').toggleClass('hide', mediaSection !== 'browse');
 	$('#mediaFilters').toggleClass('hide', !(mediaSection === 'browse' && mediaSearchFiltersAvailable));
-	$('#mediaDetail,#mediaSettingsView').addClass('hide');
+	$('#mediaDetail,#mediaSettingsView,#mediaWebView').addClass('hide');
 	updateMediaContinueVisibility();
 	updateContainerWidth();
 	setTimeout(function(){
@@ -414,24 +419,181 @@ function showMediaBrowse(restorePosition){
 	}, 0);
 }
 function showMediaDetailView(){
+	clearMediaWebPoll();
 	rememberMediaBrowsePosition();
 	mediaView = 'detail';
 	hideMediaContinue(true);
-	$('.media-panel').removeClass('media-settings-active').addClass('media-detail-active');
-	$('#mediaToolbar,#mediaLibraryNav,#mediaCategories,#mediaFilters,#mediaGrid,#mediaSettingsView,#mediaPagination').addClass('hide');
+	$('.media-panel').removeClass('media-settings-active media-web-active').addClass('media-detail-active');
+	$('#mediaToolbar,#mediaLibraryNav,#mediaCategories,#mediaFilters,#mediaGrid,#mediaSettingsView,#mediaWebView,#mediaPagination').addClass('hide');
 	$('#mediaStatus,#mediaDetail').removeClass('hide');
 	updateContainerWidth();
 	$('.container').scrollTop(0);
 }
 function showMediaSettingsView(){
+	clearMediaWebPoll();
 	rememberMediaBrowsePosition();
 	mediaView = 'settings';
 	hideMediaContinue(true);
-	$('.media-panel').removeClass('media-detail-active').addClass('media-settings-active');
-	$('#mediaToolbar,#mediaLibraryNav,#mediaStatus,#mediaCategories,#mediaFilters,#mediaGrid,#mediaDetail,#mediaPagination').addClass('hide');
+	$('.media-panel').removeClass('media-detail-active media-web-active').addClass('media-settings-active');
+	$('#mediaToolbar,#mediaLibraryNav,#mediaStatus,#mediaCategories,#mediaFilters,#mediaGrid,#mediaDetail,#mediaWebView,#mediaPagination').addClass('hide');
 	$('#mediaSettingsView').removeClass('hide');
 	updateContainerWidth();
 	$('.container').scrollTop(0);
+}
+
+function clearMediaWebPoll(){
+	if(mediaWebPollTimer){
+		clearTimeout(mediaWebPollTimer);
+		mediaWebPollTimer = null;
+	}
+}
+
+function showMediaWebView(){
+	mediaView = 'web';
+	selectMediaSection('web');
+	hideMediaContinue(true);
+	resetMediaPagination();
+	$('.media-panel').removeClass('media-detail-active media-settings-active').addClass('media-web-active');
+	$('#mediaToolbar,#mediaLibraryNav,#mediaWebView').removeClass('hide');
+	$('#mediaSearchControl,.media-toolbar-actions,#mediaStatus,#mediaCategories,#mediaFilters,#mediaGrid,#mediaDetail,#mediaSettingsView,#mediaPagination').addClass('hide');
+	if(!$('#mediaWebUrl').val()){
+		try { $('#mediaWebUrl').val(localStorage.getItem('mediaWebLastUrl') || ''); } catch(e) {}
+	}
+	if(mediaWebSessionId) pollMediaWebSession();
+	updateContainerWidth();
+	$('.container').scrollTop(0);
+}
+
+function setMediaWebMeta(text, state){
+	$('#mediaWebMeta').removeClass('loading ready error').addClass(state || '').text(text || '');
+}
+
+function mediaWebTypeLabel(type){
+	var value = String(type || '').toLowerCase();
+	if(value === 'hls') return 'HLS';
+	if(value === 'dash') return 'DASH';
+	if(value === 'video') return '视频';
+	return value ? value.toUpperCase() : '视频';
+}
+
+function renderMediaWebCandidates(items){
+	items = items || [];
+	mediaWebLastCandidates = items;
+	if(!items.length){
+		$('#mediaWebResults').html('<div class="media-web-empty"><div class="media-web-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="28" height="28"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m10 9 5 3-5 3V9Z" fill="currentColor"/></svg></div><div class="media-web-empty-title">正在等待视频候选</div><div class="media-web-empty-copy">有些网页需要几秒钟加载播放器。保持电视和手机连接即可。</div></div>');
+		return;
+	}
+	var html = [];
+	for(var i=0;i<items.length;i++){
+		var item = items[i] || {};
+		html.push('<div class="media-web-candidate" data-candidate="'+escapeHtml(item.id || '')+'">');
+		html.push('<div class="media-web-candidate-copy">');
+		html.push('<div class="media-web-candidate-head"><span class="media-web-type">'+escapeHtml(mediaWebTypeLabel(item.type))+'</span><span class="media-web-host">'+escapeHtml(item.host || '未知来源')+'</span>'+(i === 0 ? '<span class="media-web-best">优先</span>' : '')+'</div>');
+		html.push('<div class="media-web-url" title="'+escapeHtml(item.displayUrl || '')+'">'+escapeHtml(item.displayUrl || '')+'</div>');
+		html.push('</div>');
+		html.push('<button type="button" class="media-web-play-btn" data-candidate="'+escapeHtml(item.id || '')+'" aria-label="在电视播放"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" fill="currentColor"/></svg><span>电视播放</span></button>');
+		html.push('</div>');
+	}
+	$('#mediaWebResults').html(html.join(''));
+}
+
+function setMediaWebSniffBusy(busy){
+	$('#btnMediaWebSniff').prop('disabled', !!busy).toggleClass('loading', !!busy).find('span').text(busy ? '嗅探中…' : '开始嗅探');
+}
+
+function renderMediaWebSession(data){
+	data = data || {};
+	if(data.success === false){
+		setMediaWebSniffBusy(false);
+		setMediaWebMeta(data.message || '网页视频嗅探失败', 'error');
+		return false;
+	}
+	mediaWebSessionId = data.sessionId || mediaWebSessionId;
+	var items = data.candidates || [];
+	renderMediaWebCandidates(items);
+	var status = String(data.status || '');
+	var title = String(data.pageTitle || '').trim();
+	var message = data.message || (status === 'ready' ? '嗅探完成' : '正在寻找可播放视频…');
+	if(title && items.length) message = title+' · '+items.length+' 个候选';
+	setMediaWebMeta(message, status === 'error' ? 'error' : (status === 'ready' ? 'ready' : 'loading'));
+	var pending = status === 'loading' || status === 'sniffing';
+	setMediaWebSniffBusy(pending);
+	return pending;
+}
+
+function scheduleMediaWebPoll(delay){
+	clearMediaWebPoll();
+	if(!mediaWebSessionId) return;
+	mediaWebPollTimer = setTimeout(pollMediaWebSession, delay || 900);
+}
+
+function pollMediaWebSession(){
+	mediaWebPollTimer = null;
+	if(!mediaWebSessionId) return;
+	$.ajax({url:'/media/web/session', data:{sessionId:mediaWebSessionId}, dataType:'json', timeout:6000, success:function(data){
+		mediaWebPollFailures = 0;
+		if(renderMediaWebSession(data) && mediaView === 'web') scheduleMediaWebPoll(900);
+	}, error:function(){
+		mediaWebPollFailures++;
+		if(mediaView !== 'web') return;
+		if(mediaWebPollFailures <= 3){
+			setMediaWebMeta('电视正在处理网页，正在重新连接…', 'loading');
+			scheduleMediaWebPoll(1400);
+		}else{
+			setMediaWebSniffBusy(false);
+			setMediaWebMeta('读取嗅探结果失败，请重新开始。', 'error');
+		}
+	}});
+}
+
+function startMediaWebSniff(){
+	var url = String($('#mediaWebUrl').val() || '').trim();
+	if(!url){
+		setMediaWebMeta('请先粘贴一个网页地址。', 'error');
+		$('#mediaWebUrl').focus();
+		return;
+	}
+	clearMediaWebPoll();
+	mediaWebSessionId = '';
+	mediaWebPollFailures = 0;
+	mediaWebLastCandidates = [];
+	setMediaWebSniffBusy(true);
+	setMediaWebMeta('正在让电视打开网页并寻找视频…', 'loading');
+	renderMediaWebCandidates([]);
+	try { localStorage.setItem('mediaWebLastUrl', url); } catch(e) {}
+	$.ajax({url:'/media/web/sniff', type:'POST', data:{url:url}, dataType:'json', timeout:12000, success:function(data){
+		if(data && data.success === false){
+			setMediaWebSniffBusy(false);
+			setMediaWebMeta(data.message || '网页视频嗅探失败', 'error');
+			return;
+		}
+		if(renderMediaWebSession(data) && mediaView === 'web') scheduleMediaWebPoll(700);
+	}, error:function(xhr){
+		setMediaWebSniffBusy(false);
+		var message = xhr && xhr.responseJSON && xhr.responseJSON.message;
+		setMediaWebMeta(message || '无法让电视打开这个网页，请检查地址后重试。', 'error');
+	}});
+}
+
+function playMediaWebCandidate(candidateId, button){
+	if(!mediaWebSessionId || !candidateId) return;
+	var $button = $(button);
+	$button.prop('disabled', true).addClass('loading').find('span').text('发送中…');
+	$.ajax({url:'/media/web/play', type:'POST', data:{sessionId:mediaWebSessionId,candidateId:candidateId}, dataType:'json', timeout:45000, success:function(data){
+		if(data && data.success === false){
+			setMediaWebMeta(data.message || '发送到电视失败', 'error');
+			$button.prop('disabled', false).removeClass('loading').find('span').text('电视播放');
+			return;
+		}
+		$('.media-web-play-btn').removeClass('playing loading').prop('disabled', false).find('span').text('电视播放');
+		$button.addClass('playing').find('span').text('已发送');
+		setMediaWebMeta('已发送到电视'+(data && data.title ? ' · '+data.title : ''), 'ready');
+		updateMediaPlaybackPolling();
+		setTimeout(refreshMediaPlaybackStatus, 350);
+	}, error:function(){
+		setMediaWebMeta('发送到电视超时，请重试。', 'error');
+		$button.prop('disabled', false).removeClass('loading').find('span').text('电视播放');
+	}});
 }
 
 function mediaScore(item){
@@ -1385,8 +1547,19 @@ $('#mediaQueueItems').on('click', '.media-queue-item:not(.current)', function(){
 });
 $('#mediaLibraryNav').on('click', '.media-library-tab', function(){
 	var section = $(this).attr('data-section') || 'browse';
-	if(section === 'browse') loadMediaHome();
+	if(section === 'web') showMediaWebView();
+	else if(section === 'browse') loadMediaHome();
 	else loadMediaLibrary(section);
+});
+$('#btnMediaWebSniff').on('click', startMediaWebSniff);
+$('#mediaWebUrl').on('keydown', function(e){
+	if(e.key === 'Enter' || e.keyCode === 13){
+		e.preventDefault();
+		startMediaWebSniff();
+	}
+});
+$('#mediaWebResults').on('click', '.media-web-play-btn', function(){
+	playMediaWebCandidate($(this).attr('data-candidate') || '', this);
 });
 $('#btnMediaContinueAll').on('click', function(){
 	loadMediaLibrary('history');
