@@ -20,14 +20,16 @@ public class IMEServiceBroadCastReceiver extends BroadcastReceiver {
     private final String ACTION_BOOT = "android.intent.action.BOOT_COMPLETED";
     private final String ACTION_QUICK_BOOT = "android.intent.action.QUICKBOOT_POWERON";
     private final String ACTION_PACKAGE_REPLACED = "android.intent.action.MY_PACKAGE_REPLACED";
+    private final String ACTION_USER_UNLOCKED = "android.intent.action.USER_UNLOCKED";
     private final String MEDIA_MOUNTED = "android.intent.action.MEDIA_MOUNTED";
-    private static final String ACTION_RETRY = "com.android.tvremoteime.BOOT_RETRY";
+    static final String ACTION_RETRY = "com.android.tvremoteime.BOOT_RETRY";
 
     @Override
     public void onReceive(Context context, Intent intent) {
         Log.d(TAG, "receive msg:" + intent.getAction());
        if (ACTION_BOOT.equals(intent.getAction()) || ACTION_QUICK_BOOT.equals(intent.getAction()) ||
-               ACTION_PACKAGE_REPLACED.equals(intent.getAction()) || MEDIA_MOUNTED.equals(intent.getAction()) ||
+               ACTION_PACKAGE_REPLACED.equals(intent.getAction()) || ACTION_USER_UNLOCKED.equals(intent.getAction()) ||
+               MEDIA_MOUNTED.equals(intent.getAction()) ||
                ACTION_RETRY.equals(intent.getAction())) {
            //之前这里是"if(!isDefaultIME(context))"——只有在还没设成默认
            //输入法时才启动服务，正好反了。这个服务承载的是HTTP远程控制/
@@ -38,21 +40,31 @@ public class IMEServiceBroadCastReceiver extends BroadcastReceiver {
            //一直不跑，表现就是"开机/打开App之后要等好久才能连上"。去掉这个
            //条件，开机/存储挂载后始终尝试启动服务(已经在跑的话startService()
            //只是重新调一次onStartCommand()，不会重复初始化，无副作用)。
-           Log.d(TAG, "startService.....");
-           try {
-               context.startService(new Intent(context, IMEService.class));
-           } catch (Exception e) {
-               Log.e(TAG, "开机启动远程服务失败", e);
-           }
+           startRemoteService(context);
            if(AdbHelper.getInstance() == null) AdbHelper.createInstance();
            if (!ACTION_RETRY.equals(intent.getAction())) {
-               scheduleRetry(context, 20 * 1000L, 1);
-               scheduleRetry(context, 90 * 1000L, 2);
+               // Some TV firmwares deliver BOOT_COMPLETED before networking and the
+               // launcher are fully ready, and may also kill background processes
+               // aggressively during that window. Retry at several points instead
+               // of relying on a single boot broadcast.
+               scheduleServiceRetry(context, 5 * 1000L, 1);
+               scheduleServiceRetry(context, 30 * 1000L, 2);
+               scheduleServiceRetry(context, 2 * 60 * 1000L, 3);
+               scheduleServiceRetry(context, 5 * 60 * 1000L, 4);
            }
        }
     }
 
-    private void scheduleRetry(Context context, long delay, int requestCode) {
+    static void startRemoteService(Context context) {
+        Log.d("IMEServiceBCR", "startService.....");
+        try {
+            context.startService(new Intent(context, IMEService.class));
+        } catch (Exception e) {
+            Log.e("IMEServiceBCR", "启动远程服务失败", e);
+        }
+    }
+
+    static void scheduleServiceRetry(Context context, long delay, int requestCode) {
         AlarmManager alarm = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         if (alarm == null) return;
         Intent retry = new Intent(context, IMEServiceBroadCastReceiver.class).setAction(ACTION_RETRY);

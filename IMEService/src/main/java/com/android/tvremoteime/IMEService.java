@@ -199,7 +199,11 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		}
 
 		// 开机时网络可能比应用服务晚几十秒才就绪。广播接收器会重试启动，
-		// 每次重试都让 mDNS 再检查一次；HTTP 服务本身仍只在 onCreate 创建。
+		// 每次重试都让 mDNS 再检查一次。也检查 HTTP 服务自身：部分电视 ROM
+		// 会保留 Service 进程但回收底层 socket/thread，表现成“服务在、网页打不开”。
+		if(mServer == null || !mServer.isStarting()){
+			startRemoteServer();
+		}
 		MDnsHelper.start(this.getApplicationContext());
 		onStart(intent, startId);
 		return START_STICKY;
@@ -557,6 +561,10 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		MDnsHelper.stop();
 		AdbHelper.stopService();
 		Environment.toastInHandler(this, getString(R.string.app_name)  + "服务已停止");
+		// START_STICKY 是第一层恢复；额外安排两次显式唤醒，兼容会忽略 sticky
+		// restart 的电视 ROM。重复 startService 对已经恢复的服务是幂等的。
+		IMEServiceBroadCastReceiver.scheduleServiceRetry(getApplicationContext(), 5 * 1000L, 101);
+		IMEServiceBroadCastReceiver.scheduleServiceRetry(getApplicationContext(), 30 * 1000L, 102);
     	super.onDestroy();    	
     }
 
