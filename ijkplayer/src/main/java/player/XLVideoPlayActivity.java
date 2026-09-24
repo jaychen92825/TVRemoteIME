@@ -133,6 +133,11 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     private volatile boolean webPlaybackPlaying;
     private volatile float webPlaybackSpeed = 1.0f;
     private volatile boolean webPlaybackSpeedSupported;
+    private volatile String webPlaybackState = "idle";
+    private volatile long webPlaybackStateTimestamp;
+    private volatile int webPlaybackErrorCode;
+    private volatile int webPlaybackErrorExtra;
+    private volatile String webPlaybackErrorMessage = "";
     private volatile int webVolumeBeforeMute = -1;
     private int webSeekTarget = -1;
     private long webSeekTargetTimestamp;
@@ -379,6 +384,11 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         public final boolean playing;
         public final float speed;
         public final boolean speedSupported;
+        public final String state;
+        public final long stateTimestamp;
+        public final int errorCode;
+        public final int errorExtra;
+        public final String errorMessage;
         public final int volume;
         public final boolean muted;
         public final WebTrackInfo[] audioTracks;
@@ -387,6 +397,8 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         private WebPlaybackStatus(boolean active, String title, boolean directStream,
                                   int position, int duration,
                                   boolean playing, float speed, boolean speedSupported,
+                                  String state, long stateTimestamp,
+                                  int errorCode, int errorExtra, String errorMessage,
                                   int volume, boolean muted,
                                   WebTrackInfo[] audioTracks, WebTrackInfo[] subtitleTracks) {
             this.active = active;
@@ -397,6 +409,11 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             this.playing = playing;
             this.speed = speed;
             this.speedSupported = speedSupported;
+            this.state = state;
+            this.stateTimestamp = stateTimestamp;
+            this.errorCode = errorCode;
+            this.errorExtra = errorExtra;
+            this.errorMessage = errorMessage;
             this.volume = volume;
             this.muted = muted;
             this.audioTracks = audioTracks;
@@ -422,6 +439,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         XLVideoPlayActivity activity = runningInstance;
         if (!isRunning || activity == null || activity.isFinishing()) {
             return new WebPlaybackStatus(false, "", false, 0, 0, false, 1.0f, false,
+                    "idle", 0L, 0, 0, "",
                     0, false, new WebTrackInfo[0], new WebTrackInfo[0]);
         }
         int position = activity.webPlaybackPosition;
@@ -449,6 +467,12 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             }
             playing = activity.mVideoView.isPlaying();
             activity.webPlaybackPlaying = playing;
+            if (activity.mDirectStream && playing
+                    && !"buffering".equals(activity.webPlaybackState)
+                    && !"error".equals(activity.webPlaybackState)
+                    && !"completed".equals(activity.webPlaybackState)) {
+                activity.setDirectPlaybackState("playing");
+            }
             if (activity.webPlaybackSpeedSupported) {
                 activity.webPlaybackSpeed = activity.mVideoView.getPlaybackSpeed();
             }
@@ -463,6 +487,9 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                 activity.mDirectStream,
                 Math.max(0, position), Math.max(0, duration),
                 playing, activity.webPlaybackSpeed, activity.webPlaybackSpeedSupported,
+                activity.webPlaybackState, activity.webPlaybackStateTimestamp,
+                activity.webPlaybackErrorCode, activity.webPlaybackErrorExtra,
+                activity.webPlaybackErrorMessage,
                 volume, volume <= 0, tracks[0], tracks[1]);
     }
 
@@ -820,6 +847,30 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         webPlaybackPlaying = mVideoView.isPlaying();
     }
 
+    private void setDirectPlaybackState(String state) {
+        if (!mDirectStream || TextUtils.isEmpty(state)) return;
+        if (!TextUtils.equals(webPlaybackState, state)) {
+            webPlaybackState = state;
+            webPlaybackStateTimestamp = System.currentTimeMillis();
+        }
+        if (!"error".equals(state)) {
+            webPlaybackErrorCode = 0;
+            webPlaybackErrorExtra = 0;
+            webPlaybackErrorMessage = "";
+        }
+    }
+
+    private void setDirectPlaybackError(int errorCode, int errorExtra) {
+        if (!mDirectStream) return;
+        webPlaybackErrorCode = errorCode;
+        webPlaybackErrorExtra = errorExtra;
+        webPlaybackErrorMessage = "播放器无法打开该视频流";
+        if (!"error".equals(webPlaybackState)) {
+            webPlaybackState = "error";
+            webPlaybackStateTimestamp = System.currentTimeMillis();
+        }
+    }
+
     private boolean togglePlaybackForWeb() {
         if (mVideoView == null) {
             return false;
@@ -1089,6 +1140,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
         if (mDirectStream) {
             $.id(R.id.app_video_loading).visible();
+            setDirectPlaybackState("preparing");
             mVideoView.setVideoURI(Uri.parse(mVideoPath), mDirectHeaders);
         } else {
             handler.sendEmptyMessageDelayed(XLVideoPlayActivity.MESSAGE_RESTART_PLAY, 2000);
@@ -1098,6 +1150,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     @Override
     public void onCompletion(IMediaPlayer iMediaPlayer) {
         if (runningInstance != this) return;
+        if (mDirectStream) setDirectPlaybackState("completed");
         notifyPlaybackProgress();
         PlaybackLifecycleListener listener = mDirectStream ? null : playbackLifecycleListener;
         if (listener != null && listener.onCompletion()) return;
@@ -1107,6 +1160,11 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     @Override
     public boolean onError(IMediaPlayer iMediaPlayer, int i, int i1) {
         if (runningInstance != this) return true;
+        if (mDirectStream) {
+            setDirectPlaybackError(i, i1);
+            statusChange(STATUS_ERROR);
+            return true;
+        }
         PlaybackLifecycleListener listener = mDirectStream ? null : playbackLifecycleListener;
         if (listener != null && listener.onPlaybackError()) return true;
         return false;
@@ -1147,6 +1205,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     @Override
     public void onPrepared(IMediaPlayer iMediaPlayer) {
         duration = mVideoView.getDuration();
+        if (mDirectStream) setDirectPlaybackState("prepared");
         // DownloadTask historically labels every HTTP/HTTPS URL as live so it can
         // bypass the download proxy. That transport decision must not make a VOD
         // stream behave like live TV. A real duration is the reliable signal here.
@@ -1262,6 +1321,17 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
     private void statusChange(int newStatus) {
         status = newStatus;
+        if (mDirectStream) {
+            if (newStatus == STATUS_LOADING) {
+                setDirectPlaybackState("buffering");
+            } else if (newStatus == STATUS_PLAYING) {
+                setDirectPlaybackState("playing");
+            } else if (newStatus == STATUS_PAUSE) {
+                setDirectPlaybackState("paused");
+            } else if (newStatus == STATUS_COMPLETED) {
+                setDirectPlaybackState("completed");
+            }
+        }
         if (!isLive && newStatus == STATUS_COMPLETED) {
             currentPosition = 0;
             hideAll();
@@ -1811,6 +1881,11 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     @Override
     protected void onDestroy() {
         boolean ownsPlaybackSession = runningInstance == this;
+        if (ownsPlaybackSession && mDirectStream
+                && !"error".equals(webPlaybackState)
+                && !"completed".equals(webPlaybackState)) {
+            setDirectPlaybackState("stopped");
+        }
         notifyPlaybackProgress();
         PlaybackLifecycleListener listener = mDirectStream ? null : playbackLifecycleListener;
         if (ownsPlaybackSession && listener != null) listener.onStopped(webPlaybackPosition, webPlaybackDuration);

@@ -188,6 +188,11 @@ public class InputRequestProcesser implements RequestProcesser {
             result.put("playing", status.playing);
             result.put("speed", status.speed);
             result.put("speedSupported", status.speedSupported);
+            result.put("state", status.state);
+            result.put("stateTimestamp", status.stateTimestamp);
+            result.put("errorCode", status.errorCode);
+            result.put("errorExtra", status.errorExtra);
+            result.put("errorMessage", status.errorMessage);
             result.put("volume", status.volume);
             result.put("muted", status.muted);
             result.put("audioTracks", trackArray(status.audioTracks));

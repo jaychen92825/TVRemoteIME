@@ -32,6 +32,8 @@ var mediaPlaybackActive = false;
 var mediaPlaybackHasSession = false;
 var mediaPlaybackTogglePending = false;
 var mediaPlaybackMuted = false;
+var mediaWebPlaybackPendingCandidateId = '';
+var mediaWebPlaybackPendingSince = 0;
 var mediaSearchAllItems = [];
 var mediaSearchFiltersAvailable = false;
 var mediaSearchStatusBase = '';
@@ -587,19 +589,25 @@ function startMediaWebSniff(){
 function playMediaWebCandidate(candidateId, button){
 	if(!mediaWebSessionId || !candidateId) return;
 	var $button = $(button);
+	mediaWebPlaybackPendingCandidateId = candidateId;
+	mediaWebPlaybackPendingSince = Date.now();
 	$button.prop('disabled', true).addClass('loading').find('span').text('发送中…');
 	$.ajax({url:'/media/web/play', type:'POST', data:{sessionId:mediaWebSessionId,candidateId:candidateId}, dataType:'json', timeout:45000, success:function(data){
 		if(data && data.success === false){
+			mediaWebPlaybackPendingCandidateId = '';
+			mediaWebPlaybackPendingSince = 0;
 			setMediaWebMeta(data.message || '发送到电视失败', 'error');
 			$button.prop('disabled', false).removeClass('loading').find('span').text('电视播放');
 			return;
 		}
 		$('.media-web-play-btn').removeClass('playing loading').prop('disabled', false).find('span').text('电视播放');
-		$button.addClass('playing').find('span').text('已发送');
-		setMediaWebMeta('已发送到电视'+(data && data.title ? ' · '+data.title : ''), 'ready');
+		$button.addClass('playing loading').prop('disabled', true).find('span').text('连接中…');
+		setMediaWebMeta('已发送到电视，正在确认播放状态'+(data && data.title ? ' · '+data.title : '')+'…', 'loading');
 		updateMediaPlaybackPolling();
 		setTimeout(refreshMediaPlaybackStatus, 350);
 	}, error:function(){
+		mediaWebPlaybackPendingCandidateId = '';
+		mediaWebPlaybackPendingSince = 0;
 		setMediaWebMeta('发送到电视超时，请重试。', 'error');
 		$button.prop('disabled', false).removeClass('loading').find('span').text('电视播放');
 	}});
@@ -1246,11 +1254,66 @@ function toggleMediaPlayback(){
 	});
 }
 
+function directPlaybackLabel(state, playing){
+	if(state === 'preparing' || state === 'prepared') return '正在连接电视…';
+	if(state === 'buffering') return '正在缓冲…';
+	if(state === 'error') return '电视播放失败';
+	if(state === 'completed') return '播放已结束';
+	if(state === 'stopped') return '已停止';
+	if(state === 'paused') return '网页视频已暂停';
+	if(state === 'playing') return '网页视频播放中';
+	return playing ? '网页视频播放中' : '网页视频准备中';
+}
+
+function syncPendingMediaWebPlayback(data){
+	if(!mediaWebPlaybackPendingCandidateId) return;
+	var candidateId = mediaWebPlaybackPendingCandidateId;
+	var $button = $('.media-web-play-btn').filter(function(){ return String($(this).data('candidate') || '') === candidateId; }).first();
+	var activeDirect = !!(data && data.active && data.directStream);
+	var state = String(data && data.state || '');
+	if(activeDirect){
+		if(state === 'error'){
+			var code = Number(data.errorCode) || 0;
+			var extra = Number(data.errorExtra) || 0;
+			var message = data.errorMessage || '电视播放器无法打开这个视频流';
+			if(code || extra) message += '（错误 '+code+(extra ? ' / '+extra : '')+'）';
+			$button.prop('disabled', false).removeClass('playing loading').find('span').text('电视播放');
+			setMediaWebMeta(message, 'error');
+			mediaWebPlaybackPendingCandidateId = '';
+			mediaWebPlaybackPendingSince = 0;
+			return;
+		}
+		if(state === 'playing' || state === 'paused'){
+			$button.prop('disabled', false).removeClass('loading').addClass('playing').find('span').text(state === 'paused' ? '已暂停' : '播放中');
+			setMediaWebMeta(state === 'paused' ? '电视已暂停，可从播放控制继续。' : '已在电视播放。', 'ready');
+			mediaWebPlaybackPendingCandidateId = '';
+			mediaWebPlaybackPendingSince = 0;
+			return;
+		}
+		if(state === 'buffering'){
+			$button.prop('disabled', true).addClass('playing loading').find('span').text('缓冲中…');
+			setMediaWebMeta('电视正在缓冲视频…', 'loading');
+			return;
+		}
+		$button.prop('disabled', true).addClass('playing loading').find('span').text('连接中…');
+		setMediaWebMeta('正在连接电视播放器…', 'loading');
+		return;
+	}
+	if(mediaWebPlaybackPendingSince && Date.now() - mediaWebPlaybackPendingSince > 12000){
+		$button.prop('disabled', false).removeClass('playing loading').find('span').text('电视播放');
+		setMediaWebMeta('电视播放器没有进入播放状态，请重试或选择其他候选。', 'error');
+		mediaWebPlaybackPendingCandidateId = '';
+		mediaWebPlaybackPendingSince = 0;
+	}
+}
+
 function renderMediaPlaybackStatus(data){
 	var active = !!(data && data.active);
 	var hasSession = !!(data && data.hasSession);
 	var directStream = !!(data && data.directStream);
 	var playing = !!(data && data.playing);
+	var playbackState = String(data && data.state || '');
+	syncPendingMediaWebPlayback(data || {});
 	mediaPlaybackActive = active;
 	mediaPlaybackHasSession = hasSession;
 	$('#mediaPlaybackControls').toggleClass('hide', !(active || hasSession));
@@ -1272,7 +1335,7 @@ function renderMediaPlaybackStatus(data){
 	if(!mediaPlaybackDragging) $seek.val(position);
 	$('#mediaPlaybackCurrent').text(formatPlaybackTime(mediaPlaybackDragging ? $seek.val() : position));
 	$('#mediaPlaybackDuration').text(duration > 0 ? formatPlaybackTime(duration) : '--:--');
-	$('#mediaPlaybackCompactLabel').text(active ? (directStream ? (playing ? '网页视频播放中' : '网页视频已暂停') : (playing ? '电视播放中' : '电视已暂停')) : '继续观看');
+	$('#mediaPlaybackCompactLabel').text(active ? (directStream ? directPlaybackLabel(playbackState, playing) : (playing ? '电视播放中' : '电视已暂停')) : '继续观看');
 	$('#mediaPlaybackCompactTitle').text(data.mediaName || '');
 	$('#mediaPlaybackCompactEpisode').text(hasSession ? (data.episode || '') : '');
 	$('#mediaPlaybackCompactProgress').css('width', duration > 0 ? Math.max(0, Math.min(100, position * 100 / duration))+'%' : '0%');
