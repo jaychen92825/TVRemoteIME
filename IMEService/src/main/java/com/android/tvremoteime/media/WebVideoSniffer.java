@@ -7,8 +7,10 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
+import android.util.Log;
 import android.webkit.CookieManager;
 import android.webkit.JsPromptResult;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -36,6 +38,7 @@ import java.util.UUID;
  * Request headers remain on the TV and are only applied when a candidate plays.
  */
 public final class WebVideoSniffer {
+    private static final String TAG = "WebVideoSniffer";
     private static final long SNIFF_WINDOW_MS = 18000L;
     private static final int MAX_CANDIDATES = 24;
     private static final String DOM_PROMPT_PREFIX = "__TVREMOTE_VIDEO__";
@@ -61,6 +64,7 @@ public final class WebVideoSniffer {
     private String message = "";
     private int candidateCounter;
     private WebView webView;
+    private volatile String webUserAgent = "";
 
     private WebVideoSniffer(Context context) {
         this.context = context;
@@ -159,27 +163,35 @@ public final class WebVideoSniffer {
             settings.setJavaScriptEnabled(true);
             settings.setDomStorageEnabled(true);
             settings.setLoadWithOverviewMode(false);
+            settings.setLoadsImagesAutomatically(false);
+            settings.setBlockNetworkImage(true);
+            settings.setSupportMultipleWindows(false);
+            settings.setJavaScriptCanOpenWindowsAutomatically(false);
             if (Build.VERSION.SDK_INT >= 17) settings.setMediaPlaybackRequiresUserGesture(false);
             if (Build.VERSION.SDK_INT >= 21) CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
+            // shouldInterceptRequest runs off the UI thread. Cache anything we
+            // need from WebView here instead of touching the WebView instance
+            // from request interception callbacks.
+            webUserAgent = safe(settings.getUserAgentString());
 
             webView.setWebViewClient(new WebViewClient() {
                 @Override
                 public WebResourceResponse shouldInterceptRequest(WebView view, String requestUrl) {
-                    capture(targetSessionId, requestUrl, null, false);
+                    captureSafely(targetSessionId, requestUrl, null, false);
                     return super.shouldInterceptRequest(view, requestUrl);
                 }
 
                 @Override
                 @TargetApi(21)
                 public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                    capture(targetSessionId, request.getUrl() == null ? null : request.getUrl().toString(),
+                    captureSafely(targetSessionId, request.getUrl() == null ? null : request.getUrl().toString(),
                             request.getRequestHeaders(), false);
                     return super.shouldInterceptRequest(view, request);
                 }
 
                 @Override
                 public void onLoadResource(WebView view, String requestUrl) {
-                    capture(targetSessionId, requestUrl, null, false);
+                    captureSafely(targetSessionId, requestUrl, null, false);
                     super.onLoadResource(view, requestUrl);
                 }
 
@@ -213,6 +225,25 @@ public final class WebVideoSniffer {
                     }
                     super.onReceivedError(view, errorCode, description, failingUrl);
                 }
+
+                @Override
+                @TargetApi(26)
+                public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                    if (isCurrent(targetSessionId)) {
+                        synchronized (lock) {
+                            status = "error";
+                            message = detail != null && detail.didCrash()
+                                    ? "网页渲染进程崩溃，已安全停止嗅探。可以重试或换一个具体播放页。"
+                                    : "网页占用资源过高，系统已停止渲染。可以重试或换一个具体播放页。";
+                        }
+                    }
+                    discardCrashedWebView(view);
+                    // Returning true tells WebView that the host handled the
+                    // renderer loss. Returning false lets Android terminate
+                    // the host app, which is unacceptable for a background
+                    // sniffing helper.
+                    return true;
+                }
             });
             webView.setWebChromeClient(new WebChromeClient() {
                 @Override
@@ -221,7 +252,7 @@ public final class WebVideoSniffer {
                     if (promptMessage != null && promptMessage.startsWith(DOM_PROMPT_PREFIX)) {
                         String encoded = promptMessage.substring(DOM_PROMPT_PREFIX.length());
                         try {
-                            capture(targetSessionId, Uri.decode(encoded), null, true);
+                            captureSafely(targetSessionId, Uri.decode(encoded), null, true);
                         } catch (Exception ignored) {
                         }
                         result.confirm("");
@@ -299,6 +330,17 @@ public final class WebVideoSniffer {
         }
     }
 
+    private void captureSafely(String targetSessionId, String requestUrl,
+                               Map<String, String> requestHeaders, boolean fromDom) {
+        try {
+            capture(targetSessionId, requestUrl, requestHeaders, fromDom);
+        } catch (RuntimeException error) {
+            // A malformed request or an OEM WebView implementation should not
+            // be able to take down the remote-control process while sniffing.
+            Log.w(TAG, "Ignoring failed media candidate capture", error);
+        }
+    }
+
     private int candidateScore(String lowerUrl, Map<String, String> headers, boolean fromDom) {
         if (lowerUrl.contains(".m3u8") || lowerUrl.contains("format=m3u8")) return 100;
         if (lowerUrl.contains(".mpd") || lowerUrl.contains("dash.mpd")) return 95;
@@ -325,13 +367,23 @@ public final class WebVideoSniffer {
         if (TextUtils.isEmpty(headerValue(headers, "Referer")) && !TextUtils.isEmpty(pageUrl)) {
             headers.put("Referer", pageUrl);
         }
-        String userAgent = webView == null ? "" : webView.getSettings().getUserAgentString();
+        String userAgent = webUserAgent;
         if (TextUtils.isEmpty(headerValue(headers, "User-Agent")) && !TextUtils.isEmpty(userAgent)) {
             headers.put("User-Agent", userAgent);
         }
-        String cookies = CookieManager.getInstance().getCookie(requestUrl);
-        if (TextUtils.isEmpty(cookies) && !TextUtils.isEmpty(pageUrl)) cookies = CookieManager.getInstance().getCookie(pageUrl);
+        String cookies = safeCookies(requestUrl);
+        if (TextUtils.isEmpty(cookies) && !TextUtils.isEmpty(pageUrl)) cookies = safeCookies(pageUrl);
         if (!TextUtils.isEmpty(cookies)) headers.put("Cookie", cookies);
+    }
+
+    private String safeCookies(String url) {
+        if (TextUtils.isEmpty(url)) return "";
+        try {
+            return safe(CookieManager.getInstance().getCookie(url));
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Unable to read cookies for sniffed request", error);
+            return "";
+        }
     }
 
     private String headerValue(Map<String, String> headers, String name) {
@@ -357,6 +409,15 @@ public final class WebVideoSniffer {
             } catch (Throwable ignored) {
             }
             webView = null;
+        }
+    }
+
+    private void discardCrashedWebView(WebView crashedView) {
+        if (webView == crashedView) webView = null;
+        if (crashedView == null) return;
+        try {
+            crashedView.destroy();
+        } catch (Throwable ignored) {
         }
     }
 
