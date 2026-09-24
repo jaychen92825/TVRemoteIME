@@ -23,6 +23,9 @@ import com.android.tvremoteime.VideoPlayHelper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -32,6 +35,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 /**
  * Loads a user supplied webpage on the TV and observes likely video requests.
@@ -40,7 +51,9 @@ import java.util.UUID;
 public final class WebVideoSniffer {
     private static final String TAG = "WebVideoSniffer";
     private static final long SNIFF_WINDOW_MS = 18000L;
+    private static final long PLAY_REVALIDATE_MS = 60000L;
     private static final int MAX_CANDIDATES = 24;
+    private static final int PROBE_BYTES = 16 * 1024;
     private static final String DOM_PROMPT_PREFIX = "__TVREMOTE_VIDEO__";
     private static volatile WebVideoSniffer instance;
 
@@ -57,6 +70,15 @@ public final class WebVideoSniffer {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Object lock = new Object();
     private final LinkedHashMap<String, Candidate> candidates = new LinkedHashMap<>();
+    private final ExecutorService validationExecutor = Executors.newFixedThreadPool(3);
+    private final OkHttpClient validationClient = new OkHttpClient.Builder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(7, TimeUnit.SECONDS)
+            .writeTimeout(5, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .retryOnConnectionFailure(true)
+            .build();
     private String sessionId = "";
     private String pageUrl = "";
     private String pageTitle = "";
@@ -104,34 +126,72 @@ public final class WebVideoSniffer {
             obj.put("message", message);
             JSONArray items = new JSONArray();
             List<Candidate> ranked = new ArrayList<>(candidates.values());
+            for (int i = ranked.size() - 1; i >= 0; i--) {
+                if ("failed".equals(ranked.get(i).validationState)) ranked.remove(i);
+            }
             Collections.sort(ranked, new Comparator<Candidate>() {
                 @Override
                 public int compare(Candidate left, Candidate right) {
-                    return right.score - left.score;
+                    return candidateRank(right) - candidateRank(left);
                 }
             });
             for (Candidate candidate : ranked) items.put(candidate.toPublicJson());
             obj.put("candidates", items);
-            obj.put("recommendedCandidateId", ranked.isEmpty() ? "" : ranked.get(0).id);
+            String recommendedId = "";
+            for (Candidate candidate : ranked) {
+                if ("ready".equals(candidate.validationState)) {
+                    recommendedId = candidate.id;
+                    break;
+                }
+            }
+            obj.put("recommendedCandidateId", recommendedId);
             return obj;
         }
     }
 
     public JSONObject play(String requestedSessionId, String candidateId) throws Exception {
         final Candidate candidate;
-        final String title;
         synchronized (lock) {
             if (TextUtils.isEmpty(sessionId) || !sessionId.equals(requestedSessionId)) {
                 throw new Exception("网页视频会话已过期，请重新嗅探");
             }
             candidate = candidates.get(candidateId);
             if (candidate == null) throw new Exception("没有找到这个视频候选，请重新嗅探");
+        }
+
+        boolean needsValidation;
+        synchronized (lock) {
+            needsValidation = !"ready".equals(candidate.validationState)
+                    || System.currentTimeMillis() - candidate.validatedAt > PLAY_REVALIDATE_MS;
+        }
+        if (needsValidation) {
+            ValidationResult result = validateCandidate(candidate);
+            synchronized (lock) {
+                if (!requestedSessionId.equals(sessionId) || candidates.get(candidateId) != candidate) {
+                    throw new Exception("网页视频会话已过期，请重新嗅探");
+                }
+                applyValidationLocked(candidate, result);
+            }
+        }
+
+        final String playUrl;
+        final String title;
+        final Map<String, String> playHeaders = new HashMap<>();
+        synchronized (lock) {
+            if (!"ready".equals(candidate.validationState)) {
+                throw new Exception(TextUtils.isEmpty(candidate.validationMessage)
+                        ? "这个视频候选无法播放，请选择其他候选"
+                        : "这个视频候选不可用：" + candidate.validationMessage);
+            }
+            addPlaybackHeaders(candidate.headers, candidate.url);
+            playUrl = candidate.url;
+            playHeaders.putAll(candidate.headers);
             title = TextUtils.isEmpty(pageTitle) ? candidate.host : pageTitle;
         }
         mainHandler.post(new Runnable() {
             @Override
             public void run() {
-                VideoPlayHelper.playDirectStream(context, candidate.url, title, candidate.headers);
+                VideoPlayHelper.playDirectStream(context, playUrl, title, playHeaders);
             }
         });
         JSONObject obj = new JSONObject();
@@ -291,10 +351,17 @@ public final class WebVideoSniffer {
         if (!isCurrent(targetSessionId)) return;
         synchronized (lock) {
             if (!"error".equals(status)) {
-                status = "ready";
-                message = candidates.isEmpty()
-                        ? "暂未发现可播放视频。可以确认链接后重新嗅探，部分网站需要先进入具体播放页。"
-                        : "已发现 " + candidates.size() + " 个可播放候选";
+                int readyCount = readyCandidateCountLocked();
+                int validatingCount = validatingCandidateCountLocked();
+                if (validatingCount > 0) {
+                    status = "validating";
+                    message = "已发现候选，正在验证可播放性...";
+                } else {
+                    status = "ready";
+                    message = readyCount > 0
+                            ? "已验证 " + readyCount + " 个可播放视频"
+                            : "暂未找到可播放视频。可以确认链接后重新嗅探，部分网站需要先进入具体播放页。";
+                }
             }
         }
         destroyWebView();
@@ -306,6 +373,7 @@ public final class WebVideoSniffer {
         if (!lower.startsWith("http://") && !lower.startsWith("https://")) return;
         int score = candidateScore(lower, requestHeaders, fromDom);
         if (score <= 0) return;
+        Candidate created = null;
         synchronized (lock) {
             if (!targetSessionId.equals(sessionId)) return;
             for (Candidate existing : candidates.values()) {
@@ -322,12 +390,17 @@ public final class WebVideoSniffer {
             candidate.type = mediaType(lower);
             candidate.host = safe(Uri.parse(requestUrl).getHost());
             candidate.score = score;
+            candidate.fromDom = fromDom;
+            candidate.validationState = "validating";
+            candidate.validationMessage = "正在验证";
             if (requestHeaders != null) candidate.headers.putAll(requestHeaders);
             addPlaybackHeaders(candidate.headers, requestUrl);
             candidates.put(candidate.id, candidate);
+            created = candidate;
             status = "sniffing";
             message = "已发现 " + candidates.size() + " 个视频候选";
         }
+        if (created != null) queueValidation(targetSessionId, created.id);
     }
 
     private void captureSafely(String targetSessionId, String requestUrl,
@@ -345,13 +418,277 @@ public final class WebVideoSniffer {
         if (lowerUrl.contains(".m3u8") || lowerUrl.contains("format=m3u8")) return 100;
         if (lowerUrl.contains(".mpd") || lowerUrl.contains("dash.mpd")) return 95;
         if (lowerUrl.matches(".*\\.(mp4|m4v|webm|mkv|flv|mov)(\\?.*)?$")) return 90;
-        if (fromDom && lowerUrl.matches(".*\\.(ts|m2ts)(\\?.*)?$")) return 60;
+        if (fromDom && lowerUrl.matches(".*\\.(ts|m2ts)(\\?.*)?$")) return 45;
         if (fromDom) return 85;
         if (headers != null) {
             String accept = headerValue(headers, "Accept").toLowerCase(Locale.US);
             if (accept.contains("video/") || accept.contains("mpegurl") || accept.contains("dash+xml")) return 70;
         }
         return 0;
+    }
+
+    private static int candidateRank(Candidate candidate) {
+        if (candidate == null) return Integer.MIN_VALUE;
+        int validationBoost = "ready".equals(candidate.validationState) ? 1000
+                : ("validating".equals(candidate.validationState) ? 0 : -1000);
+        return validationBoost + candidate.score;
+    }
+
+    private void queueValidation(final String targetSessionId, final String candidateId) {
+        validationExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                Candidate candidate;
+                synchronized (lock) {
+                    if (!targetSessionId.equals(sessionId)) return;
+                    candidate = candidates.get(candidateId);
+                    if (candidate == null) return;
+                }
+                ValidationResult result = validateCandidate(candidate);
+                synchronized (lock) {
+                    if (!targetSessionId.equals(sessionId) || candidates.get(candidateId) != candidate) return;
+                    applyValidationLocked(candidate, result);
+                    if ("validating".equals(status) && validatingCandidateCountLocked() == 0) {
+                        status = "ready";
+                        int readyCount = readyCandidateCountLocked();
+                        message = readyCount > 0
+                                ? "已验证 " + readyCount + " 个可播放视频"
+                                : "没有验证到可播放视频，请换一个具体播放页或重新嗅探。";
+                    } else if ("sniffing".equals(status) || "loading".equals(status)) {
+                        int readyCount = readyCandidateCountLocked();
+                        if (readyCount > 0) message = "已验证 " + readyCount + " 个可播放视频，仍在寻找更多候选";
+                    }
+                }
+            }
+        });
+    }
+
+    private ValidationResult validateCandidate(Candidate candidate) {
+        String url;
+        String type;
+        boolean fromDom;
+        Map<String, String> headers = new HashMap<>();
+        synchronized (lock) {
+            url = candidate.url;
+            type = candidate.type;
+            fromDom = candidate.fromDom;
+            headers.putAll(candidate.headers);
+        }
+
+        ValidationResult result = probe(url, type, headers, true);
+        if (!result.ready && result.retryWithoutRange) {
+            result = probe(url, type, headers, false);
+        }
+        if (!result.ready && fromDom && isTransportStreamUrl(url) && result.httpCode >= 200 && result.httpCode < 300) {
+            result.message = "检测到单个视频分片，不作为主播放源";
+        }
+        return result;
+    }
+
+    private ValidationResult probe(String url, String type, Map<String, String> headers, boolean allowRange) {
+        ValidationResult result = new ValidationResult();
+        Response response = null;
+        InputStream input = null;
+        try {
+            Request.Builder builder = new Request.Builder().url(url).get();
+            builder.header("Accept", "*/*");
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                String name = safe(entry.getKey()).trim();
+                String value = safe(entry.getValue());
+                if (TextUtils.isEmpty(name) || TextUtils.isEmpty(value)
+                        || "Host".equalsIgnoreCase(name)
+                        || "Content-Length".equalsIgnoreCase(name)
+                        || "Range".equalsIgnoreCase(name)) continue;
+                try {
+                    builder.header(name, value);
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+
+            boolean manifestHint = isManifestUrl(url) || "HLS".equals(type) || "DASH".equals(type);
+            if (allowRange && !manifestHint) builder.header("Range", "bytes=0-" + (PROBE_BYTES - 1));
+
+            response = validationClient.newCall(builder.build()).execute();
+            result.httpCode = response.code();
+            result.finalUrl = response.request().url().toString();
+            result.contentType = safe(response.header("Content-Type")).toLowerCase(Locale.US);
+            result.contentLength = parseContentLength(response.header("Content-Length"));
+
+            if (!response.isSuccessful() && response.code() != 206) {
+                result.message = "HTTP " + response.code();
+                result.retryWithoutRange = allowRange && (response.code() == 400 || response.code() == 403
+                        || response.code() == 405 || response.code() == 416);
+                return result;
+            }
+
+            ResponseBody body = response.body();
+            if (body == null) {
+                result.message = "媒体响应为空";
+                return result;
+            }
+            input = body.byteStream();
+            byte[] prefix = readPrefix(input, PROBE_BYTES);
+            String text = new String(prefix, Charset.forName("UTF-8"));
+            String trimmed = text.trim();
+            String lowerText = trimmed.toLowerCase(Locale.US);
+
+            boolean hls = text.indexOf("#EXTM3U") >= 0;
+            boolean dash = lowerText.indexOf("<mpd") >= 0;
+            boolean videoMime = result.contentType.startsWith("video/");
+            boolean hlsMime = result.contentType.contains("mpegurl") || result.contentType.contains("vnd.apple.mpegurl");
+            boolean dashMime = result.contentType.contains("dash+xml");
+            boolean binaryVideo = hasVideoSignature(prefix);
+            boolean htmlOrJson = result.contentType.contains("text/html")
+                    || result.contentType.contains("application/json")
+                    || lowerText.startsWith("<!doctype html")
+                    || lowerText.startsWith("<html")
+                    || lowerText.startsWith("{")
+                    || lowerText.startsWith("[");
+
+            if (hls || (hlsMime && !htmlOrJson)) {
+                if (!hls && prefix.length > 0) {
+                    result.message = "HLS 响应缺少有效播放列表标记";
+                    return result;
+                }
+                result.ready = true;
+                result.type = text.indexOf("#EXT-X-STREAM-INF") >= 0 ? "HLS Master" : "HLS";
+                result.message = "已验证 HLS";
+                return result;
+            }
+            if (dash || (dashMime && !htmlOrJson)) {
+                if (!dash && prefix.length > 0) {
+                    result.message = "DASH 响应缺少有效 MPD";
+                    return result;
+                }
+                result.ready = true;
+                result.type = "DASH";
+                result.message = "已验证 DASH";
+                return result;
+            }
+            if (htmlOrJson) {
+                result.message = "返回的是网页或接口数据，不是视频流";
+                return result;
+            }
+            if (isTransportStreamUrl(url) && fromSegmentLikeResponse(result.contentType, prefix)) {
+                result.message = "检测到单个视频分片，不作为主播放源";
+                return result;
+            }
+            if (videoMime || binaryVideo) {
+                if (result.contentLength > 0 && result.contentLength < 512 && !binaryVideo) {
+                    result.message = "媒体响应过小";
+                    return result;
+                }
+                result.ready = true;
+                result.type = sniffedMediaType(result.contentType, result.finalUrl, prefix, type);
+                result.message = "已验证视频流";
+                return result;
+            }
+
+            result.message = TextUtils.isEmpty(result.contentType)
+                    ? "无法确认这是可播放媒体"
+                    : "不支持的响应类型：" + result.contentType;
+            return result;
+        } catch (Exception error) {
+            result.message = TextUtils.isEmpty(error.getMessage()) ? "媒体校验失败" : error.getMessage();
+            return result;
+        } finally {
+            if (input != null) {
+                try {
+                    input.close();
+                } catch (IOException ignored) {
+                }
+            }
+            if (response != null) response.close();
+        }
+    }
+
+    private void applyValidationLocked(Candidate candidate, ValidationResult result) {
+        candidate.validatedAt = System.currentTimeMillis();
+        candidate.validationState = result.ready ? "ready" : "failed";
+        candidate.validationMessage = safe(result.message);
+        candidate.contentType = safe(result.contentType);
+        if (!TextUtils.isEmpty(result.type)) candidate.type = result.type;
+        if (result.ready && !TextUtils.isEmpty(result.finalUrl)) {
+            candidate.url = result.finalUrl;
+            candidate.host = safe(Uri.parse(candidate.url).getHost());
+            addPlaybackHeaders(candidate.headers, candidate.url);
+        }
+    }
+
+    private int readyCandidateCountLocked() {
+        int count = 0;
+        for (Candidate candidate : candidates.values()) {
+            if ("ready".equals(candidate.validationState)) count++;
+        }
+        return count;
+    }
+
+    private int validatingCandidateCountLocked() {
+        int count = 0;
+        for (Candidate candidate : candidates.values()) {
+            if ("validating".equals(candidate.validationState)) count++;
+        }
+        return count;
+    }
+
+    private boolean isManifestUrl(String url) {
+        String lower = safe(url).toLowerCase(Locale.US);
+        return lower.contains(".m3u8") || lower.contains("format=m3u8") || lower.contains(".mpd");
+    }
+
+    private boolean isTransportStreamUrl(String url) {
+        return safe(url).toLowerCase(Locale.US).matches(".*\\.(ts|m2ts)(\\?.*)?$");
+    }
+
+    private boolean fromSegmentLikeResponse(String contentType, byte[] prefix) {
+        String type = safe(contentType).toLowerCase(Locale.US);
+        if (type.contains("mp2t")) return true;
+        return prefix != null && prefix.length > 188
+                && (prefix[0] & 0xff) == 0x47 && (prefix[188] & 0xff) == 0x47;
+    }
+
+    private byte[] readPrefix(InputStream input, int limit) throws IOException {
+        byte[] out = new byte[limit];
+        int offset = 0;
+        while (offset < limit) {
+            int read = input.read(out, offset, limit - offset);
+            if (read < 0) break;
+            if (read == 0) continue;
+            offset += read;
+        }
+        if (offset == out.length) return out;
+        byte[] trimmed = new byte[offset];
+        System.arraycopy(out, 0, trimmed, 0, offset);
+        return trimmed;
+    }
+
+    private long parseContentLength(String value) {
+        try {
+            return TextUtils.isEmpty(value) ? -1L : Long.parseLong(value.trim());
+        } catch (NumberFormatException ignored) {
+            return -1L;
+        }
+    }
+
+    private boolean hasVideoSignature(byte[] bytes) {
+        if (bytes == null) return false;
+        if (bytes.length >= 8 && bytes[4] == 'f' && bytes[5] == 't' && bytes[6] == 'y' && bytes[7] == 'p') return true;
+        if (bytes.length >= 4 && (bytes[0] & 0xff) == 0x1a && (bytes[1] & 0xff) == 0x45
+                && (bytes[2] & 0xff) == 0xdf && (bytes[3] & 0xff) == 0xa3) return true;
+        if (bytes.length >= 3 && bytes[0] == 'F' && bytes[1] == 'L' && bytes[2] == 'V') return true;
+        return bytes.length > 188 && (bytes[0] & 0xff) == 0x47 && (bytes[188] & 0xff) == 0x47;
+    }
+
+    private String sniffedMediaType(String contentType, String url, byte[] prefix, String fallback) {
+        String mime = safe(contentType).toLowerCase(Locale.US);
+        String lowerUrl = safe(url).toLowerCase(Locale.US);
+        if (mime.contains("webm") || lowerUrl.contains(".webm")) return "WebM";
+        if (mime.contains("matroska") || lowerUrl.contains(".mkv")) return "MKV";
+        if (mime.contains("flv") || lowerUrl.contains(".flv")) return "FLV";
+        if (mime.contains("mp4") || lowerUrl.contains(".mp4") || lowerUrl.contains(".m4v")
+                || (prefix != null && prefix.length >= 8 && prefix[4] == 'f' && prefix[5] == 't'
+                && prefix[6] == 'y' && prefix[7] == 'p')) return "MP4";
+        return TextUtils.isEmpty(fallback) ? "Video" : fallback;
     }
 
     private String mediaType(String lowerUrl) {
@@ -431,6 +768,11 @@ public final class WebVideoSniffer {
         String type;
         String host;
         int score;
+        boolean fromDom;
+        long validatedAt;
+        String validationState = "validating";
+        String validationMessage = "";
+        String contentType = "";
         final Map<String, String> headers = new HashMap<>();
 
         JSONObject toPublicJson() throws Exception {
@@ -439,8 +781,21 @@ public final class WebVideoSniffer {
             obj.put("type", type);
             obj.put("host", host);
             obj.put("score", score);
+            obj.put("validationState", validationState);
+            obj.put("validationMessage", validationMessage);
             obj.put("displayUrl", url.length() > 180 ? url.substring(0, 180) + "..." : url);
             return obj;
         }
+    }
+
+    private static final class ValidationResult {
+        boolean ready;
+        boolean retryWithoutRange;
+        int httpCode;
+        long contentLength = -1L;
+        String finalUrl = "";
+        String contentType = "";
+        String type = "";
+        String message = "";
     }
 }

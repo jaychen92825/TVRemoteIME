@@ -1230,7 +1230,8 @@ body {
 }
 
 .media-web-type,
-.media-web-best {
+.media-web-best,
+.media-web-state {
 	flex: 0 0 auto;
 	height: 20px;
 	display: inline-flex;
@@ -1250,6 +1251,12 @@ body {
 	background: var(--color-primary);
 	color: #fff;
 	border: 1px solid var(--color-primary);
+}
+
+.media-web-state {
+	background: var(--color-bg);
+	color: var(--color-text-secondary);
+	border: 1px solid var(--color-border);
 }
 
 .media-web-play-btn.primary {
@@ -1851,7 +1858,8 @@ body {
 	}
 
 	.media-web-type,
-	.media-web-best {
+	.media-web-best,
+	.media-web-state {
 		height: 18px;
 		padding: 0 5px;
 		font-size: 9px;

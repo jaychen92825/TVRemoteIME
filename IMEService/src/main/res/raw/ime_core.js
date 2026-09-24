@@ -490,12 +490,15 @@ function renderMediaWebCandidates(items, recommendedCandidateId){
 	for(var i=0;i<items.length;i++){
 		var item = items[i] || {};
 		var recommended = String(item.id || '') === recommendedId;
+		var validationState = String(item.validationState || 'validating');
+		var playable = validationState === 'ready';
+		var stateLabel = playable ? '' : '校验中';
 		html.push('<div class="media-web-candidate'+(recommended ? ' recommended' : '')+'" data-candidate="'+escapeHtml(item.id || '')+'">');
 		html.push('<div class="media-web-candidate-copy">');
-		html.push('<div class="media-web-candidate-head"><span class="media-web-type">'+escapeHtml(mediaWebTypeLabel(item.type))+'</span><span class="media-web-host">'+escapeHtml(item.host || '未知来源')+'</span>'+(recommended ? '<span class="media-web-best">推荐</span>' : '')+'</div>');
+		html.push('<div class="media-web-candidate-head"><span class="media-web-type">'+escapeHtml(mediaWebTypeLabel(item.type))+'</span><span class="media-web-host">'+escapeHtml(item.host || '未知来源')+'</span>'+(recommended ? '<span class="media-web-best">推荐</span>' : '')+(stateLabel ? '<span class="media-web-state">'+stateLabel+'</span>' : '')+'</div>');
 		html.push('<div class="media-web-url" title="'+escapeHtml(item.displayUrl || '')+'">'+escapeHtml(item.displayUrl || '')+'</div>');
 		html.push('</div>');
-		html.push('<button type="button" class="media-web-play-btn'+(recommended ? ' primary' : '')+'" data-candidate="'+escapeHtml(item.id || '')+'" aria-label="'+(recommended ? '播放推荐视频' : '在电视播放')+'"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" fill="currentColor"/></svg><span>'+(recommended ? '推荐播放' : '电视播放')+'</span></button>');
+		html.push('<button type="button" class="media-web-play-btn'+(recommended ? ' primary' : '')+'" data-candidate="'+escapeHtml(item.id || '')+'" aria-label="'+(recommended ? '播放推荐视频' : '在电视播放')+'"'+(playable ? '' : ' disabled')+'><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" fill="currentColor"/></svg><span>'+(playable ? (recommended ? '推荐播放' : '电视播放') : '校验中')+'</span></button>');
 		html.push('</div>');
 	}
 	$('#mediaWebResults').html(html.join(''));
@@ -518,9 +521,9 @@ function renderMediaWebSession(data){
 	var status = String(data.status || '');
 	var title = String(data.pageTitle || '').trim();
 	var message = data.message || (status === 'ready' ? '嗅探完成' : '正在寻找可播放视频…');
-	if(title && items.length) message = title+' · '+items.length+' 个候选';
+	if(title && items.length && status === 'ready') message = title+' · '+items.length+' 个可播放候选';
 	setMediaWebMeta(message, status === 'error' ? 'error' : (status === 'ready' ? 'ready' : 'loading'));
-	var pending = status === 'loading' || status === 'sniffing';
+	var pending = status === 'loading' || status === 'sniffing' || status === 'validating';
 	setMediaWebSniffBusy(pending);
 	return pending;
 }
