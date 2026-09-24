@@ -493,9 +493,11 @@ function renderMediaWebCandidates(items, recommendedCandidateId){
 		var validationState = String(item.validationState || 'validating');
 		var playable = validationState === 'ready';
 		var stateLabel = playable ? '' : '校验中';
+		var streamMode = String(item.streamMode || '');
+		var typeLabel = mediaWebTypeLabel(item.type)+(streamMode === 'live' ? ' · 直播' : (streamMode === 'vod' ? ' · 点播' : ''));
 		html.push('<div class="media-web-candidate'+(recommended ? ' recommended' : '')+'" data-candidate="'+escapeHtml(item.id || '')+'">');
 		html.push('<div class="media-web-candidate-copy">');
-		html.push('<div class="media-web-candidate-head"><span class="media-web-type">'+escapeHtml(mediaWebTypeLabel(item.type))+'</span><span class="media-web-host">'+escapeHtml(item.host || '未知来源')+'</span>'+(recommended ? '<span class="media-web-best">推荐</span>' : '')+(stateLabel ? '<span class="media-web-state">'+stateLabel+'</span>' : '')+'</div>');
+		html.push('<div class="media-web-candidate-head"><span class="media-web-type">'+escapeHtml(typeLabel)+'</span><span class="media-web-host">'+escapeHtml(item.host || '未知来源')+'</span>'+(recommended ? '<span class="media-web-best">推荐</span>' : '')+(stateLabel ? '<span class="media-web-state">'+stateLabel+'</span>' : '')+'</div>');
 		html.push('<div class="media-web-url" title="'+escapeHtml(item.displayUrl || '')+'">'+escapeHtml(item.displayUrl || '')+'</div>');
 		html.push('</div>');
 		html.push('<button type="button" class="media-web-play-btn'+(recommended ? ' primary' : '')+'" data-candidate="'+escapeHtml(item.id || '')+'" aria-label="'+(recommended ? '播放推荐视频' : '在电视播放')+'"'+(playable ? '' : ' disabled')+'><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" fill="currentColor"/></svg><span>'+(playable ? (recommended ? '推荐播放' : '电视播放') : '校验中')+'</span></button>');

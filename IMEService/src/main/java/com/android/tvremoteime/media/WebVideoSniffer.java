@@ -39,6 +39,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -550,10 +551,11 @@ public final class WebVideoSniffer {
                     result.message = "HLS 响应缺少有效播放列表标记";
                     return result;
                 }
-                result.ready = true;
-                result.type = text.indexOf("#EXT-X-STREAM-INF") >= 0 ? "HLS Master" : "HLS";
-                result.message = "已验证 HLS";
-                return result;
+                ValidationResult hlsResult = validateHlsChain(result.finalUrl, text, headers);
+                hlsResult.httpCode = result.httpCode;
+                hlsResult.finalUrl = result.finalUrl;
+                hlsResult.contentType = result.contentType;
+                return hlsResult;
             }
             if (dash || (dashMime && !htmlOrJson)) {
                 if (!dash && prefix.length > 0) {
@@ -607,6 +609,7 @@ public final class WebVideoSniffer {
         candidate.validationState = result.ready ? "ready" : "failed";
         candidate.validationMessage = safe(result.message);
         candidate.contentType = safe(result.contentType);
+        candidate.streamMode = TextUtils.isEmpty(result.streamMode) ? "unknown" : result.streamMode;
         if (!TextUtils.isEmpty(result.type)) candidate.type = result.type;
         if (result.ready && !TextUtils.isEmpty(result.finalUrl)) {
             candidate.url = result.finalUrl;
@@ -634,6 +637,296 @@ public final class WebVideoSniffer {
     private boolean isManifestUrl(String url) {
         String lower = safe(url).toLowerCase(Locale.US);
         return lower.contains(".m3u8") || lower.contains("format=m3u8") || lower.contains(".mpd");
+    }
+
+    private ValidationResult validateHlsChain(String playlistUrl, String playlistText,
+                                              Map<String, String> headers) {
+        ValidationResult result = new ValidationResult();
+        result.type = playlistText.indexOf("#EXT-X-STREAM-INF") >= 0 ? "HLS Master" : "HLS";
+        try {
+            String mediaUrl = playlistUrl;
+            String mediaText = playlistText;
+
+            if (playlistText.indexOf("#EXT-X-STREAM-INF") >= 0) {
+                String variant = selectHlsVariant(playlistText);
+                if (TextUtils.isEmpty(variant)) {
+                    result.message = "HLS Master 没有可用码率地址";
+                    return result;
+                }
+                mediaUrl = resolveUrl(playlistUrl, variant);
+                PlaylistProbe variantProbe = fetchPlaylist(mediaUrl, headers);
+                if (!variantProbe.success) {
+                    result.message = "HLS 子码率不可用：" + variantProbe.message;
+                    return result;
+                }
+                mediaUrl = variantProbe.finalUrl;
+                mediaText = variantProbe.text;
+            }
+
+            if (mediaText.indexOf("#EXTM3U") < 0) {
+                result.message = "HLS 媒体列表无效";
+                return result;
+            }
+
+            result.streamMode = mediaText.indexOf("#EXT-X-ENDLIST") >= 0 ? "vod" : "live";
+
+            String initUri = hlsAttributeUri(mediaText, "#EXT-X-MAP:");
+            if (!TextUtils.isEmpty(initUri)) {
+                ResourceProbe initProbe = probeHlsResource(resolveUrl(mediaUrl, initUri), headers, false);
+                if (!initProbe.success) {
+                    result.message = "HLS 初始化分片不可用：" + initProbe.message;
+                    return result;
+                }
+            }
+
+            String keyUri = hlsAttributeUri(mediaText, "#EXT-X-KEY:");
+            if (!TextUtils.isEmpty(keyUri)) {
+                ResourceProbe keyProbe = probeHlsResource(resolveUrl(mediaUrl, keyUri), headers, true);
+                if (!keyProbe.success) {
+                    result.message = "HLS 解密密钥不可用：" + keyProbe.message;
+                    return result;
+                }
+            }
+
+            String segment = firstHlsMediaUri(mediaText);
+            if (TextUtils.isEmpty(segment)) {
+                result.message = "HLS 媒体列表没有可播放分片";
+                return result;
+            }
+            ResourceProbe segmentProbe = probeHlsResource(resolveUrl(mediaUrl, segment), headers, false);
+            if (!segmentProbe.success) {
+                result.message = "HLS 首个分片不可用：" + segmentProbe.message;
+                return result;
+            }
+
+            result.ready = true;
+            result.message = "已验证 HLS · " + ("live".equals(result.streamMode) ? "直播" : "点播");
+            return result;
+        } catch (Exception error) {
+            result.message = TextUtils.isEmpty(error.getMessage()) ? "HLS 深度校验失败" : error.getMessage();
+            return result;
+        }
+    }
+
+    private PlaylistProbe fetchPlaylist(String url, Map<String, String> headers) {
+        PlaylistProbe result = new PlaylistProbe();
+        Response response = null;
+        InputStream input = null;
+        try {
+            Request.Builder builder = requestBuilder(url, headers);
+            response = validationClient.newCall(builder.get().build()).execute();
+            result.finalUrl = response.request().url().toString();
+            if (!response.isSuccessful()) {
+                result.message = "HTTP " + response.code();
+                return result;
+            }
+            ResponseBody body = response.body();
+            if (body == null) {
+                result.message = "播放列表响应为空";
+                return result;
+            }
+            input = body.byteStream();
+            byte[] prefix = readPrefix(input, PROBE_BYTES);
+            result.text = new String(prefix, Charset.forName("UTF-8"));
+            if (result.text.indexOf("#EXTM3U") < 0) {
+                result.message = "响应不是有效 HLS 播放列表";
+                return result;
+            }
+            result.success = true;
+            return result;
+        } catch (Exception error) {
+            result.message = TextUtils.isEmpty(error.getMessage()) ? "播放列表请求失败" : error.getMessage();
+            return result;
+        } finally {
+            if (input != null) {
+                try {
+                    input.close();
+                } catch (IOException ignored) {
+                }
+            }
+            if (response != null) response.close();
+        }
+    }
+
+    private ResourceProbe probeHlsResource(String url, Map<String, String> headers, boolean keyResource) {
+        ResourceProbe result = probeHlsResourceOnce(url, headers, keyResource, true);
+        if (!result.success && result.retryWithoutRange) {
+            result = probeHlsResourceOnce(url, headers, keyResource, false);
+        }
+        return result;
+    }
+
+    private ResourceProbe probeHlsResourceOnce(String url, Map<String, String> headers,
+                                               boolean keyResource, boolean allowRange) {
+        ResourceProbe result = new ResourceProbe();
+        Response response = null;
+        InputStream input = null;
+        try {
+            Request.Builder builder = requestBuilder(url, headers);
+            if (allowRange) builder.header("Range", "bytes=0-" + (PROBE_BYTES - 1));
+            response = validationClient.newCall(builder.get().build()).execute();
+            int code = response.code();
+            if (!response.isSuccessful() && code != 206) {
+                result.message = "HTTP " + code;
+                result.retryWithoutRange = allowRange && (code == 400 || code == 403
+                        || code == 405 || code == 416);
+                return result;
+            }
+            ResponseBody body = response.body();
+            if (body == null) {
+                result.message = "响应为空";
+                return result;
+            }
+            input = body.byteStream();
+            byte[] prefix = readPrefix(input, PROBE_BYTES);
+            if (prefix.length == 0) {
+                result.message = "响应为空";
+                return result;
+            }
+            String contentType = safe(response.header("Content-Type")).toLowerCase(Locale.US);
+            String lowerText = new String(prefix, Charset.forName("UTF-8")).trim().toLowerCase(Locale.US);
+            if (contentType.contains("text/html") || contentType.contains("application/json")
+                    || lowerText.startsWith("<!doctype html") || lowerText.startsWith("<html")
+                    || lowerText.startsWith("{") || lowerText.startsWith("[")) {
+                result.message = "返回的不是媒体数据";
+                return result;
+            }
+            if (keyResource) {
+                result.success = prefix.length >= 8;
+                result.message = result.success ? "" : "密钥响应过短";
+                return result;
+            }
+            if (contentType.startsWith("video/") || contentType.contains("mp2t")
+                    || contentType.contains("octet-stream") || hasMediaSegmentSignature(prefix)) {
+                result.success = true;
+                return result;
+            }
+            result.message = TextUtils.isEmpty(contentType) ? "无法确认媒体分片" : "响应类型 " + contentType;
+            return result;
+        } catch (Exception error) {
+            result.message = TextUtils.isEmpty(error.getMessage()) ? "媒体分片请求失败" : error.getMessage();
+            return result;
+        } finally {
+            if (input != null) {
+                try {
+                    input.close();
+                } catch (IOException ignored) {
+                }
+            }
+            if (response != null) response.close();
+        }
+    }
+
+    private Request.Builder requestBuilder(String url, Map<String, String> headers) {
+        Request.Builder builder = new Request.Builder().url(url).header("Accept", "*/*");
+        if (headers == null) return builder;
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            String name = safe(entry.getKey()).trim();
+            String value = safe(entry.getValue());
+            if (TextUtils.isEmpty(name) || TextUtils.isEmpty(value)
+                    || "Host".equalsIgnoreCase(name)
+                    || "Content-Length".equalsIgnoreCase(name)
+                    || "Range".equalsIgnoreCase(name)) continue;
+            try {
+                builder.header(name, value);
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        return builder;
+    }
+
+    private String selectHlsVariant(String text) {
+        String[] lines = text.split("\\r?\\n");
+        String bestUri = "";
+        long bestBandwidth = -1L;
+        String lowestUri = "";
+        long lowestBandwidth = Long.MAX_VALUE;
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i].trim();
+            if (!line.startsWith("#EXT-X-STREAM-INF:")) continue;
+            long bandwidth = hlsLongAttribute(line, "BANDWIDTH");
+            String uri = nextHlsUri(lines, i + 1);
+            if (TextUtils.isEmpty(uri)) continue;
+            if (bandwidth > 0 && bandwidth < lowestBandwidth) {
+                lowestBandwidth = bandwidth;
+                lowestUri = uri;
+            }
+            if (bandwidth <= 12000000L && bandwidth > bestBandwidth) {
+                bestBandwidth = bandwidth;
+                bestUri = uri;
+            }
+            if (TextUtils.isEmpty(bestUri) && TextUtils.isEmpty(lowestUri)) bestUri = uri;
+        }
+        if (!TextUtils.isEmpty(bestUri)) return bestUri;
+        return lowestUri;
+    }
+
+    private long hlsLongAttribute(String line, String name) {
+        String marker = name + "=";
+        int start = line.indexOf(marker);
+        if (start < 0) return -1L;
+        start += marker.length();
+        int end = start;
+        while (end < line.length() && Character.isDigit(line.charAt(end))) end++;
+        try {
+            return end > start ? Long.parseLong(line.substring(start, end)) : -1L;
+        } catch (NumberFormatException ignored) {
+            return -1L;
+        }
+    }
+
+    private String nextHlsUri(String[] lines, int startIndex) {
+        for (int i = startIndex; i < lines.length; i++) {
+            String line = lines[i].trim();
+            if (TextUtils.isEmpty(line)) continue;
+            if (!line.startsWith("#")) return line;
+            if (line.startsWith("#EXT-X-STREAM-INF:")) return "";
+        }
+        return "";
+    }
+
+    private String firstHlsMediaUri(String text) {
+        String[] lines = text.split("\\r?\\n");
+        for (String rawLine : lines) {
+            String line = rawLine.trim();
+            if (!TextUtils.isEmpty(line) && !line.startsWith("#")) return line;
+        }
+        return "";
+    }
+
+    private String hlsAttributeUri(String text, String tag) {
+        String[] lines = text.split("\\r?\\n");
+        for (String rawLine : lines) {
+            String line = rawLine.trim();
+            if (!line.startsWith(tag)) continue;
+            int marker = line.indexOf("URI=");
+            if (marker < 0) continue;
+            int start = marker + 4;
+            if (start >= line.length()) continue;
+            if (line.charAt(start) == '"') {
+                int end = line.indexOf('"', start + 1);
+                if (end > start + 1) return line.substring(start + 1, end);
+            } else {
+                int end = line.indexOf(',', start);
+                if (end < 0) end = line.length();
+                if (end > start) return line.substring(start, end).trim();
+            }
+        }
+        return "";
+    }
+
+    private String resolveUrl(String baseUrl, String reference) throws Exception {
+        HttpUrl base = HttpUrl.parse(baseUrl);
+        HttpUrl resolved = base == null ? null : base.resolve(reference);
+        if (resolved == null) throw new Exception("无法解析 HLS 子资源地址");
+        return resolved.toString();
+    }
+
+    private boolean hasMediaSegmentSignature(byte[] bytes) {
+        if (hasVideoSignature(bytes) || fromSegmentLikeResponse("", bytes)) return true;
+        if (bytes == null || bytes.length < 8) return false;
+        String box = new String(bytes, 4, 4, Charset.forName("US-ASCII"));
+        return "styp".equals(box) || "moof".equals(box) || "sidx".equals(box) || "moov".equals(box);
     }
 
     private boolean isTransportStreamUrl(String url) {
@@ -773,6 +1066,7 @@ public final class WebVideoSniffer {
         String validationState = "validating";
         String validationMessage = "";
         String contentType = "";
+        String streamMode = "unknown";
         final Map<String, String> headers = new HashMap<>();
 
         JSONObject toPublicJson() throws Exception {
@@ -783,6 +1077,7 @@ public final class WebVideoSniffer {
             obj.put("score", score);
             obj.put("validationState", validationState);
             obj.put("validationMessage", validationMessage);
+            obj.put("streamMode", streamMode);
             obj.put("displayUrl", url.length() > 180 ? url.substring(0, 180) + "..." : url);
             return obj;
         }
@@ -796,6 +1091,20 @@ public final class WebVideoSniffer {
         String finalUrl = "";
         String contentType = "";
         String type = "";
+        String message = "";
+        String streamMode = "unknown";
+    }
+
+    private static final class PlaylistProbe {
+        boolean success;
+        String finalUrl = "";
+        String text = "";
+        String message = "";
+    }
+
+    private static final class ResourceProbe {
+        boolean success;
+        boolean retryWithoutRange;
         String message = "";
     }
 }
