@@ -2516,6 +2516,33 @@ $.get("/accessibilityStatus", function(data){
 	$("#sleep-btn").addClass("hide");
 });
 var KEEPALIVE_INTERVAL_MS = 4000;
+var TV_CONNECTION_OFFLINE_THRESHOLD = 3;
+var tvConnectionFailureCount = 0;
+
+function setTvConnectionState(state){
+	var labels = {
+		connecting: '正在连接',
+		online: '电视在线',
+		reconnecting: '正在重连',
+		offline: '已离线'
+	};
+	var label = labels[state] || labels.connecting;
+	var status = $('#tvConnectionStatus');
+	status.removeClass('is-connecting is-online is-reconnecting is-offline')
+		.addClass('is-' + state)
+		.attr('title', label);
+	$('#tvConnectionStatusText').text(label);
+}
+
+function markTvConnectionHealthy(){
+	tvConnectionFailureCount = 0;
+	setTvConnectionState('online');
+}
+
+function markTvConnectionFailed(){
+	tvConnectionFailureCount += 1;
+	setTvConnectionState(tvConnectionFailureCount >= TV_CONNECTION_OFFLINE_THRESHOLD ? 'offline' : 'reconnecting');
+}
 //电视端软键盘(带二维码，没有活跃控制端连着时靠它扫码)显示/隐藏：这里只
 //负责读取/切换状态并同步按键的高亮外观，具体"什么时候默认显示/隐藏"的
 //判断逻辑在Environment.isKeyboardViewVisible里(当前有没有活跃客户端来定，
@@ -2528,9 +2555,12 @@ var KEEPALIVE_INTERVAL_MS = 4000;
 //还开着，就定期发一次(间隔比服务端判活的超时阈值短很多，复用上面
 //KEEPALIVE_INTERVAL_MS这个间隔)，不需要用户有任何操作。
 function refreshKeyboardViewBtn(){
-	$.get("/keyboardViewStatus", function(data){
+	return $.get("/keyboardViewStatus", function(data){
 		$("#btnToggleKeyboard").toggleClass("active", !!(data && data.visible));
-	}, "json");
+		markTvConnectionHealthy();
+	}, "json").fail(function(){
+		markTvConnectionFailed();
+	});
 }
 $("#btnToggleKeyboard").on("click", function(){
 	vibrateShort();
@@ -2541,6 +2571,9 @@ $("#btnToggleKeyboard").on("click", function(){
 })
 refreshKeyboardViewBtn();
 setInterval(refreshKeyboardViewBtn, KEEPALIVE_INTERVAL_MS);
+document.addEventListener('visibilitychange', function(){
+	if (!document.hidden) refreshKeyboardViewBtn();
+});
 reloadAppList();
 loadFileList("");
 getDiskSpace();

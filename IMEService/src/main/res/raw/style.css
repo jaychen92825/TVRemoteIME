@@ -2751,6 +2751,63 @@ body {
 	-webkit-overflow-scrolling: touch;
 }
 
+.tv-connection-status {
+	position: sticky;
+	top: 0;
+	z-index: 1001;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 26px;
+	margin: 8px 12px 6px;
+	padding: 0 9px;
+	box-sizing: border-box;
+	border: 1px solid var(--color-border);
+	border-radius: 13px;
+	background: rgba(255,255,255,.94);
+	box-shadow: 0 1px 4px rgba(0,0,0,.06);
+	color: #747982;
+	font-size: 11px;
+	line-height: 1;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
+.tv-connection-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: #9aa0a6;
+	box-shadow: 0 0 0 2px rgba(154,160,166,.14);
+}
+
+.tv-connection-status.is-online {
+	color: #26734d;
+}
+
+.tv-connection-status.is-online .tv-connection-dot {
+	background: #34a56f;
+	box-shadow: 0 0 0 2px rgba(52,165,111,.14);
+}
+
+.tv-connection-status.is-reconnecting {
+	color: #9a6513;
+}
+
+.tv-connection-status.is-reconnecting .tv-connection-dot {
+	background: #d99a2b;
+	box-shadow: 0 0 0 2px rgba(217,154,43,.14);
+}
+
+.tv-connection-status.is-offline {
+	color: #b23b3b;
+}
+
+.tv-connection-status.is-offline .tv-connection-dot {
+	background: #d65353;
+	box-shadow: 0 0 0 2px rgba(214,83,83,.14);
+}
+
 /* 操作列表是全站唯一一个越宽越有用的视图——按钮/宫格类的界面本来就是照
    手机单手操作设计的，屏幕再宽也不需要占满；但操作列表按"行"紧凑排布
    (见.elements-row)，容器越宽，一行能并排塞下的条目就越多，行数、也就是
@@ -3744,6 +3801,14 @@ body {
    are intentionally shared by every view, but they are declared after the
    first mobile media block and would otherwise override its compact spacing. */
 @media (max-width: 640px) {
+	.tv-connection-status {
+		position: fixed;
+		top: max(8px, env(safe-area-inset-top));
+		right: 8px;
+		margin: 0;
+		z-index: 1100;
+	}
+
 	.tabs-row,
 	.container.media-wide-mode .tabs-row {
 		position: fixed;
