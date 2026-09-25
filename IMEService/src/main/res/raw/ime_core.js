@@ -30,6 +30,10 @@ var mediaPlaybackDragging = false;
 var mediaVolumeDragging = false;
 var mediaPlaybackActive = false;
 var mediaPlaybackHasSession = false;
+var mediaPlaybackPlaying = false;
+var mediaPlaybackSessionKey = '';
+var mediaPlaybackDismissedSessionKey = '';
+var mediaPlaybackPlayerKeyCode = '';
 var mediaPlaybackTogglePending = false;
 var mediaPlaybackMuted = false;
 var mediaRemoteReturnScrollTop = 0;
@@ -184,7 +188,7 @@ function postKeyCode(keyCode){
 			console.log(data);
 		});
 	};
-	if(keyCode === "21" || keyCode === "22" || keyCode === "23"){
+	if(mediaPlaybackActive && mediaPlaybackPlaying && (keyCode === "21" || keyCode === "22" || keyCode === "23")){
 		$.post("/player/control", {code:keyCode, action:"press"}, function(data){
 			if($.trim(data) !== "handled") fallback();
 		}).fail(fallback);
@@ -196,6 +200,11 @@ function postKeyActionCode(keyCode, keyAction){
 	curKeyCode = keyCode;
 	curKeyState = keyAction;
 	var shouldRepeat = keyCode === "19" || keyCode === "20" || keyCode === "21" || keyCode === "22" || keyCode === "67";
+	var isPlaybackShortcut = keyCode === "21" || keyCode === "22" || keyCode === "23";
+	if(keyAction == 1 && isPlaybackShortcut && mediaPlaybackActive && mediaPlaybackPlaying){
+		mediaPlaybackPlayerKeyCode = keyCode;
+	}
+	var routeToPlayer = isPlaybackShortcut && mediaPlaybackPlayerKeyCode === keyCode;
 	var action = function(){
 		var path = keyAction == 1 ? "/keydown" : "/keyup";
 		var onComplete = function(data){
@@ -210,7 +219,7 @@ function postKeyActionCode(keyCode, keyAction){
 		var fallback = function(){
 			$.post(path,{code:keyCode},onComplete);
 		};
-		if(keyCode === "21" || keyCode === "22" || keyCode === "23"){
+		if(routeToPlayer){
 			$.post("/player/control", {code:keyCode, action:keyAction == 1 ? "down" : "up"}, function(data){
 				if($.trim(data) === "handled"){
 					onComplete(data);
@@ -229,6 +238,9 @@ function postKeyActionCode(keyCode, keyAction){
 		}
 	}
 	action();
+	if(keyAction == 2 && mediaPlaybackPlayerKeyCode === keyCode){
+		mediaPlaybackPlayerKeyCode = '';
+	}
 }
 function clickApp(id,type){
 	var app=$("#app-"+id);
@@ -246,6 +258,17 @@ function clickApp(id,type){
 			}
 		});
 	}
+}
+
+function mediaPlaybackSessionIdentity(data){
+	return [
+		'request:' + String(data && data.requestId || ''),
+		String(data && data.sourceKey || ''),
+		String(data && (data.mediaId || data.canonicalId) || ''),
+		String(data && data.playId || ''),
+		String(data && data.mediaName || ''),
+		String(data && data.episode || '')
+	].join('|');
 }
 function postFileAction(action){
 	if(selectedPaths.length == 0) return;
@@ -1468,13 +1491,22 @@ function renderMediaPlaybackStatus(data){
 	var directStream = !!(data && data.directStream);
 	var playing = !!(data && data.playing);
 	var playbackState = String(data && data.state || '');
+	var hasPlaybackUi = active || hasSession;
+	var nextSessionKey = hasPlaybackUi ? mediaPlaybackSessionIdentity(data || {}) : '';
+	if(nextSessionKey && nextSessionKey !== mediaPlaybackSessionKey){
+		mediaPlaybackDismissedSessionKey = '';
+	}
+	mediaPlaybackSessionKey = nextSessionKey;
 	syncPendingMediaWebPlayback(data || {});
 	mediaPlaybackActive = active;
 	mediaPlaybackHasSession = hasSession;
-	$('#mediaPlaybackControls').toggleClass('hide', !(active || hasSession));
+	mediaPlaybackPlaying = !!(active && playing);
+	var hiddenByDismiss = !!(hasPlaybackUi && nextSessionKey && mediaPlaybackDismissedSessionKey === nextSessionKey);
+	$('#mediaPlaybackControls').toggleClass('hide', !hasPlaybackUi || hiddenByDismiss);
 	$('#mediaPlaybackControls').toggleClass('direct-stream', directStream);
-	$('.container').toggleClass('media-has-global-playback', active || hasSession);
-	if(!(active || hasSession)){
+	$('.container').toggleClass('media-has-global-playback', hasPlaybackUi && !hiddenByDismiss);
+	if(!hasPlaybackUi){
+		mediaPlaybackDismissedSessionKey = '';
 		mediaPlaybackDragging = false;
 		mediaVolumeDragging = false;
 		setMediaPlaybackPlayingUi(false, false);
@@ -1813,6 +1845,12 @@ $('#btnMediaPlaybackToggle').on('click', function(){
 	var expanded = !$('#mediaPlaybackControls').hasClass('expanded');
 	$('#mediaPlaybackControls').toggleClass('expanded', expanded);
 	$(this).attr('aria-expanded', expanded ? 'true' : 'false').attr('aria-label', expanded ? '收起播放控制' : '展开播放控制');
+});
+$('#btnMediaPlaybackDismiss').on('click', function(){
+	mediaPlaybackDismissedSessionKey = mediaPlaybackSessionKey;
+	$('#mediaPlaybackControls').removeClass('expanded').addClass('hide');
+	$('#btnMediaPlaybackToggle').attr('aria-expanded', 'false').attr('aria-label', '展开播放控制');
+	$('.container').removeClass('media-has-global-playback');
 });
 $('#btnMediaCompactPrimary').on('click', function(){
 	if(mediaPlaybackActive){
