@@ -32,6 +32,7 @@ var mediaPlaybackActive = false;
 var mediaPlaybackHasSession = false;
 var mediaPlaybackTogglePending = false;
 var mediaPlaybackMuted = false;
+var mediaRemoteReturnScrollTop = 0;
 var mediaWebPlaybackPendingCandidateId = '';
 var mediaWebPlaybackPendingRequestId = '';
 var mediaWebPlaybackPendingSince = 0;
@@ -1729,6 +1730,18 @@ $('#btnMediaMute').on('click', function(){
 		setTimeout(refreshMediaPlaybackStatus, 120);
 	}, 'json').fail(function(){ mediaMessage('静音切换失败，请稍后重试。'); });
 });
+$('#btnMediaOpenRemote').on('click', function(){
+	mediaRemoteReturnScrollTop = $('.container').scrollTop() || 0;
+	$('.container').addClass('media-remote-context');
+	$('#mediaPlaybackControls').removeClass('expanded');
+	$('#btnMediaPlaybackToggle').attr('aria-expanded', 'false').attr('aria-label', '展开播放控制');
+	switchMode('dpad');
+	$('div.tab[data-rel="controls"]').trigger('click');
+	$('.container').scrollTop(0);
+});
+$('#btnMediaReturnFromRemote').on('click', function(){
+	$('div.tab[data-rel="media"]').trigger('click');
+});
 $('#btnMediaStop').on('click', function(){
 	$.post('/player/stop', {}, function(data){
 		if(!data || data.handled === false) mediaMessage('当前没有正在播放的视频。');
@@ -2158,13 +2171,19 @@ $("#cbFileSelect").on("click",function(){
 })
 $("div.tab").on("click", function(){
 	var o = $(this);
+	var targetTab = o.attr('data-rel');
+	var restoreMediaPosition = $('.container').hasClass('media-remote-context') && targetTab === 'media';
+	if(targetTab !== 'controls') $('.container').removeClass('media-remote-context');
 	$(".cur").removeClass("cur");
 	tabs.addClass("hide");
-	tabs.filter('[data-tab="' + o.attr('data-rel')+ '"]').removeClass("hide");
+	tabs.filter('[data-tab="' + targetTab+ '"]').removeClass("hide");
 	o.addClass('cur');
 	updateContainerWidth();
 	updateElementsAutoRefresh();
 	updateMediaPlaybackPolling();
+	if(restoreMediaPosition){
+		setTimeout(function(){ $('.container').scrollTop(mediaRemoteReturnScrollTop); }, 0);
+	}
 })
 //方向键/操作列表这两个子Tab除了点标签切换，也支持在内容区左右滑动切换——
 //点两个小标签来回切总感觉要"精确瞄准"，直接在当前显示的面板上一划更顺手。
