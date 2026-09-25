@@ -188,7 +188,7 @@ function postKeyCode(keyCode){
 			console.log(data);
 		});
 	};
-	if(mediaPlaybackActive && mediaPlaybackPlaying && (keyCode === "21" || keyCode === "22" || keyCode === "23")){
+	if(mediaPlaybackOwnsRemoteKeys() && (keyCode === "21" || keyCode === "22" || keyCode === "23")){
 		$.post("/player/control", {code:keyCode, action:"press"}, function(data){
 			if($.trim(data) !== "handled") fallback();
 		}).fail(fallback);
@@ -201,7 +201,7 @@ function postKeyActionCode(keyCode, keyAction){
 	curKeyState = keyAction;
 	var shouldRepeat = keyCode === "19" || keyCode === "20" || keyCode === "21" || keyCode === "22" || keyCode === "67";
 	var isPlaybackShortcut = keyCode === "21" || keyCode === "22" || keyCode === "23";
-	if(keyAction == 1 && isPlaybackShortcut && mediaPlaybackActive && mediaPlaybackPlaying){
+	if(keyAction == 1 && isPlaybackShortcut && mediaPlaybackOwnsRemoteKeys()){
 		mediaPlaybackPlayerKeyCode = keyCode;
 	}
 	var routeToPlayer = isPlaybackShortcut && mediaPlaybackPlayerKeyCode === keyCode;
@@ -269,6 +269,10 @@ function mediaPlaybackSessionIdentity(data){
 		String(data && data.mediaName || ''),
 		String(data && data.episode || '')
 	].join('|');
+}
+function mediaPlaybackOwnsRemoteKeys(){
+	var dismissed = !!(mediaPlaybackSessionKey && mediaPlaybackDismissedSessionKey === mediaPlaybackSessionKey);
+	return mediaPlaybackActive && mediaPlaybackPlaying && !dismissed;
 }
 function postFileAction(action){
 	if(selectedPaths.length == 0) return;
