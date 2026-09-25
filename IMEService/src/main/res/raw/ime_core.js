@@ -1100,10 +1100,22 @@ function updateMediaDisplayMode(mode){
 	$('#btnMediaViewMode .media-view-grid-icon').toggleClass('hide', listMode);
 	$('#btnMediaViewMode .media-view-list-icon').toggleClass('hide', !listMode);
 }
+function mediaSectionLabel(section){
+	if(section === 'history') return '历史';
+	if(section === 'favorites') return '收藏';
+	if(section === 'web') return '网页视频';
+	return '浏览';
+}
+function closeMediaLibraryMenu(){
+	$('#mediaLibraryNav').removeClass('is-open');
+	$('#btnMediaLibraryMenu').attr('aria-expanded', 'false');
+}
 function selectMediaSection(section){
 	mediaSection = section || 'browse';
 	$('#mediaLibraryNav .media-library-tab').removeClass('active');
 	$('#mediaLibraryNav .media-library-tab[data-section="'+cssAttributeValue(mediaSection)+'"]').addClass('active');
+	$('#mediaLibraryCurrentLabel').text(mediaSectionLabel(mediaSection));
+	closeMediaLibraryMenu();
 }
 function loadMediaLibrary(section){
 	resetMediaPagination();
@@ -1649,6 +1661,15 @@ $('#btnMediaViewMode').on('click', function(){
 	updateMediaDisplayMode(mediaDisplayMode === 'grid' ? 'list' : 'grid');
 	renderMediaGrid(renderedMediaItems);
 });
+$('#btnMediaLibraryMenu').on('click', function(e){
+	e.stopPropagation();
+	var open = !$('#mediaLibraryNav').hasClass('is-open');
+	$('#mediaLibraryNav').toggleClass('is-open', open);
+	$(this).attr('aria-expanded', open ? 'true' : 'false');
+});
+$(document).on('click', function(e){
+	if(!$(e.target).closest('#btnMediaLibraryMenu,#mediaLibraryNav').length) closeMediaLibraryMenu();
+});
 $('#btnMediaSettingsBack').on('click', function(){
 	showMediaBrowse(true);
 });
@@ -1761,6 +1782,7 @@ $('#mediaQueueItems').on('click', '.media-queue-item:not(.current)', function(){
 });
 $('#mediaLibraryNav').on('click', '.media-library-tab', function(){
 	var section = $(this).attr('data-section') || 'browse';
+	closeMediaLibraryMenu();
 	if(section === 'web') showMediaWebView();
 	else if(section === 'browse') loadMediaHome();
 	else loadMediaLibrary(section);
