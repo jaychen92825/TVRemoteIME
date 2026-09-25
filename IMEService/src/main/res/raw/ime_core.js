@@ -681,7 +681,7 @@ function renderMediaContinue(items, requestVersion){
 	for(var j=0;j<filtered.length;j++){
 		var history = filtered[j];
 		var percent = Math.round(mediaHistoryProgress(history));
-		html.push('<button type="button" class="media-continue-card" data-source="'+escapeHtml(history.sourceKey)+'" data-id="'+escapeHtml(history.id)+'" title="继续观看 '+escapeHtml(history.name || '')+'">');
+		html.push('<button type="button" class="media-continue-card" data-index="'+j+'" data-source="'+escapeHtml(history.sourceKey)+'" data-id="'+escapeHtml(history.id)+'" title="继续观看 '+escapeHtml(history.name || '')+'">');
 		html.push(mediaPoster(history, true));
 		html.push('<span class="media-continue-copy"><span class="media-continue-title">'+escapeHtml(history.name || '未命名影片')+'</span><span class="media-continue-meta">'+escapeHtml(history.episode || '继续观看')+' · '+percent+'%</span></span>');
 		html.push('</button>');
@@ -1303,6 +1303,41 @@ function playMediaEpisode(sourceKey, flag, playId, title, episode){
 	}});
 }
 
+function playMediaHistoryItem(history){
+	if(!history || !history.sourceKey || !history.id || !history.playId) return;
+	var displayTitle = history.name || '';
+	if(history.episode) displayTitle += (displayTitle ? ' · ' : '') + history.episode;
+	mediaMessage('正在从上次位置继续播放…');
+	$.ajax({url:'/media/play', type:'POST', data:{
+		sourceKey:history.sourceKey || '',
+		sourceName:history.sourceName || '',
+		mediaId:history.id || '',
+		canonicalId:history.canonicalId || '',
+		mediaName:history.name || '',
+		pic:history.pic || '',
+		score:history.score || '',
+		remark:history.remark || '',
+		year:history.year || '',
+		type:history.type || '',
+		flag:history.flag || '',
+		playId:history.playId || '',
+		episode:history.episode || '',
+		title:displayTitle
+	}, dataType:'json', timeout:45000, success:function(data){
+		if(data && data.success === false){
+			mediaMessage('续播失败，正在打开详情页选择线路…');
+			loadMediaDetail(history.sourceKey, history.id);
+			return;
+		}
+		mediaMessage('已从上次位置发送到电视播放。');
+		refreshMediaPlaybackStatus();
+		updateMediaPlaybackPolling();
+	}, error:function(){
+		mediaMessage('续播解析超时，正在打开详情页选择线路…');
+		loadMediaDetail(history.sourceKey, history.id);
+	}});
+}
+
 function mediaRecoveryMessage(message, fallback, action){
 	var text = String(message || fallback || '请求失败').trim();
 	if(!action || /请|可以|建议|重试|切换|返回|检查/.test(text)) return text;
@@ -1814,7 +1849,10 @@ $('#btnMediaContinueAll').on('click', function(){
 	loadMediaLibrary('history');
 });
 $('#mediaContinueItems').on('click', '.media-continue-card', function(){
-	loadMediaDetail($(this).attr('data-source') || '', $(this).attr('data-id') || '');
+	var index = Number($(this).attr('data-index'));
+	var history = isNaN(index) ? null : mediaContinueItems[index];
+	if(history) playMediaHistoryItem(history);
+	else loadMediaDetail($(this).attr('data-source') || '', $(this).attr('data-id') || '');
 });
 $('#mediaHomeLibrary').on('click', '.media-home-card', function(){
 	loadMediaDetail($(this).attr('data-source') || '', $(this).attr('data-id') || '');
