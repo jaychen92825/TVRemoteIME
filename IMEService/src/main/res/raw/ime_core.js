@@ -55,6 +55,8 @@ var mediaWebSessionId = '';
 var mediaWebPollTimer = null;
 var mediaWebPollFailures = 0;
 var mediaWebLastCandidates = [];
+var LAST_MAIN_TAB_STORAGE_KEY = 'tapTvLastMainTab';
+var skipNextMainTabPersistence = false;
 try {
 	mediaDisplayMode = localStorage.getItem('mediaDisplayMode') === 'list' ? 'list' : 'grid';
 } catch(e) {}
@@ -2211,11 +2213,17 @@ $("div.tab").on("click", function(){
 	var o = $(this);
 	var targetTab = o.attr('data-rel');
 	var restoreMediaPosition = $('.container').hasClass('media-remote-context') && targetTab === 'media';
+	var isTemporaryMediaRemote = $('.container').hasClass('media-remote-context') && targetTab === 'controls';
+	var shouldSkipPersistence = skipNextMainTabPersistence;
+	skipNextMainTabPersistence = false;
 	if(targetTab !== 'controls') $('.container').removeClass('media-remote-context');
 	$(".cur").removeClass("cur");
 	tabs.addClass("hide");
 	tabs.filter('[data-tab="' + targetTab+ '"]').removeClass("hide");
 	o.addClass('cur');
+	if(!isTemporaryMediaRemote && !shouldSkipPersistence){
+		try { localStorage.setItem(LAST_MAIN_TAB_STORAGE_KEY, targetTab); } catch(e) {}
+	}
 	updateContainerWidth();
 	updateElementsAutoRefresh();
 	updateMediaPlaybackPolling();
@@ -2223,6 +2231,16 @@ $("div.tab").on("click", function(){
 		setTimeout(function(){ $('.container').scrollTop(mediaRemoteReturnScrollTop); }, 0);
 	}
 })
+
+function restoreLastMainTab(){
+	var targetTab = '';
+	try { targetTab = localStorage.getItem(LAST_MAIN_TAB_STORAGE_KEY) || ''; } catch(e) {}
+	if(!/^(controls|app|file|video|media)$/.test(targetTab) || targetTab === 'controls') return;
+	var $target = $('div.tab[data-rel="' + targetTab + '"]');
+	if($target.length) $target.trigger('click');
+}
+
+restoreLastMainTab();
 //方向键/操作列表这两个子Tab除了点标签切换，也支持在内容区左右滑动切换——
 //点两个小标签来回切总感觉要"精确瞄准"，直接在当前显示的面板上一划更顺手。
 var MODE_ORDER = ["dpad", "elements"];
@@ -2836,6 +2854,7 @@ function extractPlayUrlFromShare(){
 var sharedPlayUrl = extractPlayUrlFromShare();
 if (sharedPlayUrl) {
 	history.replaceState(null, '', location.pathname);
+	skipNextMainTabPersistence = true;
 	$('div.tab[data-rel="video"]').trigger('click');
 	$('#playUrl').val(sharedPlayUrl);
 	submitPlayUrl(sharedPlayUrl);
