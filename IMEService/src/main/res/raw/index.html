@@ -6,6 +6,9 @@
 	<title>TapTV</title>
 	<meta name="layoutmode" content="standard">
 	<meta name="theme-color" content="#3ea6ff">
+	<meta name="mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="default">
 	<link rel="manifest" href="/manifest.json">
 	<link rel="icon" href="/icon.png">
 	<link rel="apple-touch-icon" href="/icon.png">
@@ -17,6 +20,10 @@
 			<span class="tv-connection-dot" aria-hidden="true"></span>
 			<span id="tvConnectionStatusText">正在连接</span>
 		</div>
+		<button type="button" class="pwa-install-button" id="pwaInstallButton" aria-label="添加 TapTV 到主屏幕" title="添加到主屏幕" hidden>
+			<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M12 3v11m0 0-4-4m4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 15v4h14v-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+		</button>
+		<div class="pwa-install-hint" id="pwaInstallHint" role="status" aria-live="polite" hidden></div>
 	    <div class="tabs-row">
 		<div class="tabs">
 		  <div class="tab cur" data-rel="controls">

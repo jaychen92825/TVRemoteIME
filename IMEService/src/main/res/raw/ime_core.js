@@ -2660,6 +2660,75 @@ function loadDeviceName(){
 		}
 	});
 }
+
+var deferredPwaInstallPrompt = null;
+var pwaInstallHintTimer = null;
+
+function isStandaloneWebApp(){
+	return window.matchMedia && window.matchMedia('(display-mode: standalone)').matches
+		|| window.navigator.standalone === true;
+}
+
+function isMobileBrowser(){
+	return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '')
+		|| (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function isIosBrowser(){
+	return /iPhone|iPad|iPod/i.test(navigator.userAgent || '')
+		|| (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function showPwaInstallHint(message){
+	var hint = $('#pwaInstallHint');
+	if(!hint.length) return;
+	hint.text(message).prop('hidden', false);
+	if(pwaInstallHintTimer) clearTimeout(pwaInstallHintTimer);
+	pwaInstallHintTimer = setTimeout(function(){
+		hint.prop('hidden', true);
+	}, 5200);
+}
+
+function updatePwaInstallButton(){
+	var button = $('#pwaInstallButton');
+	if(!button.length) return;
+	button.prop('hidden', isStandaloneWebApp() || !isMobileBrowser());
+}
+
+window.addEventListener('beforeinstallprompt', function(event){
+	event.preventDefault();
+	deferredPwaInstallPrompt = event;
+	updatePwaInstallButton();
+});
+
+window.addEventListener('appinstalled', function(){
+	deferredPwaInstallPrompt = null;
+	$('#pwaInstallButton').prop('hidden', true);
+	showPwaInstallHint('TapTV 已添加到主屏幕');
+});
+
+$('#pwaInstallButton').on('click', function(){
+	if(deferredPwaInstallPrompt){
+		var prompt = deferredPwaInstallPrompt;
+		deferredPwaInstallPrompt = null;
+		prompt.prompt();
+		if(prompt.userChoice && typeof prompt.userChoice.then === 'function'){
+			prompt.userChoice.then(function(){
+				updatePwaInstallButton();
+			});
+		}else{
+			updatePwaInstallButton();
+		}
+		return;
+	}
+	if(isIosBrowser()){
+		showPwaInstallHint('Safari：点“分享”，再选“添加到主屏幕”');
+	}else{
+		showPwaInstallHint('浏览器菜单：选择“添加到主屏幕”或“安装应用”');
+	}
+});
+
+updatePwaInstallButton();
 //"睡眠"键(#sleep-btn)不需要这里单独写点击逻辑——它跟其它遥控键一样带
 //class="otherbtn"，上面通用的".otherbtn"点击处理器(postKeyCode(o.attr(
 //"data-key")))已经会把data-key="sleep"发出去，落到IMEService里"sleep"

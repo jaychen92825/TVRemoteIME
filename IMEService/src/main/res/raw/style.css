@@ -3054,6 +3054,49 @@ body {
 	box-shadow: 0 0 0 2px rgba(214,83,83,.14);
 }
 
+.pwa-install-button {
+	display: none;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: 1px solid var(--color-border);
+	border-radius: 50%;
+	background: rgba(255,255,255,.96);
+	box-shadow: 0 1px 4px rgba(0,0,0,.08);
+	color: #5f646c;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.pwa-install-button[hidden] {
+	display: none !important;
+}
+
+.pwa-install-hint {
+	position: fixed;
+	left: 50%;
+	top: max(48px, calc(env(safe-area-inset-top) + 48px));
+	z-index: 1200;
+	max-width: calc(100vw - 32px);
+	transform: translateX(-50%);
+	padding: 9px 12px;
+	box-sizing: border-box;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: rgba(27,31,36,.94);
+	box-shadow: 0 4px 14px rgba(0,0,0,.16);
+	color: #fff;
+	font-size: 12px;
+	line-height: 1.45;
+	text-align: center;
+}
+
+.pwa-install-hint[hidden] {
+	display: none !important;
+}
+
 /* 操作列表是全站唯一一个越宽越有用的视图——按钮/宫格类的界面本来就是照
    手机单手操作设计的，屏幕再宽也不需要占满；但操作列表按"行"紧凑排布
    (见.elements-row)，容器越宽，一行能并排塞下的条目就越多，行数、也就是
@@ -4047,6 +4090,14 @@ body {
    are intentionally shared by every view, but they are declared after the
    first mobile media block and would otherwise override its compact spacing. */
 @media (max-width: 640px) {
+	.pwa-install-button {
+		position: fixed;
+		display: inline-flex;
+		top: max(8px, env(safe-area-inset-top));
+		left: 8px;
+		z-index: 1100;
+	}
+
 	.tv-connection-status {
 		position: fixed;
 		top: max(8px, env(safe-area-inset-top));
