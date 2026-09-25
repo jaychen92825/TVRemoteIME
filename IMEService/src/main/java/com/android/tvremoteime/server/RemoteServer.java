@@ -333,7 +333,7 @@ public class RemoteServer extends NanoHTTPD
         storeSessionToken(token, new SessionRecord(System.currentTimeMillis(), hashAccessCode(accessCode)));
         noteClientActiveAndRefreshKeyboardView();
         Response resp = newFixedLengthResponse(Response.Status.OK, NanoHTTPD.MIME_HTML,
-                "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>location.replace('/');</script></head><body>登录成功，正在跳转…</body></html>");
+                "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>location.replace('/?paired=1');</script></head><body>登录成功，正在跳转…</body></html>");
         resp.addHeader("Set-Cookie", SESSION_COOKIE_NAME + "=" + token + "; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax");
         return resp;
     }

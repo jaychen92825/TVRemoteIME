@@ -2669,15 +2669,33 @@ function showCurrentVersion() {
 //是哪一台——水印文字直接显示在角标里，同时把它也写进页面标题，这样连浏览器
 //标签栏本身都能看出区别，不用先点进某个标签页才知道是哪台。没设置过名字时
 //什么都不显示，跟以前一样只有版本号。
-function loadDeviceName(){
+function consumePairingEntryMarker(){
+	var params = new URLSearchParams(location.search);
+	if(params.get('paired') !== '1') return false;
+	params.delete('paired');
+	var cleanUrl = location.pathname + (params.toString() ? '?' + params.toString() : '') + location.hash;
+	history.replaceState(null, '', cleanUrl);
+	return true;
+}
+
+function loadDeviceName(showPairingConfirmation){
 	$.get('/deviceName', function(name){
 		name = (name || '').trim();
 		if(name){
 			$('#deviceNameWatermark').text(name + ' · ');
 			document.title = name + ' - TapTV';
 		}
+		if(showPairingConfirmation){
+			showPwaInstallHint('已连接到' + (name ? '「' + name + '」' : '电视') + '，以后可直接打开 TapTV');
+		}
+	}).fail(function(){
+		if(showPairingConfirmation){
+			showPwaInstallHint('已连接到电视，以后可直接打开 TapTV');
+		}
 	});
 }
+
+var justPairedFromQr = consumePairingEntryMarker();
 
 var deferredPwaInstallPrompt = null;
 var pwaInstallHintTimer = null;
@@ -2860,6 +2878,6 @@ if (sharedPlayUrl) {
 	submitPlayUrl(sharedPlayUrl);
 }
 showCurrentVersion();
-loadDeviceName();
+loadDeviceName(justPairedFromQr);
 updateContainerWidth();
 updateElementsAutoRefresh();
