@@ -127,9 +127,6 @@ public final class WebVideoSniffer {
             obj.put("message", message);
             JSONArray items = new JSONArray();
             List<Candidate> ranked = new ArrayList<>(candidates.values());
-            for (int i = ranked.size() - 1; i >= 0; i--) {
-                if ("failed".equals(ranked.get(i).validationState)) ranked.remove(i);
-            }
             Collections.sort(ranked, new Comparator<Candidate>() {
                 @Override
                 public int compare(Candidate left, Candidate right) {
