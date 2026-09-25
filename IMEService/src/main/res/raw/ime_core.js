@@ -607,6 +607,7 @@ function playMediaWebCandidate(candidateId, button){
 			return;
 		}
 		mediaWebPlaybackPendingRequestId = String(data && data.requestId || '');
+		mediaWebPlaybackPendingSince = Date.now();
 		$('.media-web-play-btn').removeClass('playing loading').prop('disabled', false).find('span').text('电视播放');
 		$button.addClass('playing loading').prop('disabled', true).find('span').text('连接中…');
 		setMediaWebMeta('已发送到电视，正在确认播放状态'+(data && data.title ? ' · '+data.title : '')+'…', 'loading');
