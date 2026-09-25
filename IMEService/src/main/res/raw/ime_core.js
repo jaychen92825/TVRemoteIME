@@ -2678,13 +2678,17 @@ function consumePairingEntryMarker(){
 	return true;
 }
 
+var connectedTvName = '';
+
 function loadDeviceName(showPairingConfirmation){
 	$.get('/deviceName', function(name){
 		name = (name || '').trim();
+		connectedTvName = name;
 		if(name){
 			$('#deviceNameWatermark').text(name + ' · ');
 			document.title = name + ' - TapTV';
 		}
+		setTvConnectionState(tvConnectionState);
 		if(showPairingConfirmation){
 			showPwaInstallHint('已连接到' + (name ? '「' + name + '」' : '电视') + '，以后可直接打开 TapTV');
 		}
@@ -2786,18 +2790,21 @@ $.get("/accessibilityStatus", function(data){
 var KEEPALIVE_INTERVAL_MS = 4000;
 var TV_CONNECTION_OFFLINE_THRESHOLD = 3;
 var tvConnectionFailureCount = 0;
+var tvConnectionState = 'connecting';
 
 function setTvConnectionState(state){
 	var labels = {
-		connecting: '正在连接',
-		online: '电视在线',
-		reconnecting: '正在重连',
-		offline: '已离线'
+		connecting: '连接中',
+		online: '在线',
+		reconnecting: '重连中',
+		offline: '离线'
 	};
-	var label = labels[state] || labels.connecting;
+	tvConnectionState = labels[state] ? state : 'connecting';
+	var stateLabel = labels[tvConnectionState];
+	var label = connectedTvName ? connectedTvName + ' · ' + stateLabel : (tvConnectionState === 'online' ? '电视在线' : stateLabel);
 	var status = $('#tvConnectionStatus');
 	status.removeClass('is-connecting is-online is-reconnecting is-offline')
-		.addClass('is-' + state)
+		.addClass('is-' + tvConnectionState)
 		.attr('title', label);
 	$('#tvConnectionStatusText').text(label);
 }

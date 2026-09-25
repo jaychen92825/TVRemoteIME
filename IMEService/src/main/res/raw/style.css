@@ -3016,7 +3016,13 @@ body {
 	font-size: 11px;
 	line-height: 1;
 	white-space: nowrap;
+	max-width: min(240px, calc(100vw - 64px));
 	pointer-events: none;
+}
+
+#tvConnectionStatusText {
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .tv-connection-dot {
