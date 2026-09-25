@@ -1176,6 +1176,18 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                     // restart-only streams.
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "http-detect-range-support", 1);
 
+                    String scheme = mUri.getScheme();
+                    if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
+                        // Sniffed/CDN streams can briefly drop their HTTP connection.
+                        // These options are supported by the bundled ijkffmpeg and
+                        // keep transient network failures from becoming permanent
+                        // stalls while preserving normal EOF behavior for VOD.
+                        ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1);
+                        ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_streamed", 1);
+                        ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_delay_max", 3);
+                        ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rw_timeout", 15000000L);
+                    }
+
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48);
                 }
                 mediaPlayer = ijkMediaPlayer;
