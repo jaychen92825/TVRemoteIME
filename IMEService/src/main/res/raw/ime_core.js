@@ -1282,6 +1282,7 @@ function syncPendingMediaWebPlayback(data){
 	var statusRequestId = String(data && data.requestId || '');
 	var matchesPendingRequest = !!mediaWebPlaybackPendingRequestId && statusRequestId === mediaWebPlaybackPendingRequestId;
 	var state = String(data && data.state || '');
+	var pendingElapsed = mediaWebPlaybackPendingSince ? Date.now() - mediaWebPlaybackPendingSince : 0;
 	if(activeDirect && matchesPendingRequest){
 		if(state === 'error'){
 			var code = Number(data.errorCode) || 0;
@@ -1304,8 +1305,24 @@ function syncPendingMediaWebPlayback(data){
 			return;
 		}
 		if(state === 'buffering'){
+			if(pendingElapsed > 30000){
+				$button.prop('disabled', false).removeClass('playing loading').find('span').text('电视播放');
+				setMediaWebMeta('电视播放器缓冲超时，请重试或选择其他候选。', 'error');
+				mediaWebPlaybackPendingCandidateId = '';
+				mediaWebPlaybackPendingRequestId = '';
+				mediaWebPlaybackPendingSince = 0;
+				return;
+			}
 			$button.prop('disabled', true).addClass('playing loading').find('span').text('缓冲中…');
 			setMediaWebMeta('电视正在缓冲视频…', 'loading');
+			return;
+		}
+		if(pendingElapsed > 30000){
+			$button.prop('disabled', false).removeClass('playing loading').find('span').text('电视播放');
+			setMediaWebMeta('电视播放器启动超时，请重试或选择其他候选。', 'error');
+			mediaWebPlaybackPendingCandidateId = '';
+			mediaWebPlaybackPendingRequestId = '';
+			mediaWebPlaybackPendingSince = 0;
 			return;
 		}
 		$button.prop('disabled', true).addClass('playing loading').find('span').text('连接中…');
