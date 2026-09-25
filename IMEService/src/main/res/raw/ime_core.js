@@ -47,6 +47,9 @@ var mediaHasMore = false;
 var mediaPaginationObserver = null;
 var mediaContinueItems = [];
 var mediaContinueRequestVersion = 0;
+var mediaHomeFavoriteItems = [];
+var mediaHomeRecentItems = [];
+var mediaHomeLibraryRequestVersion = 0;
 var mediaWebSessionId = '';
 var mediaWebPollTimer = null;
 var mediaWebPollFailures = 0;
@@ -402,11 +405,18 @@ function mediaContinueContextActive(){
 	return mediaView === 'browse' && mediaSection === 'browse' && !currentMediaCategoryId && !mediaFolderStack.length && !mediaSearchStatusBase && !String($('#mediaSearchInput').val() || '').trim();
 }
 function updateMediaContinueVisibility(){
-	$('#mediaContinue').toggleClass('hide', !mediaContinueItems.length || !mediaContinueContextActive());
+	var active = mediaContinueContextActive();
+	$('#mediaContinue').toggleClass('hide', !mediaContinueItems.length || !active);
+	$('#mediaHomeFavorites').toggleClass('hide', !mediaHomeFavoriteItems.length || !active);
+	$('#mediaHomeRecent').toggleClass('hide', !mediaHomeRecentItems.length || !active);
+	$('#mediaHomeLibrary').toggleClass('hide', (!mediaHomeFavoriteItems.length && !mediaHomeRecentItems.length) || !active);
 }
 function hideMediaContinue(cancelPending){
-	if(cancelPending) mediaContinueRequestVersion++;
-	$('#mediaContinue').addClass('hide');
+	if(cancelPending){
+		mediaContinueRequestVersion++;
+		mediaHomeLibraryRequestVersion++;
+	}
+	$('#mediaContinue,#mediaHomeLibrary,#mediaHomeFavorites,#mediaHomeRecent').addClass('hide');
 }
 function showMediaBrowse(restorePosition){
 	clearMediaWebPoll();
@@ -678,14 +688,76 @@ function renderMediaContinue(items, requestVersion){
 	$('#mediaContinueItems').html(html.join(''));
 	updateMediaContinueVisibility();
 }
-function loadMediaContinueHome(){
-	var requestVersion = ++mediaContinueRequestVersion;
+function mediaHomeItemKey(item){
+	if(!item) return '';
+	return String(item.canonicalId || '') || [item.sourceKey || '', item.id || ''].join('|');
+}
+function mediaHomeShelfCard(item, meta){
+	return '<button type="button" class="media-home-card" data-source="'+escapeHtml(item.sourceKey || '')+'" data-id="'+escapeHtml(item.id || '')+'" title="'+escapeHtml(item.name || '')+'">'+
+		mediaPoster(item, true)+
+		'<span class="media-home-card-copy"><span class="media-home-card-title">'+escapeHtml(item.name || '未命名影片')+'</span><span class="media-home-card-meta">'+escapeHtml(meta || '')+'</span></span></button>';
+}
+function renderMediaHomeFavorites(items, requestVersion){
+	if(requestVersion !== mediaHomeLibraryRequestVersion) return;
+	var filtered = [];
+	for(var i=0;i<(items || []).length && filtered.length < 8;i++){
+		var item = items[i] || {};
+		if(!item.sourceKey || !item.id || !sourceByKey(item.sourceKey)) continue;
+		filtered.push(item);
+	}
+	mediaHomeFavoriteItems = filtered;
+	var html = [];
+	for(var j=0;j<filtered.length;j++){
+		var favorite = filtered[j];
+		var meta = favorite.year || favorite.type || favorite.remark || '已收藏';
+		html.push(mediaHomeShelfCard(favorite, meta));
+	}
+	$('#mediaHomeFavoriteItems').html(html.join(''));
+	updateMediaContinueVisibility();
+}
+function renderMediaHomeRecent(items, requestVersion){
+	if(requestVersion !== mediaHomeLibraryRequestVersion) return;
+	var filtered = [];
+	var continueKeys = {};
+	for(var i=0;i<mediaContinueItems.length;i++) continueKeys[mediaHomeItemKey(mediaContinueItems[i])] = true;
+	for(var j=0;j<(items || []).length && filtered.length < 8;j++){
+		var item = items[j] || {};
+		if(!item.sourceKey || !item.id || !sourceByKey(item.sourceKey)) continue;
+		if(continueKeys[mediaHomeItemKey(item)]) continue;
+		filtered.push(item);
+	}
+	mediaHomeRecentItems = filtered;
+	var html = [];
+	for(var k=0;k<filtered.length;k++){
+		var history = filtered[k];
+		var progress = Math.round(mediaHistoryProgress(history));
+		var meta = history.episode || (progress >= 95 ? '已看完' : '') || history.year || history.type || '最近观看';
+		html.push(mediaHomeShelfCard(history, meta));
+	}
+	$('#mediaHomeRecentItems').html(html.join(''));
+	updateMediaContinueVisibility();
+}
+function loadMediaHomeLibrary(){
+	var continueVersion = ++mediaContinueRequestVersion;
+	var requestVersion = ++mediaHomeLibraryRequestVersion;
 	$.get('/media/history', null, function(data){
-		renderMediaContinue(data && data.items ? data.items : [], requestVersion);
+		var items = data && data.items ? data.items : [];
+		renderMediaContinue(items, continueVersion);
+		renderMediaHomeRecent(items, requestVersion);
 	}, 'json').fail(function(){
-		if(requestVersion !== mediaContinueRequestVersion) return;
+		if(continueVersion !== mediaContinueRequestVersion || requestVersion !== mediaHomeLibraryRequestVersion) return;
 		mediaContinueItems = [];
+		mediaHomeRecentItems = [];
 		$('#mediaContinueItems').empty();
+		$('#mediaHomeRecentItems').empty();
+		updateMediaContinueVisibility();
+	});
+	$.get('/media/favorites', null, function(data){
+		renderMediaHomeFavorites(data && data.items ? data.items : [], requestVersion);
+	}, 'json').fail(function(){
+		if(requestVersion !== mediaHomeLibraryRequestVersion) return;
+		mediaHomeFavoriteItems = [];
+		$('#mediaHomeFavoriteItems').empty();
 		updateMediaContinueVisibility();
 	});
 }
@@ -822,7 +894,7 @@ function loadMediaHome(){
 		return;
 	}
 	currentMediaSourceKey = $('#mediaSourceSelect').val() || currentMediaSourceKey || firstSupportedSourceKey();
-	loadMediaContinueHome();
+	loadMediaHomeLibrary();
 	$('#mediaGrid').html(mediaStateHtml('正在加载首页', '', '', '', true));
 	$.ajax({url:'/media/home', data:{sourceKey:currentMediaSourceKey}, dataType:'json', timeout:65000, success:function(data){
 		if(data && data.success === false){
@@ -1708,6 +1780,12 @@ $('#btnMediaContinueAll').on('click', function(){
 });
 $('#mediaContinueItems').on('click', '.media-continue-card', function(){
 	loadMediaDetail($(this).attr('data-source') || '', $(this).attr('data-id') || '');
+});
+$('#mediaHomeLibrary').on('click', '.media-home-card', function(){
+	loadMediaDetail($(this).attr('data-source') || '', $(this).attr('data-id') || '');
+});
+$('#mediaHomeLibrary').on('click', '.media-home-shelf-all', function(){
+	loadMediaLibrary($(this).attr('data-library') || 'history');
 });
 $('.media-panel').on('click', '.media-state-action', function(){
 	var action = $(this).attr('data-media-action') || '';

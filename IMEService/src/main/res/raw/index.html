@@ -341,10 +341,26 @@
 			<section class="media-continue hide" id="mediaContinue" aria-label="继续观看">
 				<div class="media-continue-head">
 					<div class="media-section-title">继续观看</div>
-					<button type="button" class="media-continue-all" id="btnMediaContinueAll">全部历史</button>
+					<button type="button" class="media-continue-all" id="btnMediaContinueAll">查看全部</button>
 				</div>
 				<div class="media-continue-row" id="mediaContinueItems"></div>
 			</section>
+			<div class="media-home-library hide" id="mediaHomeLibrary">
+				<section class="media-home-shelf hide" id="mediaHomeFavorites" aria-label="收藏">
+					<div class="media-home-shelf-head">
+						<div class="media-section-title">收藏</div>
+						<button type="button" class="media-home-shelf-all" data-library="favorites">查看全部</button>
+					</div>
+					<div class="media-home-shelf-row" id="mediaHomeFavoriteItems"></div>
+				</section>
+				<section class="media-home-shelf hide" id="mediaHomeRecent" aria-label="最近观看">
+					<div class="media-home-shelf-head">
+						<div class="media-section-title">最近观看</div>
+						<button type="button" class="media-home-shelf-all" data-library="history">查看全部</button>
+					</div>
+					<div class="media-home-shelf-row" id="mediaHomeRecentItems"></div>
+				</section>
+			</div>
 			<div class="media-categories" id="mediaCategories"></div>
 			<div class="media-detail hide" id="mediaDetail"></div>
 			<div class="media-grid" id="mediaGrid"></div>
