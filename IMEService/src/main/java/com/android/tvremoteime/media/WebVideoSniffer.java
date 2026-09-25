@@ -552,7 +552,7 @@ public final class WebVideoSniffer {
                 }
                 ValidationResult hlsResult = validateHlsChain(result.finalUrl, text, headers);
                 hlsResult.httpCode = result.httpCode;
-                hlsResult.finalUrl = result.finalUrl;
+                if (TextUtils.isEmpty(hlsResult.finalUrl)) hlsResult.finalUrl = result.finalUrl;
                 hlsResult.contentType = result.contentType;
                 return hlsResult;
             }
@@ -699,6 +699,7 @@ public final class WebVideoSniffer {
             }
 
             result.ready = true;
+            result.finalUrl = mediaUrl;
             result.message = "已验证 HLS · " + ("live".equals(result.streamMode) ? "直播" : "点播");
             return result;
         } catch (Exception error) {
