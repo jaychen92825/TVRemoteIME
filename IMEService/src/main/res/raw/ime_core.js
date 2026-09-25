@@ -1452,6 +1452,8 @@ function renderMediaPlaybackSwitchers(data, hasSession){
 	if(!hasSession){
 		$('#mediaPlaybackSource,#mediaPlaybackRoute').html('');
 		$('#mediaPlaybackSwitchers').addClass('hide');
+		$('#mediaPlaybackRouting').addClass('hide').prop('open', false).removeClass('is-switching');
+		$('#mediaPlaybackRoutingLabel').text('自动选择最佳线路');
 		return;
 	}
 	var sourceOptions = [];
@@ -1481,7 +1483,11 @@ function renderMediaPlaybackSwitchers(data, hasSession){
 	}
 	var $route = $('#mediaPlaybackRoute').html(routeOptions.join(''));
 	$route.val(String(data.flag || '')).prop('disabled', routeOptions.length <= 1);
-	$('#mediaPlaybackSwitchers').toggleClass('hide', !sourceOptions.length && !routeOptions.length);
+	var hasManualChoices = sourceOptions.length > 1 || routeOptions.length > 1;
+	$('#mediaPlaybackSwitchers').toggleClass('hide', !hasManualChoices);
+	$('#mediaPlaybackRouting').removeClass('hide').toggleClass('is-switching', !!data.autoSwitching);
+	$('#mediaPlaybackRoutingLabel').text(data.autoSwitching ? '正在切换更稳定的线路…' : '自动选择最佳线路');
+	if(!hasManualChoices) $('#mediaPlaybackRouting').prop('open', false);
 }
 
 function mediaPlaybackSwitch(type, value){

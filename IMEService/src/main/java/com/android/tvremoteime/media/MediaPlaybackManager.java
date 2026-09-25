@@ -90,6 +90,9 @@ public class MediaPlaybackManager implements XLVideoPlayActivity.PlaybackLifecyc
     public void decorateStatus(JSONObject result) {
         JSONObject current = snapshot();
         try {
+            synchronized (this) {
+                result.put("autoSwitching", advancing);
+            }
             if (result.optBoolean("active") && result.optBoolean("directStream")) {
                 result.put("hasSession", false);
                 return;
