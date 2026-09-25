@@ -185,6 +185,7 @@ public final class WebVideoSniffer {
             addPlaybackHeaders(candidate.headers, candidate.url);
             playUrl = candidate.url;
             playHeaders.putAll(candidate.headers);
+            removeHeader(playHeaders, "Range");
             title = TextUtils.isEmpty(pageTitle) ? candidate.host : pageTitle;
         }
         mainHandler.post(new Runnable() {
@@ -1022,6 +1023,15 @@ public final class WebVideoSniffer {
             if (name.equalsIgnoreCase(entry.getKey())) return safe(entry.getValue());
         }
         return "";
+    }
+
+    private void removeHeader(Map<String, String> headers, String name) {
+        if (headers == null || TextUtils.isEmpty(name)) return;
+        List<String> matches = new ArrayList<>();
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            if (name.equalsIgnoreCase(entry.getKey())) matches.add(entry.getKey());
+        }
+        for (String key : matches) headers.remove(key);
     }
 
     private boolean isCurrent(String targetSessionId) {
