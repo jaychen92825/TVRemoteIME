@@ -33,6 +33,7 @@ var mediaPlaybackHasSession = false;
 var mediaPlaybackTogglePending = false;
 var mediaPlaybackMuted = false;
 var mediaWebPlaybackPendingCandidateId = '';
+var mediaWebPlaybackPendingRequestId = '';
 var mediaWebPlaybackPendingSince = 0;
 var mediaSearchAllItems = [];
 var mediaSearchFiltersAvailable = false;
@@ -566,6 +567,9 @@ function startMediaWebSniff(){
 	}
 	clearMediaWebPoll();
 	mediaWebSessionId = '';
+	mediaWebPlaybackPendingCandidateId = '';
+	mediaWebPlaybackPendingRequestId = '';
+	mediaWebPlaybackPendingSince = 0;
 	mediaWebPollFailures = 0;
 	mediaWebLastCandidates = [];
 	setMediaWebSniffBusy(true);
@@ -590,16 +594,19 @@ function playMediaWebCandidate(candidateId, button){
 	if(!mediaWebSessionId || !candidateId) return;
 	var $button = $(button);
 	mediaWebPlaybackPendingCandidateId = candidateId;
+	mediaWebPlaybackPendingRequestId = '';
 	mediaWebPlaybackPendingSince = Date.now();
 	$button.prop('disabled', true).addClass('loading').find('span').text('发送中…');
 	$.ajax({url:'/media/web/play', type:'POST', data:{sessionId:mediaWebSessionId,candidateId:candidateId}, dataType:'json', timeout:45000, success:function(data){
 		if(data && data.success === false){
 			mediaWebPlaybackPendingCandidateId = '';
+			mediaWebPlaybackPendingRequestId = '';
 			mediaWebPlaybackPendingSince = 0;
 			setMediaWebMeta(data.message || '发送到电视失败', 'error');
 			$button.prop('disabled', false).removeClass('loading').find('span').text('电视播放');
 			return;
 		}
+		mediaWebPlaybackPendingRequestId = String(data && data.requestId || '');
 		$('.media-web-play-btn').removeClass('playing loading').prop('disabled', false).find('span').text('电视播放');
 		$button.addClass('playing loading').prop('disabled', true).find('span').text('连接中…');
 		setMediaWebMeta('已发送到电视，正在确认播放状态'+(data && data.title ? ' · '+data.title : '')+'…', 'loading');
@@ -607,6 +614,7 @@ function playMediaWebCandidate(candidateId, button){
 		setTimeout(refreshMediaPlaybackStatus, 350);
 	}, error:function(){
 		mediaWebPlaybackPendingCandidateId = '';
+		mediaWebPlaybackPendingRequestId = '';
 		mediaWebPlaybackPendingSince = 0;
 		setMediaWebMeta('发送到电视超时，请重试。', 'error');
 		$button.prop('disabled', false).removeClass('loading').find('span').text('电视播放');
@@ -1270,8 +1278,10 @@ function syncPendingMediaWebPlayback(data){
 	var candidateId = mediaWebPlaybackPendingCandidateId;
 	var $button = $('.media-web-play-btn').filter(function(){ return String($(this).data('candidate') || '') === candidateId; }).first();
 	var activeDirect = !!(data && data.active && data.directStream);
+	var statusRequestId = String(data && data.requestId || '');
+	var matchesPendingRequest = !!mediaWebPlaybackPendingRequestId && statusRequestId === mediaWebPlaybackPendingRequestId;
 	var state = String(data && data.state || '');
-	if(activeDirect){
+	if(activeDirect && matchesPendingRequest){
 		if(state === 'error'){
 			var code = Number(data.errorCode) || 0;
 			var extra = Number(data.errorExtra) || 0;
@@ -1280,6 +1290,7 @@ function syncPendingMediaWebPlayback(data){
 			$button.prop('disabled', false).removeClass('playing loading').find('span').text('电视播放');
 			setMediaWebMeta(message, 'error');
 			mediaWebPlaybackPendingCandidateId = '';
+			mediaWebPlaybackPendingRequestId = '';
 			mediaWebPlaybackPendingSince = 0;
 			return;
 		}
@@ -1287,6 +1298,7 @@ function syncPendingMediaWebPlayback(data){
 			$button.prop('disabled', false).removeClass('loading').addClass('playing').find('span').text(state === 'paused' ? '已暂停' : '播放中');
 			setMediaWebMeta(state === 'paused' ? '电视已暂停，可从播放控制继续。' : '已在电视播放。', 'ready');
 			mediaWebPlaybackPendingCandidateId = '';
+			mediaWebPlaybackPendingRequestId = '';
 			mediaWebPlaybackPendingSince = 0;
 			return;
 		}
@@ -1303,6 +1315,7 @@ function syncPendingMediaWebPlayback(data){
 		$button.prop('disabled', false).removeClass('playing loading').find('span').text('电视播放');
 		setMediaWebMeta('电视播放器没有进入播放状态，请重试或选择其他候选。', 'error');
 		mediaWebPlaybackPendingCandidateId = '';
+		mediaWebPlaybackPendingRequestId = '';
 		mediaWebPlaybackPendingSince = 0;
 	}
 }

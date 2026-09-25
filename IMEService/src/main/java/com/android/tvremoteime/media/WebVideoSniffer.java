@@ -177,6 +177,7 @@ public final class WebVideoSniffer {
 
         final String playUrl;
         final String title;
+        final String requestId = UUID.randomUUID().toString();
         final Map<String, String> playHeaders = new HashMap<>();
         synchronized (lock) {
             if (!"ready".equals(candidate.validationState)) {
@@ -192,12 +193,13 @@ public final class WebVideoSniffer {
         mainHandler.post(new Runnable() {
             @Override
             public void run() {
-                VideoPlayHelper.playDirectStream(context, playUrl, title, playHeaders);
+                VideoPlayHelper.playDirectStream(context, playUrl, title, playHeaders, requestId);
             }
         });
         JSONObject obj = new JSONObject();
         obj.put("success", true);
         obj.put("candidateId", candidate.id);
+        obj.put("requestId", requestId);
         obj.put("title", title);
         return obj;
     }

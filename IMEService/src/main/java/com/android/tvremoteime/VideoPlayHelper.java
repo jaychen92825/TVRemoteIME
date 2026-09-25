@@ -18,8 +18,13 @@ import java.util.Map;
 
 public class VideoPlayHelper {
     public static void playDirectStream(Context context, String url, String title, Map<String, String> headers) {
+        playDirectStream(context, url, title, headers, null);
+    }
+
+    public static void playDirectStream(Context context, String url, String title,
+                                        Map<String, String> headers, String requestId) {
         XLVideoPlayActivity.intentToDirectStream(XLVideoPlayActivity.class, context, url,
-                TextUtils.isEmpty(title) ? url : title, headers);
+                TextUtils.isEmpty(title) ? url : title, headers, requestId);
     }
 
     public static void playUrl(Context context, String url, int videoIndex, boolean useSystem){

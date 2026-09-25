@@ -76,6 +76,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     private static volatile PlaybackLifecycleListener playbackLifecycleListener = null;
     private static final String EXTRA_DIRECT_STREAM = "directStream";
     private static final String EXTRA_DIRECT_HEADERS = "directHeaders";
+    private static final String EXTRA_DIRECT_REQUEST_ID = "directRequestId";
 
     public interface PlaybackLifecycleListener {
         int onPrepared(int durationMs);
@@ -106,6 +107,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     private Uri mVideoUri;
     private boolean mDirectStream;
     private Map<String, String> mDirectHeaders = new HashMap<>();
+    private String mDirectRequestId = "";
 
     protected IjkVideoView mVideoView;
     private TableLayout mHudView;
@@ -258,8 +260,15 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     public static <T extends XLVideoPlayActivity> Intent newDirectStreamIntent(
             Class<T> cls, Context context, String videoUrl, String videoTitle,
             Map<String, String> headers) {
+        return newDirectStreamIntent(cls, context, videoUrl, videoTitle, headers, null);
+    }
+
+    public static <T extends XLVideoPlayActivity> Intent newDirectStreamIntent(
+            Class<T> cls, Context context, String videoUrl, String videoTitle,
+            Map<String, String> headers, String requestId) {
         Intent intent = newIntent(cls, context, videoUrl, videoTitle, 0);
         intent.putExtra(EXTRA_DIRECT_STREAM, true);
+        if (!TextUtils.isEmpty(requestId)) intent.putExtra(EXTRA_DIRECT_REQUEST_ID, requestId);
         Bundle headerBundle = new Bundle();
         if (headers != null) {
             for (Map.Entry<String, String> entry : headers.entrySet()) {
@@ -275,8 +284,14 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     public static <T extends XLVideoPlayActivity> void intentToDirectStream(
             Class<T> cls, Context context, String videoUrl, String videoTitle,
             Map<String, String> headers) {
+        intentToDirectStream(cls, context, videoUrl, videoTitle, headers, null);
+    }
+
+    public static <T extends XLVideoPlayActivity> void intentToDirectStream(
+            Class<T> cls, Context context, String videoUrl, String videoTitle,
+            Map<String, String> headers, String requestId) {
         if (isRunning && runningInstance != null) runningInstance.finish();
-        context.startActivity(newDirectStreamIntent(cls, context, videoUrl, videoTitle, headers));
+        context.startActivity(newDirectStreamIntent(cls, context, videoUrl, videoTitle, headers, requestId));
     }
 
     public static boolean dispatchRemoteKeyEvent(int keyCode, int action) {
@@ -379,6 +394,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         public final boolean active;
         public final String title;
         public final boolean directStream;
+        public final String requestId;
         public final int position;
         public final int duration;
         public final boolean playing;
@@ -394,7 +410,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         public final WebTrackInfo[] audioTracks;
         public final WebTrackInfo[] subtitleTracks;
 
-        private WebPlaybackStatus(boolean active, String title, boolean directStream,
+        private WebPlaybackStatus(boolean active, String title, boolean directStream, String requestId,
                                   int position, int duration,
                                   boolean playing, float speed, boolean speedSupported,
                                   String state, long stateTimestamp,
@@ -404,6 +420,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             this.active = active;
             this.title = title;
             this.directStream = directStream;
+            this.requestId = requestId;
             this.position = position;
             this.duration = duration;
             this.playing = playing;
@@ -438,7 +455,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     public static WebPlaybackStatus getWebPlaybackStatus() {
         XLVideoPlayActivity activity = runningInstance;
         if (!isRunning || activity == null || activity.isFinishing()) {
-            return new WebPlaybackStatus(false, "", false, 0, 0, false, 1.0f, false,
+            return new WebPlaybackStatus(false, "", false, "", 0, 0, false, 1.0f, false,
                     "idle", 0L, 0, 0, "",
                     0, false, new WebTrackInfo[0], new WebTrackInfo[0]);
         }
@@ -485,6 +502,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         return new WebPlaybackStatus(true,
                 activity.mVideoTitle == null ? "" : activity.mVideoTitle,
                 activity.mDirectStream,
+                activity.mDirectRequestId == null ? "" : activity.mDirectRequestId,
                 Math.max(0, position), Math.max(0, duration),
                 playing, activity.webPlaybackSpeed, activity.webPlaybackSpeedSupported,
                 activity.webPlaybackState, activity.webPlaybackStateTimestamp,
@@ -1018,6 +1036,8 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
         Intent intent = getIntent();
         mDirectStream = intent.getBooleanExtra(EXTRA_DIRECT_STREAM, false);
+        mDirectRequestId = intent.getStringExtra(EXTRA_DIRECT_REQUEST_ID);
+        if (mDirectRequestId == null) mDirectRequestId = "";
         Bundle directHeaderBundle = intent.getBundleExtra(EXTRA_DIRECT_HEADERS);
         if (directHeaderBundle != null) {
             for (String key : directHeaderBundle.keySet()) {

@@ -180,6 +180,7 @@ public class InputRequestProcesser implements RequestProcesser {
         try {
             result.put("active", status.active);
             result.put("directStream", status.directStream);
+            result.put("requestId", status.requestId == null ? "" : status.requestId);
             if (status.active && status.title != null && !status.title.isEmpty()) {
                 result.put("mediaName", status.title);
             }
