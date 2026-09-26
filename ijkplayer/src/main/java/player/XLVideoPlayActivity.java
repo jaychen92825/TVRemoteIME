@@ -46,10 +46,14 @@ import player.settings.GlobalSettings;
 import player.widget.media.IjkVideoView;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
+import tv.danmaku.ijk.media.player.misc.ITrackInfo;
 import xllib.FileUtils;
 import xllib.PlayListItem;
 import xllib.PlayListItemAdapter;
 import xllib.views.FocusFixedLinearLayoutManager;
+
+import java.util.HashMap;
+import java.util.Map;
 
 
 public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPreparedListener,
@@ -64,14 +68,46 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     protected static final int MESSAGE_HIDE_CENTER_BOX = 4;
     private static final int MESSAGE_RESTART_PLAY = 5;
     private static final int MESSAGE_LIVE_RESTART = 6;
+    private static final int MESSAGE_SESSION_PROGRESS = 7;
 
-    private static boolean isRunning = false;
-    private static XLVideoPlayActivity runningInstance = null;
+    private static volatile boolean isRunning = false;
+    private static volatile boolean isForeground = false;
+    private static volatile XLVideoPlayActivity runningInstance = null;
+    private static volatile PlaybackLifecycleListener playbackLifecycleListener = null;
+    private static final String EXTRA_DIRECT_STREAM = "directStream";
+    private static final String EXTRA_DIRECT_HEADERS = "directHeaders";
+    private static final String EXTRA_DIRECT_REQUEST_ID = "directRequestId";
+
+    public interface PlaybackLifecycleListener {
+        int onPrepared(int durationMs);
+        void onProgress(int positionMs, int durationMs, boolean playing);
+        boolean onCompletion();
+        boolean onPlaybackError();
+        void onStopped(int positionMs, int durationMs);
+    }
+
+    public static void setPlaybackLifecycleListener(PlaybackLifecycleListener listener) {
+        playbackLifecycleListener = listener;
+    }
+
+    public static void finishCurrentPlayback() {
+        final XLVideoPlayActivity activity = runningInstance;
+        if (activity == null || activity.isFinishing()) return;
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity == runningInstance && !activity.isFinishing()) activity.finish();
+            }
+        });
+    }
 
     private String mVideoPath;
     private String mVideoTitle;
     private int mVideoIndex;
     private Uri mVideoUri;
+    private boolean mDirectStream;
+    private Map<String, String> mDirectHeaders = new HashMap<>();
+    private String mDirectRequestId = "";
 
     protected IjkVideoView mVideoView;
     private TableLayout mHudView;
@@ -94,6 +130,19 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     private boolean instantSeeking = false;
     private boolean portrait;
     private int currentPosition;
+    private volatile int webPlaybackPosition;
+    private volatile int webPlaybackDuration;
+    private volatile boolean webPlaybackPlaying;
+    private volatile float webPlaybackSpeed = 1.0f;
+    private volatile boolean webPlaybackSpeedSupported;
+    private volatile String webPlaybackState = "idle";
+    private volatile long webPlaybackStateTimestamp;
+    private volatile int webPlaybackErrorCode;
+    private volatile int webPlaybackErrorExtra;
+    private volatile String webPlaybackErrorMessage = "";
+    private volatile int webVolumeBeforeMute = -1;
+    private int webSeekTarget = -1;
+    private long webSeekTargetTimestamp;
 
     private WakeLock mWakeLock = null;
 
@@ -128,6 +177,14 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                 seekTo(0);
                 start();
                 doPauseResume();
+            } else if (v.getId() == R.id.app_video_rewind) {
+                previewKeySeek(-GlobalSettings.FastForwardInterval);
+                finishKeySeek();
+                show(defaultTimeout);
+            } else if (v.getId() == R.id.app_video_fast_forward) {
+                previewKeySeek(GlobalSettings.FastForwardInterval);
+                finishKeySeek();
+                show(defaultTimeout);
             }else if(v.getId() == R.id.app_play_btn_play_list){
                 if(playListView != null){
                     if(playListView.isShown()){
@@ -188,7 +245,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     }
     public static <T extends XLVideoPlayActivity> void intentTo(Class<T> cls, Context context, String videoPath, String videoTitle, int videoIndex) {
         if(isRunning && runningInstance != null){
-            if(runningInstance.getClass() == cls) {
+            if(runningInstance.getClass() == cls && !runningInstance.mDirectStream) {
                 runningInstance.resetVideoPath(videoPath, videoIndex);
             }else{
                 runningInstance.finish();
@@ -197,6 +254,710 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         }
         else {
             context.startActivity(newIntent(cls, context, videoPath, videoTitle, videoIndex));
+        }
+    }
+
+    public static <T extends XLVideoPlayActivity> Intent newDirectStreamIntent(
+            Class<T> cls, Context context, String videoUrl, String videoTitle,
+            Map<String, String> headers) {
+        return newDirectStreamIntent(cls, context, videoUrl, videoTitle, headers, null);
+    }
+
+    public static <T extends XLVideoPlayActivity> Intent newDirectStreamIntent(
+            Class<T> cls, Context context, String videoUrl, String videoTitle,
+            Map<String, String> headers, String requestId) {
+        Intent intent = newIntent(cls, context, videoUrl, videoTitle, 0);
+        intent.putExtra(EXTRA_DIRECT_STREAM, true);
+        if (!TextUtils.isEmpty(requestId)) intent.putExtra(EXTRA_DIRECT_REQUEST_ID, requestId);
+        Bundle headerBundle = new Bundle();
+        if (headers != null) {
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                if (!TextUtils.isEmpty(entry.getKey()) && entry.getValue() != null) {
+                    headerBundle.putString(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+        intent.putExtra(EXTRA_DIRECT_HEADERS, headerBundle);
+        return intent;
+    }
+
+    public static <T extends XLVideoPlayActivity> void intentToDirectStream(
+            Class<T> cls, Context context, String videoUrl, String videoTitle,
+            Map<String, String> headers) {
+        intentToDirectStream(cls, context, videoUrl, videoTitle, headers, null);
+    }
+
+    public static <T extends XLVideoPlayActivity> void intentToDirectStream(
+            Class<T> cls, Context context, String videoUrl, String videoTitle,
+            Map<String, String> headers, String requestId) {
+        if (isRunning && runningInstance != null) runningInstance.finish();
+        context.startActivity(newDirectStreamIntent(cls, context, videoUrl, videoTitle, headers, requestId));
+    }
+
+    public static boolean dispatchRemoteKeyEvent(int keyCode, int action) {
+        final XLVideoPlayActivity activity = runningInstance;
+        final int remoteKeyCode = keyCode;
+        final int remoteAction = action;
+        if (!isRunning || !isForeground || activity == null || activity.isFinishing()
+                || (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP)) {
+            return false;
+        }
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_BACK:
+            case KeyEvent.KEYCODE_ESCAPE:
+                activity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (activity != runningInstance || !isForeground || activity.isFinishing()) {
+                            return;
+                        }
+                        long eventTime = android.os.SystemClock.uptimeMillis();
+                        activity.dispatchKeyEvent(new KeyEvent(eventTime, eventTime, remoteAction, remoteKeyCode, 0));
+                    }
+                });
+                return true;
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                activity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (activity != runningInstance || !isForeground || activity.isFinishing()) {
+                            return;
+                        }
+                        activity.handleRemotePlayerControl(remoteKeyCode, remoteAction);
+                    }
+                });
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public static boolean dispatchDirectPlayerControl(int keyCode, int action) {
+        final XLVideoPlayActivity activity = runningInstance;
+        final int remoteKeyCode = keyCode;
+        final int remoteAction = action;
+        if (!isRunning || activity == null || activity.isFinishing()
+                || (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP)) {
+            return false;
+        }
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                if (Looper.myLooper() == Looper.getMainLooper()) {
+                    return activity.handleDirectWebPlayerControl(remoteKeyCode, remoteAction);
+                }
+                activity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (activity != runningInstance || activity.isFinishing()) {
+                            return;
+                        }
+                        Log.d(activity.TAG, "direct web player control key=" + remoteKeyCode + " action=" + remoteAction);
+                        activity.handleDirectWebPlayerControl(remoteKeyCode, remoteAction);
+                    }
+                });
+                // The HTTP server runs off the player UI thread. Treat a successfully
+                // queued command as handled instead of timing out and falling back to
+                // a synthetic D-pad event, which can trigger unrelated player actions.
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public static final class WebPlaybackStatus {
+        public final boolean active;
+        public final String title;
+        public final boolean directStream;
+        public final String requestId;
+        public final int position;
+        public final int duration;
+        public final boolean playing;
+        public final float speed;
+        public final boolean speedSupported;
+        public final String state;
+        public final long stateTimestamp;
+        public final int errorCode;
+        public final int errorExtra;
+        public final String errorMessage;
+        public final int volume;
+        public final boolean muted;
+        public final WebTrackInfo[] audioTracks;
+        public final WebTrackInfo[] subtitleTracks;
+
+        private WebPlaybackStatus(boolean active, String title, boolean directStream, String requestId,
+                                  int position, int duration,
+                                  boolean playing, float speed, boolean speedSupported,
+                                  String state, long stateTimestamp,
+                                  int errorCode, int errorExtra, String errorMessage,
+                                  int volume, boolean muted,
+                                  WebTrackInfo[] audioTracks, WebTrackInfo[] subtitleTracks) {
+            this.active = active;
+            this.title = title;
+            this.directStream = directStream;
+            this.requestId = requestId;
+            this.position = position;
+            this.duration = duration;
+            this.playing = playing;
+            this.speed = speed;
+            this.speedSupported = speedSupported;
+            this.state = state;
+            this.stateTimestamp = stateTimestamp;
+            this.errorCode = errorCode;
+            this.errorExtra = errorExtra;
+            this.errorMessage = errorMessage;
+            this.volume = volume;
+            this.muted = muted;
+            this.audioTracks = audioTracks;
+            this.subtitleTracks = subtitleTracks;
+        }
+    }
+
+    public static final class WebTrackInfo {
+        public final int index;
+        public final String language;
+        public final String info;
+        public final boolean selected;
+
+        private WebTrackInfo(int index, String language, String info, boolean selected) {
+            this.index = index;
+            this.language = language;
+            this.info = info;
+            this.selected = selected;
+        }
+    }
+
+    public static WebPlaybackStatus getWebPlaybackStatus() {
+        XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing()) {
+            return new WebPlaybackStatus(false, "", false, "", 0, 0, false, 1.0f, false,
+                    "idle", 0L, 0, 0, "",
+                    0, false, new WebTrackInfo[0], new WebTrackInfo[0]);
+        }
+        int position = activity.webPlaybackPosition;
+        int duration = activity.webPlaybackDuration;
+        boolean playing = activity.webPlaybackPlaying;
+        if (activity.mVideoView != null) {
+            int actualPosition = activity.mVideoView.getCurrentPosition();
+            int actualDuration = activity.mVideoView.getDuration();
+            boolean transientZero = actualPosition == 0
+                    && activity.webPlaybackPosition > 0
+                    && activity.status != activity.STATUS_COMPLETED;
+            if (actualPosition >= 0 && !transientZero) {
+                position = actualPosition;
+                activity.webPlaybackPosition = actualPosition;
+            }
+            if (activity.webSeekTarget >= 0) {
+                long seekAge = android.os.SystemClock.elapsedRealtime() - activity.webSeekTargetTimestamp;
+                if (Math.abs(actualPosition - activity.webSeekTarget) <= 1500 || seekAge > 5000) {
+                    activity.webSeekTarget = -1;
+                }
+            }
+            if (actualDuration > 0) {
+                duration = actualDuration;
+                activity.webPlaybackDuration = actualDuration;
+            }
+            playing = activity.mVideoView.isPlaying();
+            activity.webPlaybackPlaying = playing;
+            if (activity.mDirectStream && playing
+                    && !"buffering".equals(activity.webPlaybackState)
+                    && !"error".equals(activity.webPlaybackState)
+                    && !"completed".equals(activity.webPlaybackState)) {
+                activity.setDirectPlaybackState("playing");
+            }
+            if (activity.webPlaybackSpeedSupported) {
+                activity.webPlaybackSpeed = activity.mVideoView.getPlaybackSpeed();
+            }
+        }
+        if (duration > 0) {
+            position = Math.min(duration, position);
+        }
+        int volume = activity.getWebVolumePercent();
+        WebTrackInfo[][] tracks = activity.getWebTracks();
+        return new WebPlaybackStatus(true,
+                activity.mVideoTitle == null ? "" : activity.mVideoTitle,
+                activity.mDirectStream,
+                activity.mDirectRequestId == null ? "" : activity.mDirectRequestId,
+                Math.max(0, position), Math.max(0, duration),
+                playing, activity.webPlaybackSpeed, activity.webPlaybackSpeedSupported,
+                activity.webPlaybackState, activity.webPlaybackStateTimestamp,
+                activity.webPlaybackErrorCode, activity.webPlaybackErrorExtra,
+                activity.webPlaybackErrorMessage,
+                volume, volume <= 0, tracks[0], tracks[1]);
+    }
+
+    public static boolean dispatchStopPlayback() {
+        final XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing()) {
+            return false;
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity == runningInstance && !activity.isFinishing()) activity.finish();
+            }
+        });
+        return true;
+    }
+
+    public static boolean dispatchVolumePercent(final int percent) {
+        final XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing() || percent < 0 || percent > 100) {
+            return false;
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return activity.setVolumePercentForWeb(percent);
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity == runningInstance && !activity.isFinishing()) {
+                    activity.setVolumePercentForWeb(percent);
+                }
+            }
+        });
+        return true;
+    }
+
+    public static boolean dispatchMute(final boolean muted) {
+        final XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing()) {
+            return false;
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return activity.setMutedForWeb(muted);
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity == runningInstance && !activity.isFinishing()) {
+                    activity.setMutedForWeb(muted);
+                }
+            }
+        });
+        return true;
+    }
+
+    public static boolean dispatchTrackSelection(final String kind, final int index) {
+        final XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing()) {
+            return false;
+        }
+        if (!"audio".equals(kind) && !"subtitle".equals(kind)) {
+            return false;
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return activity.selectTrackForWeb(kind, index);
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity == runningInstance && !activity.isFinishing()) {
+                    activity.selectTrackForWeb(kind, index);
+                }
+            }
+        });
+        return true;
+    }
+
+    public static boolean dispatchAbsoluteSeek(final int positionMs) {
+        final XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing()) {
+            return false;
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return activity.seekAbsoluteForWeb(positionMs);
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity == runningInstance && !activity.isFinishing()) {
+                    activity.seekAbsoluteForWeb(positionMs);
+                }
+            }
+        });
+        return true;
+    }
+
+    public static boolean dispatchPlaybackSpeed(final float speed) {
+        final XLVideoPlayActivity activity = runningInstance;
+        if (!isRunning || activity == null || activity.isFinishing() || speed < 0.5f || speed > 3.0f) {
+            return false;
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return activity.setPlaybackSpeedForWeb(speed);
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity == runningInstance && !activity.isFinishing()) {
+                    activity.setPlaybackSpeedForWeb(speed);
+                }
+            }
+        });
+        return true;
+    }
+
+    private boolean handleDirectWebPlayerControl(int keyCode, int action) {
+        if (mVideoView == null) {
+            return false;
+        }
+        if (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP) {
+            return false;
+        }
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+                if (action == KeyEvent.ACTION_DOWN) {
+                    previewKeySeek(-GlobalSettings.FastForwardInterval);
+                } else {
+                    finishKeySeek();
+                }
+                return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                if (action == KeyEvent.ACTION_DOWN) {
+                    previewKeySeek(GlobalSettings.FastForwardInterval);
+                } else {
+                    finishKeySeek();
+                }
+                return true;
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+                if (action == KeyEvent.ACTION_UP) {
+                    return true;
+                }
+                return togglePlaybackForWeb();
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+                if (action == KeyEvent.ACTION_UP) {
+                    return true;
+                }
+                if (!mVideoView.isPlaying()) {
+                    start();
+                    updatePausePlay();
+                    show(defaultTimeout);
+                }
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+                if (action == KeyEvent.ACTION_UP) {
+                    return true;
+                }
+                if (mVideoView.isPlaying()) {
+                    getCurrentPosition();
+                    statusChange(STATUS_PAUSE);
+                    pause();
+                    updatePausePlay();
+                    show(defaultTimeout);
+                }
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private int getReliableSeekPosition() {
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (webSeekTarget >= 0 && now - webSeekTargetTimestamp < 1200) {
+            return webSeekTarget;
+        }
+        int playerPosition = mVideoView.getCurrentPosition();
+        if (playerPosition > 0) {
+            currentPosition = playerPosition;
+            return playerPosition;
+        }
+
+        // IjkVideoView returns 0 while it is temporarily outside playback state
+        // (for example while buffering/seeking). Do not turn that transient value
+        // into a seek back to the start when we already have a valid position.
+        if (currentPosition > 0 && status != STATUS_COMPLETED) {
+            return currentPosition;
+        }
+        return Math.max(0, playerPosition);
+    }
+
+    private void markSeekableVod(int durationMs) {
+        if (durationMs <= 0) {
+            return;
+        }
+        if (isLive) {
+            isLive = false;
+            isLiveRestarted = false;
+            handler.removeMessages(MESSAGE_LIVE_RESTART);
+        }
+        webPlaybackDuration = durationMs;
+    }
+
+    private boolean seekAbsoluteForWeb(int positionMs) {
+        if (mVideoView == null) {
+            return false;
+        }
+        int duration = mVideoView.getDuration();
+        if (duration <= 0) {
+            duration = webPlaybackDuration;
+        }
+        // This legacy player labels every http/https URL as "live". TVBox VOD
+        // streams are also HTTP, so seekability must be based on a real duration
+        // instead of the URL classification.
+        if (duration <= 0) {
+            return false;
+        }
+        markSeekableVod(duration);
+        int target = Math.max(0, positionMs);
+        target = Math.min(duration, target);
+        handler.removeMessages(MESSAGE_SEEK_NEW_POSITION);
+        changeProgressByKey = false;
+        seekStartPosition = -1;
+        newPosition = -1;
+        webSeekTarget = target;
+        webSeekTargetTimestamp = android.os.SystemClock.elapsedRealtime();
+        seekTo(target);
+        show(defaultTimeout);
+        return true;
+    }
+
+    private boolean setPlaybackSpeedForWeb(float speed) {
+        if (mVideoView == null) {
+            return false;
+        }
+        boolean supported;
+        try {
+            supported = mVideoView.setPlaybackSpeed(speed);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "unable to set web playback speed", e);
+            supported = false;
+        }
+        webPlaybackSpeedSupported = supported;
+        if (supported) {
+            webPlaybackSpeed = mVideoView.getPlaybackSpeed();
+            refreshWebPlaybackSnapshot();
+        }
+        return supported;
+    }
+
+    private int getWebVolumePercent() {
+        if (audioManager == null) return 0;
+        int max = Math.max(1, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+        int current = Math.max(0, audioManager.getStreamVolume(AudioManager.STREAM_MUSIC));
+        return Math.max(0, Math.min(100, Math.round(current * 100f / max)));
+    }
+
+    private boolean setVolumePercentForWeb(int percent) {
+        if (audioManager == null) return false;
+        int max = Math.max(1, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+        int target = Math.max(0, Math.min(max, Math.round(max * percent / 100f)));
+        if (target > 0) webVolumeBeforeMute = target;
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0);
+        return true;
+    }
+
+    private boolean setMutedForWeb(boolean muted) {
+        if (audioManager == null) return false;
+        int current = Math.max(0, audioManager.getStreamVolume(AudioManager.STREAM_MUSIC));
+        if (muted) {
+            if (current > 0) webVolumeBeforeMute = current;
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0);
+        } else if (current == 0) {
+            int max = Math.max(1, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+            int restore = webVolumeBeforeMute > 0 ? webVolumeBeforeMute : Math.max(1, max / 2);
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, Math.min(max, restore), 0);
+        }
+        return true;
+    }
+
+    private WebTrackInfo[][] getWebTracks() {
+        WebTrackInfo[] empty = new WebTrackInfo[0];
+        if (mVideoView == null) return new WebTrackInfo[][]{empty, empty};
+        ITrackInfo[] infos;
+        try {
+            infos = mVideoView.getTrackInfo();
+        } catch (RuntimeException e) {
+            return new WebTrackInfo[][]{empty, empty};
+        }
+        if (infos == null || infos.length == 0) return new WebTrackInfo[][]{empty, empty};
+
+        int selectedAudio = mVideoView.getSelectedTrack(ITrackInfo.MEDIA_TRACK_TYPE_AUDIO);
+        int selectedTimedText = mVideoView.getSelectedTrack(ITrackInfo.MEDIA_TRACK_TYPE_TIMEDTEXT);
+        int selectedSubtitle = mVideoView.getSelectedTrack(ITrackInfo.MEDIA_TRACK_TYPE_SUBTITLE);
+        java.util.ArrayList<WebTrackInfo> audio = new java.util.ArrayList<>();
+        java.util.ArrayList<WebTrackInfo> subtitles = new java.util.ArrayList<>();
+        for (int i = 0; i < infos.length; i++) {
+            ITrackInfo info = infos[i];
+            if (info == null) continue;
+            int type = info.getTrackType();
+            String language = info.getLanguage();
+            String inline = info.getInfoInline();
+            if (type == ITrackInfo.MEDIA_TRACK_TYPE_AUDIO) {
+                audio.add(new WebTrackInfo(i, language, inline, i == selectedAudio));
+            } else if (type == ITrackInfo.MEDIA_TRACK_TYPE_TIMEDTEXT
+                    || type == ITrackInfo.MEDIA_TRACK_TYPE_SUBTITLE) {
+                boolean selected = i == selectedTimedText || i == selectedSubtitle;
+                subtitles.add(new WebTrackInfo(i, language, inline, selected));
+            }
+        }
+        return new WebTrackInfo[][]{
+                audio.toArray(new WebTrackInfo[audio.size()]),
+                subtitles.toArray(new WebTrackInfo[subtitles.size()])
+        };
+    }
+
+    private boolean selectTrackForWeb(String kind, int index) {
+        if (mVideoView == null) return false;
+        ITrackInfo[] infos = mVideoView.getTrackInfo();
+        if ("subtitle".equals(kind) && index < 0) {
+            int timedText = mVideoView.getSelectedTrack(ITrackInfo.MEDIA_TRACK_TYPE_TIMEDTEXT);
+            int subtitle = mVideoView.getSelectedTrack(ITrackInfo.MEDIA_TRACK_TYPE_SUBTITLE);
+            if (timedText >= 0) mVideoView.deselectTrack(timedText);
+            if (subtitle >= 0 && subtitle != timedText) mVideoView.deselectTrack(subtitle);
+            return true;
+        }
+        if (infos == null || index < 0 || index >= infos.length || infos[index] == null) return false;
+        int type = infos[index].getTrackType();
+        if ("audio".equals(kind) && type != ITrackInfo.MEDIA_TRACK_TYPE_AUDIO) return false;
+        if ("subtitle".equals(kind)
+                && type != ITrackInfo.MEDIA_TRACK_TYPE_TIMEDTEXT
+                && type != ITrackInfo.MEDIA_TRACK_TYPE_SUBTITLE) return false;
+        mVideoView.selectTrack(index);
+        return true;
+    }
+
+    private void refreshWebPlaybackSnapshot() {
+        if (mVideoView == null) {
+            return;
+        }
+        int position = mVideoView.getCurrentPosition();
+        int videoDuration = mVideoView.getDuration();
+        if (position >= 0) {
+            webPlaybackPosition = position;
+        }
+        if (videoDuration > 0) {
+            webPlaybackDuration = videoDuration;
+        }
+        webPlaybackPlaying = mVideoView.isPlaying();
+    }
+
+    private void setDirectPlaybackState(String state) {
+        if (!mDirectStream || TextUtils.isEmpty(state)) return;
+        if (!TextUtils.equals(webPlaybackState, state)) {
+            webPlaybackState = state;
+            webPlaybackStateTimestamp = System.currentTimeMillis();
+        }
+        if (!"error".equals(state)) {
+            webPlaybackErrorCode = 0;
+            webPlaybackErrorExtra = 0;
+            webPlaybackErrorMessage = "";
+        }
+    }
+
+    private void setDirectPlaybackError(int errorCode, int errorExtra) {
+        if (!mDirectStream) return;
+        webPlaybackErrorCode = errorCode;
+        webPlaybackErrorExtra = errorExtra;
+        webPlaybackErrorMessage = "播放器无法打开该视频流";
+        if (!"error".equals(webPlaybackState)) {
+            webPlaybackState = "error";
+            webPlaybackStateTimestamp = System.currentTimeMillis();
+        }
+    }
+
+    private boolean togglePlaybackForWeb() {
+        if (mVideoView == null) {
+            return false;
+        }
+        if (mVideoView.isPlaying()) {
+            currentPosition = mVideoView.getCurrentPosition();
+            statusChange(STATUS_PAUSE);
+            pause();
+        } else {
+            // Web remote pause/resume must never inherit the replay-from-zero branch
+            // from doPauseResume(). IjkVideoView.start() resumes a paused stream.
+            $.id(R.id.app_video_replay).gone();
+            start();
+            statusChange(STATUS_PLAYING);
+        }
+        updatePausePlay();
+        show(defaultTimeout);
+        return true;
+    }
+
+    private void handleRemotePlayerControl(int keyCode, int action) {
+        if (mVideoView == null) {
+            return;
+        }
+        boolean isKeyDown = action == KeyEvent.ACTION_DOWN;
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+                if (isKeyDown) {
+                    previewKeySeek(-GlobalSettings.FastForwardInterval);
+                } else {
+                    finishKeySeek();
+                }
+                break;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                if (isKeyDown) {
+                    previewKeySeek(GlobalSettings.FastForwardInterval);
+                } else {
+                    finishKeySeek();
+                }
+                break;
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+                if (isKeyDown) {
+                    togglePlaybackForWeb();
+                }
+                break;
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+                if (isKeyDown && !mVideoView.isPlaying()) {
+                    start();
+                    show(defaultTimeout);
+                }
+                break;
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+                if (isKeyDown && mVideoView.isPlaying()) {
+                    getCurrentPosition();
+                    statusChange(STATUS_PAUSE);
+                    pause();
+                    show(defaultTimeout);
+                }
+                break;
+            default:
+                break;
         }
     }
 
@@ -210,6 +971,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                             resetVideoIndex(videoIndex);
                         }
                     }else {
+                        resetWebPlaybackForNewMedia();
                         stop();
                         $.id(R.id.app_video_loading).visible();
                         startDownloadTask(videoPath, videoIndex);
@@ -223,6 +985,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
     private void resetVideoIndex(int videoIndex){
         if(videoIndex != -1 && xlDownloadManager.taskInstance().getPlayList().size() > 1) {
+            resetWebPlaybackForNewMedia();
             stop();
             $.id(R.id.app_video_loading).visible();
             if(xlDownloadManager.taskInstance().changePlayItem(videoIndex)) {
@@ -230,6 +993,22 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                 handler.sendEmptyMessageDelayed(XLVideoPlayActivity.MESSAGE_RESTART_PLAY, 6000);
             }
         }
+    }
+
+    private void resetWebPlaybackForNewMedia() {
+        handler.removeMessages(MESSAGE_SEEK_NEW_POSITION);
+        handler.removeMessages(MESSAGE_LIVE_RESTART);
+        handler.removeMessages(MESSAGE_SESSION_PROGRESS);
+        changeProgressByKey = false;
+        seekStartPosition = -1;
+        newPosition = -1;
+        webSeekTarget = -1;
+        webSeekTargetTimestamp = 0;
+        webPlaybackPosition = 0;
+        webPlaybackDuration = 0;
+        webPlaybackPlaying = false;
+        currentPosition = 0;
+        duration = 0;
     }
 
     protected void startDownloadTask(String videoPath,  int videoIndex){
@@ -255,7 +1034,18 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_xl_play_video);
 
-        xlDownloadManager.init(getApplicationContext());
+        Intent intent = getIntent();
+        mDirectStream = intent.getBooleanExtra(EXTRA_DIRECT_STREAM, false);
+        mDirectRequestId = intent.getStringExtra(EXTRA_DIRECT_REQUEST_ID);
+        if (mDirectRequestId == null) mDirectRequestId = "";
+        Bundle directHeaderBundle = intent.getBundleExtra(EXTRA_DIRECT_HEADERS);
+        if (directHeaderBundle != null) {
+            for (String key : directHeaderBundle.keySet()) {
+                String value = directHeaderBundle.getString(key);
+                if (!TextUtils.isEmpty(key) && value != null) mDirectHeaders.put(key, value);
+            }
+        }
+        if (!mDirectStream) xlDownloadManager.init(getApplicationContext());
 
 //        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
 //        mWakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE, TAG);
@@ -267,7 +1057,6 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         mVideoTitle = getIntent().getStringExtra("videoTitle");
         mVideoIndex = getIntent().getIntExtra("videoIndex", 0);
 
-        Intent intent = getIntent();
         String intentAction = intent.getAction();
         if (!TextUtils.isEmpty(intentAction)) {
             if (intentAction.equals(Intent.ACTION_VIEW)) {
@@ -305,22 +1094,28 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             return;
         }
 
-        startDownloadTask(mVideoPath, mVideoIndex);
+        if (!mDirectStream) startDownloadTask(mVideoPath, mVideoIndex);
 
         playListView = (RecyclerView)findViewById(R.id.play_list_view);
-        playListView.setLayoutManager(new FocusFixedLinearLayoutManager(this));
-        playListView.setItemAnimator(new DefaultItemAnimator());
-        playListView.addItemDecoration(new DividerItemDecoration(this,DividerItemDecoration.VERTICAL));
-        playListItemAdapter = new PlayListItemAdapter();
-        playListItemAdapter.setOnPlayListItemClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                playListView.setVisibility(View.GONE);
-                int index = ((PlayListItem)view.getTag()).getIndex();
-                resetVideoIndex(index);
-            }
-        });
-        playListView.setAdapter(playListItemAdapter);
+        if (mDirectStream) {
+            playListView.setVisibility(View.GONE);
+            View playListButton = findViewById(R.id.app_play_btn_play_list);
+            if (playListButton != null) playListButton.setVisibility(View.GONE);
+        } else {
+            playListView.setLayoutManager(new FocusFixedLinearLayoutManager(this));
+            playListView.setItemAnimator(new DefaultItemAnimator());
+            playListView.addItemDecoration(new DividerItemDecoration(this,DividerItemDecoration.VERTICAL));
+            playListItemAdapter = new PlayListItemAdapter();
+            playListItemAdapter.setOnPlayListItemClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    playListView.setVisibility(View.GONE);
+                    int index = ((PlayListItem)view.getTag()).getIndex();
+                    resetVideoIndex(index);
+                }
+            });
+            playListView.setAdapter(playListItemAdapter);
+        }
 
         // init player
         IjkMediaPlayer.loadLibrariesOnce(null);
@@ -343,7 +1138,15 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         seekBar = (SeekBar) findViewById(R.id.app_video_seekBar);
         seekBar.setOnSeekBarChangeListener(mSeekListener);
 
+        String displayTitle = mVideoTitle;
+        if (TextUtils.isEmpty(displayTitle) || TextUtils.equals(displayTitle, mVideoPath)) {
+            displayTitle = "正在播放";
+        }
+        $.id(R.id.app_video_title).text(displayTitle);
+
         $.id(R.id.app_video_play).clicked(onClickListener);
+        $.id(R.id.app_video_rewind).clicked(onClickListener);
+        $.id(R.id.app_video_fast_forward).clicked(onClickListener);
         //$.id(R.id.app_video_fullscreen).clicked(onClickListener);
         $.id(R.id.app_video_replay_icon).clicked(onClickListener);
         $.id(R.id.app_play_btn_play_list).clicked(onClickListener);
@@ -352,19 +1155,38 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
         screenWidthPixels = getResources().getDisplayMetrics().widthPixels;
 
-        handler.sendEmptyMessageDelayed(XLVideoPlayActivity.MESSAGE_RESTART_PLAY, 2000);
-
         isRunning = true;
         runningInstance = this;
+
+        if (mDirectStream) {
+            $.id(R.id.app_video_loading).visible();
+            setDirectPlaybackState("preparing");
+            mVideoView.setVideoURI(Uri.parse(mVideoPath), mDirectHeaders);
+        } else {
+            handler.sendEmptyMessageDelayed(XLVideoPlayActivity.MESSAGE_RESTART_PLAY, 2000);
+        }
     }
 
     @Override
     public void onCompletion(IMediaPlayer iMediaPlayer) {
+        if (runningInstance != this) return;
+        if (mDirectStream) setDirectPlaybackState("completed");
+        notifyPlaybackProgress();
+        PlaybackLifecycleListener listener = mDirectStream ? null : playbackLifecycleListener;
+        if (listener != null && listener.onCompletion()) return;
         finish();
     }
 
     @Override
     public boolean onError(IMediaPlayer iMediaPlayer, int i, int i1) {
+        if (runningInstance != this) return true;
+        if (mDirectStream) {
+            setDirectPlaybackError(i, i1);
+            statusChange(STATUS_ERROR);
+            return true;
+        }
+        PlaybackLifecycleListener listener = mDirectStream ? null : playbackLifecycleListener;
+        if (listener != null && listener.onPlaybackError()) return true;
         return false;
     }
 
@@ -403,6 +1225,23 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     @Override
     public void onPrepared(IMediaPlayer iMediaPlayer) {
         duration = mVideoView.getDuration();
+        if (mDirectStream) setDirectPlaybackState("prepared");
+        // DownloadTask historically labels every HTTP/HTTPS URL as live so it can
+        // bypass the download proxy. That transport decision must not make a VOD
+        // stream behave like live TV. A real duration is the reliable signal here.
+        markSeekableVod(duration);
+        webPlaybackDuration = Math.max(0, duration);
+        webPlaybackSpeedSupported = mVideoView.supportsPlaybackSpeed();
+        if (webPlaybackSpeedSupported && webPlaybackSpeed != 1.0f) {
+            webPlaybackSpeedSupported = mVideoView.setPlaybackSpeed(webPlaybackSpeed);
+            webPlaybackSpeed = mVideoView.getPlaybackSpeed();
+        }
+
+        PlaybackLifecycleListener listener = mDirectStream ? null : playbackLifecycleListener;
+        if (listener != null && duration > 0) {
+            int startPosition = listener.onPrepared(duration);
+            if (startPosition > 0 && startPosition < duration) seekTo(startPosition);
+        }
 
         final GestureDetector gestureDetector = new GestureDetector(this, new PlayerGestureListener());
         mRoot = findViewById(R.id.touch_area);
@@ -425,6 +1264,8 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         });
 
         start();
+        handler.removeMessages(MESSAGE_SESSION_PROGRESS);
+        handler.sendEmptyMessageDelayed(MESSAGE_SESSION_PROGRESS, 1000);
     }
     /**
      * 获取当前播放位置
@@ -441,9 +1282,13 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
     protected void seekTo(int position){
         mVideoView.seekTo(position);
+        // Do not publish the requested target as the current position. Some remote
+        // HTTP/HLS servers reject or snap a seek; Web status must reflect the
+        // player's confirmed position rather than an optimistic target.
     }
     protected void start(){
         mVideoView.start();
+        refreshWebPlaybackSnapshot();
     }
     protected void resume(){
         mVideoView.resume();
@@ -458,6 +1303,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     }
     protected void pause(){
         mVideoView.pause();
+        refreshWebPlaybackSnapshot();
     }
     protected void stop(){
         mVideoView.stopPlayback();
@@ -495,6 +1341,17 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
     private void statusChange(int newStatus) {
         status = newStatus;
+        if (mDirectStream) {
+            if (newStatus == STATUS_LOADING) {
+                setDirectPlaybackState("buffering");
+            } else if (newStatus == STATUS_PLAYING) {
+                setDirectPlaybackState("playing");
+            } else if (newStatus == STATUS_PAUSE) {
+                setDirectPlaybackState("paused");
+            } else if (newStatus == STATUS_COMPLETED) {
+                setDirectPlaybackState("completed");
+            }
+        }
         if (!isLive && newStatus == STATUS_COMPLETED) {
             currentPosition = 0;
             hideAll();
@@ -527,20 +1384,113 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     }
 
     private boolean changeProgressByKey = false;
-    private int oldProgressValue = -1;
-    private int newProgressValue = -1;
+    private int seekStartPosition = -1;
     private int keyDownComboCount = 0;
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        boolean isKeyDown = event.getAction() == KeyEvent.ACTION_DOWN;
+
+        // While the episode list is open it owns D-pad focus and OK selection.
+        // Outside the list, left/right/OK keep their direct playback semantics.
+        if (playListView != null && playListView.isShown()) {
+            return super.dispatchKeyEvent(event);
+        }
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+                if (isKeyDown) {
+                    previewKeySeek(-GlobalSettings.FastForwardInterval);
+                } else {
+                    finishKeySeek();
+                }
+                return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                if (isKeyDown) {
+                    previewKeySeek(GlobalSettings.FastForwardInterval);
+                } else {
+                    finishKeySeek();
+                }
+                return true;
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+                if (isKeyDown && event.getRepeatCount() == 0) {
+                    doPauseResume();
+                    show(defaultTimeout);
+                }
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+                if (isKeyDown && event.getRepeatCount() == 0 && !mVideoView.isPlaying()) {
+                    start();
+                    show(defaultTimeout);
+                }
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+                if (isKeyDown && event.getRepeatCount() == 0 && mVideoView.isPlaying()) {
+                    getCurrentPosition();
+                    statusChange(STATUS_PAUSE);
+                    pause();
+                    show(defaultTimeout);
+                }
+                return true;
+            default:
+                return super.dispatchKeyEvent(event);
+        }
+    }
+
+    private void previewKeySeek(int delta) {
+        if (mVideoView == null) {
+            return;
+        }
+
+        int videoDuration = mVideoView.getDuration();
+        if (videoDuration <= 0) {
+            videoDuration = webPlaybackDuration;
+        }
+        if (videoDuration <= 0) {
+            return;
+        }
+        markSeekableVod(videoDuration);
+        if (isLive) {
+            return;
+        }
+
+        if (!changeProgressByKey) {
+            changeProgressByKey = true;
+            seekStartPosition = getReliableSeekPosition();
+            newPosition = seekStartPosition;
+        }
+
+        newPosition = Math.max(0, Math.min(videoDuration, newPosition + delta));
+        showSeekPreview(seekStartPosition, newPosition, videoDuration);
+        show(defaultTimeout);
+
+        // Some remotes do not reliably deliver ACTION_UP. Keep a delayed fallback,
+        // but leave enough room between Web repeat events so a long hold still
+        // produces one final seek instead of several overlapping seeks.
+        handler.removeMessages(MESSAGE_SEEK_NEW_POSITION);
+        handler.sendEmptyMessageDelayed(MESSAGE_SEEK_NEW_POSITION, 1000);
+    }
+
+    private void finishKeySeek() {
+        if (!changeProgressByKey) {
+            return;
+        }
+        changeProgressByKey = false;
+        seekStartPosition = -1;
+        endGesture();
+    }
+
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         switch (keyCode) {
-            case KeyEvent.KEYCODE_DPAD_LEFT:
-            case KeyEvent.KEYCODE_DPAD_RIGHT:
-                if(changeProgressByKey){
-                    changeProgressByKey = false;
-                    oldProgressValue = -1;
-                    endGesture();
-                }
-                break;
             case KeyEvent.KEYCODE_DPAD_DOWN:
                 if(keyDownComboCount > 20){
                     resume();
@@ -561,21 +1511,6 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                     return true;
                 }
                 break;
-            case KeyEvent.KEYCODE_DPAD_LEFT:
-            case KeyEvent.KEYCODE_DPAD_RIGHT:
-                if(!changeProgressByKey)changeProgressByKey = true;
-                if(oldProgressValue == -1){
-                    oldProgressValue = 0;
-                    newProgressValue = oldProgressValue;
-                }
-                newProgressValue += keyCode == KeyEvent.KEYCODE_DPAD_LEFT ? -GlobalSettings.FastForwardInterval : GlobalSettings.FastForwardInterval;
-                int max = mVideoView.getDuration();
-                //Log.d(TAG, "newProgressValue = " + newProgressValue);
-                if(newProgressValue < (0 - max))newProgressValue = (0 - max);
-                if(newProgressValue > max)newProgressValue = max;
-                float deltaP = oldProgressValue - newProgressValue;
-                onProgressSlide(-deltaP / max);
-                return true;
             case KeyEvent.KEYCODE_DPAD_DOWN:
             case KeyEvent.KEYCODE_DPAD_UP:
                 if(playListView.isShown()){
@@ -589,17 +1524,13 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                     return true;
                 }else if(xlDownloadManager.taskInstance().getPlayList().size() > 1){
                     playListView.setVisibility(View.VISIBLE);
+                    playListView.requestFocus(View.FOCUS_DOWN);
                     return true;
                 }else if(keyCode == KeyEvent.KEYCODE_DPAD_DOWN){
                     keyDownComboCount ++;
                     //Log.d(TAG, "keyDownComboCount = " + keyDownComboCount);
                 }
                 break;
-            case KeyEvent.KEYCODE_ENTER:
-            case KeyEvent.KEYCODE_DPAD_CENTER:
-                doPauseResume();
-                show(defaultTimeout);
-                return true;
         }
         return super.onKeyDown(keyCode, event);
     }
@@ -624,12 +1555,10 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     }
 
     private void showBottomControl(boolean show) {
+        $.id(R.id.app_video_bottom_box).visibility(show ? View.VISIBLE : View.GONE);
         $.id(R.id.app_play_btn_play_list).visibility(show && xlDownloadManager.taskInstance().getPlayList().size() > 1 ? View.VISIBLE : View.GONE);
-        $.id(R.id.app_video_play).visibility(show ? View.VISIBLE : View.GONE);
-        $.id(R.id.app_video_speed).visibility(show ? View.VISIBLE : View.GONE);
-        $.id(R.id.app_video_currentTime).visibility(show ? View.VISIBLE : View.GONE);
-        $.id(R.id.app_video_endTime).visibility(show ? View.VISIBLE : View.GONE);
-        $.id(R.id.app_video_seekBar).visibility(show ? View.VISIBLE : View.GONE);
+        $.id(R.id.app_video_rewind).visibility(show && !isLive ? View.VISIBLE : View.GONE);
+        $.id(R.id.app_video_fast_forward).visibility(show && !isLive ? View.VISIBLE : View.GONE);
         if(show && playListView.isShown())playListView.setVisibility(View.GONE);
     }
 
@@ -703,6 +1632,18 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
         int position = mVideoView.getCurrentPosition();
         int duration = mVideoView.getDuration();
+        markSeekableVod(duration);
+        if (!isLive && position > 0) {
+            currentPosition = position;
+        }
+        if (position >= 0) {
+            webPlaybackPosition = position;
+        }
+        if (duration > 0) {
+            webPlaybackDuration = duration;
+        }
+        webPlaybackPlaying = mVideoView.isPlaying();
+        notifyPlaybackProgress();
         if (seekBar != null) {
             if (duration > 0) {
                 seekBar.setProgress((position * 100 / duration));
@@ -718,6 +1659,15 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
         $.id(R.id.app_video_endTime).text(generateTime(this.duration));
         $.id(R.id.app_video_speed).text(FileUtils.convertFileSize(mVideoView.getTcpSpeed()) + "/s");
         return position;
+    }
+
+    private void notifyPlaybackProgress() {
+        if (runningInstance != this || mDirectStream) return;
+        PlaybackLifecycleListener listener = playbackLifecycleListener;
+        if (listener == null || mVideoView == null) return;
+        int position = Math.max(0, mVideoView.getCurrentPosition());
+        int playbackDuration = Math.max(0, mVideoView.getDuration());
+        listener.onProgress(position, playbackDuration, mVideoView.isPlaying());
     }
 
     private String generateTime(int time) {
@@ -740,23 +1690,30 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
             newPosition = duration;
         } else if (newPosition <= 0) {
             newPosition = 0;
-            delta = -position;
         }
-        int showDelta = delta / 1000;
+        showSeekPreview(position, newPosition, duration);
+    }
+
+    private void showSeekPreview(int startPosition, int targetPosition, int duration) {
+        int showDelta = (targetPosition - startPosition) / 1000;
         if (showDelta != 0) {
             $.id(R.id.app_video_fastForward_box).visible();
             String text = showDelta > 0 ? ("+" + showDelta) : "" + showDelta;
             $.id(R.id.app_video_fastForward).text(text + "s");
-            $.id(R.id.app_video_fastForward_target).text(generateTime(newPosition) + "/");
+            $.id(R.id.app_video_fastForward_target).text(generateTime(targetPosition) + "/");
             $.id(R.id.app_video_fastForward_all).text(generateTime(duration));
+            $.id(R.id.app_video_currentTime).text(generateTime(targetPosition));
+            if (seekBar != null && duration > 0) {
+                seekBar.setProgress(targetPosition * 100 / duration);
+            }
         }
     }
 
     protected void updatePausePlay() {
         if (mVideoView.isPlaying()) {
-            $.id(R.id.app_video_play).image(R.drawable.ic_stop_white_24dp);
+            $.id(R.id.app_video_play).image(android.R.drawable.ic_media_pause);
         } else {
-            $.id(R.id.app_video_play).image(R.drawable.ic_play_arrow_white_24dp);
+            $.id(R.id.app_video_play).image(android.R.drawable.ic_media_play);
         }
     }
 
@@ -848,11 +1805,15 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                     break;
                 case MESSAGE_SEEK_NEW_POSITION:
                     if (!isLive && newPosition >= 0) {
-                        seekTo(newPosition);
+                        int targetPosition = newPosition;
+                        webSeekTarget = targetPosition;
+                        webSeekTargetTimestamp = android.os.SystemClock.elapsedRealtime();
+                        seekTo(targetPosition);
                         newPosition = -1;
-                        if (!mVideoView.isPlaying()) {
-                            doPauseResume();
-                        }
+                        changeProgressByKey = false;
+                        seekStartPosition = -1;
+                        handler.removeMessages(MESSAGE_HIDE_CENTER_BOX);
+                        handler.sendEmptyMessageDelayed(MESSAGE_HIDE_CENTER_BOX, 500);
                     }
                     break;
                 case MESSAGE_SHOW_PROGRESS:
@@ -864,6 +1825,7 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                     }
                     break;
                 case MESSAGE_RESTART_PLAY:
+                    if (mDirectStream) break;
                     if(mVideoView.isPlaying()){
                         stop();
                     }
@@ -884,13 +1846,23 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
                     }
                     isLiveRestarted = true;
                     break;
+                case MESSAGE_SESSION_PROGRESS:
+                    notifyPlaybackProgress();
+                    if (runningInstance == XLVideoPlayActivity.this && !isFinishing()) {
+                        sendEmptyMessageDelayed(MESSAGE_SESSION_PROGRESS, 1000);
+                    }
+                    break;
             }
         }
     };
 
     @Override
     protected void onPause() {
+        notifyPlaybackProgress();
         super.onPause();
+        if (runningInstance == this) {
+            isForeground = false;
+        }
         if (mVideoView.isPlaying()) {
             getCurrentPosition();
             pause();
@@ -900,6 +1872,9 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
     @Override
     protected void onResume() {
         super.onResume();
+        runningInstance = this;
+        isRunning = true;
+        isForeground = true;
         if (null != mWakeLock && (!mWakeLock.isHeld())) {
             mWakeLock.acquire();
         }
@@ -915,22 +1890,39 @@ public class XLVideoPlayActivity extends Activity implements IMediaPlayer.OnPrep
 
     @Override
     protected void onStop() {
+        notifyPlaybackProgress();
         super.onStop();
         if (mVideoView.isPlaying()) {
-            currentPosition = 0;
+            currentPosition = Math.max(0, mVideoView.getCurrentPosition());
             pause();
         }
     }
 
     @Override
     protected void onDestroy() {
+        boolean ownsPlaybackSession = runningInstance == this;
+        if (ownsPlaybackSession && mDirectStream
+                && !"error".equals(webPlaybackState)
+                && !"completed".equals(webPlaybackState)) {
+            setDirectPlaybackState("stopped");
+        }
+        notifyPlaybackProgress();
+        PlaybackLifecycleListener listener = mDirectStream ? null : playbackLifecycleListener;
+        if (ownsPlaybackSession && listener != null) listener.onStopped(webPlaybackPosition, webPlaybackDuration);
+        handler.removeMessages(MESSAGE_SESSION_PROGRESS);
         super.onDestroy();
 
-        runningInstance = null;
-        isRunning = false;
+        // A replacement player Activity can already be running by the time an older
+        // instance reaches onDestroy().  Do not let the old instance clear the new
+        // instance's remote-control routing state.
+        if (runningInstance == this) {
+            runningInstance = null;
+            isRunning = false;
+            isForeground = false;
+        }
 
         if(mVideoView != null) stop();
-        xlDownloadManager.taskInstance().stopTask();
+        if (!mDirectStream) xlDownloadManager.taskInstance().stopTask();
     }
 
     @Override

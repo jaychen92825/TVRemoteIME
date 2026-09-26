@@ -1,18 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape>
+            <solid android:color="#2188E5" />
+        </shape>
+    </item>
     <item android:state_focused="true">
         <shape>
-            <solid android:color="#dafefe" />
+            <solid android:color="@color/accent" />
         </shape>
     </item>
     <item android:state_hovered="true">
         <shape>
-            <solid android:color="#dafefe" />
+            <solid android:color="#33FFFFFF" />
         </shape>
     </item>
-    <item android:state_focused="false">
+    <item>
         <shape>
-            <solid android:color="#ffffff" />
+            <solid android:color="#14000000" />
         </shape>
     </item>
 </selector>

@@ -2,6 +2,7 @@ package com.android.tvremoteime.server;
 
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.net.wifi.WifiManager;
 import android.os.SystemClock;
 import android.text.TextUtils;
@@ -19,6 +20,7 @@ import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -174,6 +176,7 @@ public class RemoteServer extends NanoHTTPD
         this.getRequestProcessers.add(new FileRequestProcesser(this.mContext));
         this.getRequestProcessers.add(new AppIconRequestProcesser(this.mContext));
         this.getRequestProcessers.add(new TVRequestProcesser(this.mContext));
+        this.getRequestProcessers.add(new MediaRequestProcesser(this.mContext));
         this.getRequestProcessers.add(new OtherGetRequestProcesser(this.mContext));
     }
     private void addPostRequestProcessers(){
@@ -184,28 +187,92 @@ public class RemoteServer extends NanoHTTPD
         this.postRequestProcessers.add(new PlayRequestProcesser(this.mContext));
         this.postRequestProcessers.add(new FileRequestProcesser(this.mContext));
         this.postRequestProcessers.add(new TVRequestProcesser(this.mContext));
+        this.postRequestProcessers.add(new MediaRequestProcesser(this.mContext));
         this.postRequestProcessers.add(new TorrentRequestProcesser(this.mContext));
         this.postRequestProcessers.add(new OtherPostRequestProcesser(this.mContext));
     }
 
 
-    //扫二维码免密登录用的会话口令，登录成功后种一个cookie，服务重启（进程内存清空）
-    //后所有会话失效，需要重新扫码或手动输入口令——不做持久化存储，简单换取安全。
+    //扫二维码免密登录用的会话口令。cookie本身有效30天，因此服务端也把会话记录
+    //持久化30天；这样电视重启/服务进程被系统回收后，已经配对过的手机仍可直接
+    //继续使用，不必重新扫二维码。每条记录同时绑定当前访问口令的摘要，用户一旦
+    //修改口令，旧会话即使还没到30天也会自动失效。
     private static final String SESSION_COOKIE_NAME = "tvrc_auth";
-    //value是这个token的生成时间，用来惰性淘汰过期token(见pruneExpiredSessionTokens)。
-    //之前是个只增不减的Set，进程存活期间每扫码登录一次就永久多一条记录，从不清理——
-    //量级对个人使用来说不算大问题，但原则上是个无界增长。改成记录生成时间，跟
-    //下面Set-Cookie的Max-Age(30天)保持一致的过期时间，每次登录时顺带清一遍过期的。
+    private static final String SESSION_PREFS_NAME = "tvremoteime_remote_sessions";
     private static final long SESSION_TOKEN_TTL_MS = 30L * 24 * 60 * 60 * 1000;
-    private static final Map<String, Long> validSessionTokens = new ConcurrentHashMap<>();
+    private static final Map<String, SessionRecord> validSessionTokens = new ConcurrentHashMap<>();
 
-    private static void pruneExpiredSessionTokens(){
+    private static class SessionRecord {
+        final long createdAt;
+        final String accessCodeHash;
+
+        SessionRecord(long createdAt, String accessCodeHash){
+            this.createdAt = createdAt;
+            this.accessCodeHash = accessCodeHash;
+        }
+    }
+
+    private SharedPreferences getSessionPrefs(){
+        return mContext.getApplicationContext().getSharedPreferences(SESSION_PREFS_NAME, Context.MODE_PRIVATE);
+    }
+
+    private static String hashAccessCode(String accessCode){
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(accessCode.getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            for(byte b : digest) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (NoSuchAlgorithmException | UnsupportedEncodingException e) {
+            //Android/Java运行时都保证SHA-256和UTF-8可用；保留兜底，避免极端环境
+            //因为摘要能力异常而让整个遥控服务无法启动。
+            return Integer.toHexString(accessCode.hashCode());
+        }
+    }
+
+    private static String encodeSessionRecord(SessionRecord record){
+        return record.createdAt + "|" + record.accessCodeHash;
+    }
+
+    private static SessionRecord decodeSessionRecord(String value){
+        if(TextUtils.isEmpty(value)) return null;
+        int separator = value.indexOf('|');
+        if(separator <= 0 || separator >= value.length() - 1) return null;
+        try {
+            return new SessionRecord(Long.parseLong(value.substring(0, separator)), value.substring(separator + 1));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private void storeSessionToken(String token, SessionRecord record){
+        validSessionTokens.put(token, record);
+        getSessionPrefs().edit().putString(token, encodeSessionRecord(record)).apply();
+    }
+
+    private void removeSessionToken(String token){
+        validSessionTokens.remove(token);
+        getSessionPrefs().edit().remove(token).apply();
+    }
+
+    private void pruneExpiredSessionTokens(){
         long now = System.currentTimeMillis();
-        for(Map.Entry<String, Long> entry : validSessionTokens.entrySet()){
-            if(now - entry.getValue() > SESSION_TOKEN_TTL_MS){
+        for(Map.Entry<String, SessionRecord> entry : validSessionTokens.entrySet()){
+            if(now - entry.getValue().createdAt > SESSION_TOKEN_TTL_MS){
                 validSessionTokens.remove(entry.getKey());
             }
         }
+        SharedPreferences prefs = getSessionPrefs();
+        SharedPreferences.Editor editor = prefs.edit();
+        boolean changed = false;
+        for(Map.Entry<String, ?> entry : prefs.getAll().entrySet()){
+            SessionRecord record = entry.getValue() instanceof String
+                    ? decodeSessionRecord((String) entry.getValue()) : null;
+            if(record == null || now - record.createdAt > SESSION_TOKEN_TTL_MS){
+                editor.remove(entry.getKey());
+                changed = true;
+            }
+        }
+        if(changed) editor.apply();
     }
 
     private static String stripQuery(String uri){
@@ -222,16 +289,25 @@ public class RemoteServer extends NanoHTTPD
         return sb.toString();
     }
 
-    private static boolean hasValidSessionCookie(IHTTPSession session){
+    private boolean hasValidSessionCookie(IHTTPSession session){
         String cookieHeader = session.getHeaders().get("cookie");
         if(TextUtils.isEmpty(cookieHeader)) return false;
+        String currentAccessCodeHash = hashAccessCode(Environment.getAccessCode(mContext));
         for(String part : cookieHeader.split(";")){
             String[] kv = part.trim().split("=", 2);
             if(kv.length == 2 && SESSION_COOKIE_NAME.equals(kv[0])){
-                Long createdAt = validSessionTokens.get(kv[1]);
-                if(createdAt != null && System.currentTimeMillis() - createdAt <= SESSION_TOKEN_TTL_MS){
+                String token = kv[1];
+                SessionRecord record = validSessionTokens.get(token);
+                if(record == null){
+                    record = decodeSessionRecord(getSessionPrefs().getString(token, null));
+                    if(record != null) validSessionTokens.put(token, record);
+                }
+                if(record != null
+                        && System.currentTimeMillis() - record.createdAt <= SESSION_TOKEN_TTL_MS
+                        && currentAccessCodeHash.equals(record.accessCodeHash)){
                     return true;
                 }
+                if(record != null) removeSessionToken(token);
             }
         }
         return false;
@@ -254,10 +330,10 @@ public class RemoteServer extends NanoHTTPD
         }
         String token = generateSessionToken();
         pruneExpiredSessionTokens();
-        validSessionTokens.put(token, System.currentTimeMillis());
+        storeSessionToken(token, new SessionRecord(System.currentTimeMillis(), hashAccessCode(accessCode)));
         noteClientActiveAndRefreshKeyboardView();
         Response resp = newFixedLengthResponse(Response.Status.OK, NanoHTTPD.MIME_HTML,
-                "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>location.replace('/');</script></head><body>登录成功，正在跳转…</body></html>");
+                "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>location.replace('/?paired=1');</script></head><body>登录成功，正在跳转…</body></html>");
         resp.addHeader("Set-Cookie", SESSION_COOKIE_NAME + "=" + token + "; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax");
         return resp;
     }

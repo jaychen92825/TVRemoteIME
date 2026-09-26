@@ -2,10 +2,13 @@
 <html lang="zh-cmn-Hans">
 <head>
 	<meta charset="utf-8">
-	<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+	<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 	<title>TapTV</title>
 	<meta name="layoutmode" content="standard">
 	<meta name="theme-color" content="#3ea6ff">
+	<meta name="mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="default">
 	<link rel="manifest" href="/manifest.json">
 	<link rel="icon" href="/icon.png">
 	<link rel="apple-touch-icon" href="/icon.png">
@@ -13,6 +16,7 @@
 </head>
 <body>
 	<div class="container">
+		<div class="pwa-install-hint" id="pwaInstallHint" role="status" aria-live="polite" hidden></div>
 	    <div class="tabs-row">
 		<div class="tabs">
 		  <div class="tab cur" data-rel="controls">
@@ -31,9 +35,17 @@
 			  <svg viewBox="0 0 24 24" width="14" height="14"><rect x="2" y="4" width="20" height="13" rx="1.5" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M10 8l6 3-6 3V8z" fill="currentColor"/><line x1="8" y1="21" x2="16" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
 			  视频直播
 		  </div>
+		  <div class="tab" data-rel="media">
+			  <svg viewBox="0 0 24 24" width="14" height="14"><rect x="4" y="5" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M9 9l7 3.5L9 16V9z" fill="currentColor"/></svg>
+			  媒体浏览
+		  </div>
 		</div>
 		</div>
 		<div class="main-wrapper" data-tab="controls">
+			<button type="button" class="media-remote-return" id="btnMediaReturnFromRemote" aria-label="返回媒体浏览">
+				<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="m14 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+				<span>返回媒体浏览</span>
+			</button>
 			<div class="inputarea-wrapper">
 				<textarea id="inputarea" rows="1" placeholder="点此为电视输入文字"></textarea>
 			</div>
@@ -116,7 +128,14 @@
 		</div>
 		<div class="upload-settings" data-tab="controls">
 		   <label style="margin-right:10px;"><input type="checkbox" checked="checked" id="cbAutoInstall">传送后自动安装APK文件或播放视频文件</label>
-		   <div class="version-watermark"><span id="deviceNameWatermark"></span>V<span id="curVer">1.0</span></div>
+		   <div class="version-watermark">
+			   <span id="deviceNameWatermark"></span><span>V<span id="curVer">1.0</span></span>
+			   <span class="version-watermark-separator" aria-hidden="true">·</span>
+			   <span class="tv-connection-status is-connecting" id="tvConnectionStatus" role="status" aria-live="polite" title="正在连接电视">
+				   <span class="tv-connection-dot" aria-hidden="true"></span>
+				   <span id="tvConnectionStatusText">连接中</span>
+			   </span>
+		   </div>
 	    </div>
 		<div class="play-line hide" data-tab="video">
 		   <div class="card">
@@ -163,6 +182,219 @@
 			  <div class="btn" id="btnTVCancel"><svg viewBox="0 0 24 24" width="14" height="14"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>取消</div>
 		  </div>
 	    </div>
+		<div class="media-panel hide" data-tab="media">
+			<div class="media-toolbar" id="mediaToolbar">
+				<button type="button" class="media-library-switcher" id="btnMediaLibraryMenu" aria-expanded="false" aria-controls="mediaLibraryNav" aria-label="切换媒体栏目">
+					<span id="mediaLibraryCurrentLabel">浏览</span>
+					<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m7 9 5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+				</button>
+				<div class="media-library-nav" id="mediaLibraryNav">
+					<button type="button" class="media-library-tab active" data-section="browse">浏览</button>
+					<button type="button" class="media-library-tab" data-section="history">历史</button>
+					<button type="button" class="media-library-tab" data-section="favorites">收藏</button>
+					<button type="button" class="media-library-tab" data-section="web">网页视频</button>
+				</div>
+				<div class="media-search-control" id="mediaSearchControl">
+					<input type="text" id="mediaSearchInput" placeholder="搜索电影、电视剧" />
+					<button type="button" class="media-icon-btn" id="btnMediaSearch" aria-label="搜索" title="搜索"><svg viewBox="0 0 24 24" width="18" height="18"><circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="1.8" fill="none"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+				</div>
+				<div class="media-toolbar-actions">
+					<button type="button" class="media-icon-btn" id="btnMediaViewMode" aria-label="切换为列表" title="切换为列表"><svg class="media-view-grid-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><svg class="media-view-list-icon hide" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="4" cy="6" r="1.2" fill="currentColor"/><circle cx="4" cy="12" r="1.2" fill="currentColor"/><circle cx="4" cy="18" r="1.2" fill="currentColor"/></svg></button>
+					<button type="button" class="media-icon-btn" id="btnMediaSettings" aria-label="媒体配置" title="媒体配置"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.1A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.1A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.5 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.15.38.37.72.66 1 .3.28.7.43 1.1.4h.1v4h-.1a1.7 1.7 0 0 0-1.76.6Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+				</div>
+			</div>
+			<div class="media-status media-browse-status" id="mediaStatus" aria-live="polite">未加载配置</div>
+			<div class="media-playback-controls hide" id="mediaPlaybackControls">
+				<div class="media-playback-compact">
+					<button type="button" class="media-playback-compact-main" id="btnMediaPlaybackToggle" aria-expanded="false" aria-label="展开播放控制">
+						<span class="media-playback-fab-icon" aria-hidden="true">
+							<svg class="media-mini-play-icon" viewBox="0 0 24 24" width="22" height="22"><path d="m8 5 11 7-11 7V5Z" fill="currentColor"/></svg>
+							<svg class="media-mini-pause-icon hide" viewBox="0 0 24 24" width="22" height="22"><rect x="7" y="5" width="3.5" height="14" rx="1" fill="currentColor"/><rect x="13.5" y="5" width="3.5" height="14" rx="1" fill="currentColor"/></svg>
+						</span>
+						<span class="media-playback-compact-copy">
+							<span class="media-playback-compact-label" id="mediaPlaybackCompactLabel">电视播放</span>
+							<span class="media-playback-compact-title" id="mediaPlaybackCompactTitle"></span>
+							<span class="media-playback-compact-episode" id="mediaPlaybackCompactEpisode"></span>
+						</span>
+						<svg class="media-playback-chevron" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="m7 14 5-5 5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+					</button>
+					<button type="button" class="media-playback-compact-action" id="btnMediaCompactPrimary" aria-label="播放">
+						<span id="mediaPlaybackCompactIcon" aria-hidden="true">
+							<svg viewBox="0 0 24 24" width="18" height="18"><path id="mediaPlaybackCompactActionPath" d="m8 5 11 7-11 7V5Z" fill="currentColor"/></svg>
+						</span>
+					</button>
+					<button type="button" class="media-playback-dismiss" id="btnMediaPlaybackDismiss" aria-label="隐藏播放控制" title="隐藏播放控制">
+						<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+					</button>
+					<div class="media-playback-compact-progress" aria-hidden="true"><span id="mediaPlaybackCompactProgress"></span></div>
+				</div>
+				<div class="media-playback-expanded">
+					<div class="media-playback-progress">
+						<span id="mediaPlaybackCurrent">00:00</span>
+						<input type="range" id="mediaPlaybackSeek" min="0" max="0" step="1000" value="0" aria-label="播放进度" />
+						<span id="mediaPlaybackDuration">00:00</span>
+					</div>
+					<div class="media-playback-command-row">
+						<div class="media-playback-actions">
+							<button type="button" class="media-control-btn media-control-icon" id="btnMediaPrevEpisode" aria-label="上一集" title="上一集"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M7 6v12M18 7l-8 5 8 5V7Z" fill="currentColor"/></svg><span class="media-control-label">上一集</span></button>
+							<button type="button" class="media-control-btn media-control-icon media-control-primary" id="btnMediaPlayPause" aria-label="暂停" title="暂停"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path id="mediaPlaybackActionPath" d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor"/></svg><span class="media-control-label">暂停</span></button>
+							<button type="button" class="media-control-btn media-control-icon" id="btnMediaNextEpisode" aria-label="下一集" title="下一集"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M17 6v12M6 7l8 5-8 5V7Z" fill="currentColor"/></svg><span class="media-control-label">下一集</span></button>
+							<button type="button" class="media-control-btn media-control-primary hide" id="btnMediaResume">继续播放</button>
+						</div>
+						<label class="media-speed-control" for="mediaPlaybackSpeed"><span>倍速</span>
+							<select id="mediaPlaybackSpeed" aria-label="播放倍速">
+								<option value="0.5">0.5x</option>
+								<option value="1" selected>1x</option>
+								<option value="1.25">1.25x</option>
+								<option value="1.5">1.5x</option>
+								<option value="2">2x</option>
+								<option value="2.5">2.5x</option>
+								<option value="3">3x</option>
+							</select>
+						</label>
+					</div>
+					<div class="media-playback-device-controls">
+						<div class="media-volume-control">
+							<button type="button" class="media-control-btn media-control-icon" id="btnMediaMute" aria-label="静音" title="静音">
+								<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path id="mediaPlaybackVolumePath" d="M4 9v6h4l5 4V5L8 9H4Zm12.5-.5a5 5 0 0 1 0 7M18.8 6.2a8 8 0 0 1 0 11.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+							</button>
+							<input type="range" id="mediaPlaybackVolume" min="0" max="100" step="1" value="50" aria-label="电视音量" />
+							<span id="mediaPlaybackVolumeValue">50%</span>
+						</div>
+						<div class="media-track-controls">
+							<label class="media-track-control" for="mediaPlaybackAudio" title="音轨">
+								<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2M4 14h3v6H5a1 1 0 0 1-1-1v-5Zm16 0h-3v6h2a1 1 0 0 0 1-1v-5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+								<select id="mediaPlaybackAudio" aria-label="选择音轨"></select>
+							</label>
+							<label class="media-track-control" for="mediaPlaybackSubtitle" title="字幕">
+								<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6.5 11h4M6.5 14.5h5.5M13.5 11h4M14.5 14.5h3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+								<select id="mediaPlaybackSubtitle" aria-label="选择字幕"><option value="-1">关闭字幕</option></select>
+							</label>
+						</div>
+						<button type="button" class="media-control-btn media-control-icon media-remote-control" id="btnMediaOpenRemote" aria-label="打开电视遥控器" title="电视遥控器">
+							<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M12 3v5m0 8v5M3 12h5m8 0h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="m9.5 5 2.5-2 2.5 2M9.5 19l2.5 2 2.5-2M5 9.5 3 12l2 2.5M19 9.5l2 2.5-2 2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/></svg>
+						</button>
+						<button type="button" class="media-control-btn media-control-icon media-stop-control" id="btnMediaStop" aria-label="停止电视播放" title="停止播放">
+							<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/></svg>
+						</button>
+					</div>
+					<details class="media-playback-routing hide" id="mediaPlaybackRouting">
+						<summary>
+							<span class="media-routing-summary">
+								<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 7h8a4 4 0 0 1 4 4v6M5 17h5M5 7l3-3M5 7l3 3M17 17l-3-3M17 17l-3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+								<span id="mediaPlaybackRoutingLabel">自动选择最佳线路</span>
+							</span>
+							<span class="media-routing-advanced">高级</span>
+							<svg class="media-routing-chevron" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+						</summary>
+						<div class="media-playback-switchers" id="mediaPlaybackSwitchers">
+							<label><span>来源</span><select id="mediaPlaybackSource" aria-label="切换播放来源"></select></label>
+							<label><span>线路</span><select id="mediaPlaybackRoute" aria-label="切换播放线路"></select></label>
+						</div>
+					</details>
+					<div class="media-playback-queue hide" id="mediaPlaybackQueue">
+						<span class="media-queue-label">选集</span>
+						<div class="media-queue-items" id="mediaQueueItems"></div>
+					</div>
+					<details class="media-playback-tools">
+						<summary aria-label="展开片头片尾设置">
+							<span class="media-playback-tools-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="6" cy="7" r="2.4" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="6" cy="17" r="2.4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m8 8.5 10 7M8 15.5l10-7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+							<span>片头片尾</span>
+							<span class="media-skip-summary" id="mediaSkipSummary"></span>
+							<svg class="media-playback-tools-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+						</summary>
+						<div class="media-skip-actions">
+							<div class="media-skip-group">
+								<button type="button" class="media-skip-adjust" data-marker="opening" data-delta="-1000" aria-label="片头减少 1 秒">−</button>
+								<button type="button" class="media-skip-btn" id="btnMediaMarkOpening">设片头</button>
+								<button type="button" class="media-skip-adjust" data-marker="opening" data-delta="1000" aria-label="片头增加 1 秒">+</button>
+							</div>
+							<div class="media-skip-group">
+								<button type="button" class="media-skip-adjust" data-marker="ending" data-delta="-1000" aria-label="片尾减少 1 秒">−</button>
+								<button type="button" class="media-skip-btn" id="btnMediaMarkEnding">设片尾</button>
+								<button type="button" class="media-skip-adjust" data-marker="ending" data-delta="1000" aria-label="片尾增加 1 秒">+</button>
+							</div>
+							<button type="button" class="media-skip-btn" id="btnMediaClearMarkers">清除跳过</button>
+						</div>
+					</details>
+				</div>
+			</div>
+			<button type="button" class="media-playback-restore hide" id="btnMediaPlaybackRestore" aria-label="显示播放控制" title="显示播放控制">
+				<span class="media-playback-fab-icon" aria-hidden="true">
+					<svg class="media-mini-play-icon" viewBox="0 0 24 24" width="21" height="21"><path d="m8 5 11 7-11 7V5Z" fill="currentColor"/></svg>
+					<svg class="media-mini-pause-icon hide" viewBox="0 0 24 24" width="21" height="21"><rect x="7" y="5" width="3.5" height="14" rx="1" fill="currentColor"/><rect x="13.5" y="5" width="3.5" height="14" rx="1" fill="currentColor"/></svg>
+				</span>
+			</button>
+			<div class="media-filter-row hide" id="mediaFilters">
+				<select id="mediaFilterType" aria-label="内容类型"><option value="">全部类型</option></select>
+				<select id="mediaFilterYear" aria-label="年份"><option value="">全部年份</option></select>
+			</div>
+			<div class="media-settings-view hide" id="mediaSettingsView">
+				<div class="media-subview-head">
+					<button type="button" class="media-back-btn" id="btnMediaSettingsBack" aria-label="返回浏览" title="返回浏览"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+					<div class="media-subview-title">媒体配置</div>
+				</div>
+				<div class="media-settings-card">
+					<label for="mediaSourceSelect">当前媒体源</label>
+					<div class="media-settings-source"><select id="mediaSourceSelect" aria-label="当前媒体源"></select></div>
+					<label for="mediaConfigUrl">TVBox 配置 URL</label>
+					<div class="media-config-row">
+						<input type="text" id="mediaConfigUrl" placeholder="https://example.com/config.json" />
+						<div class="btn" id="btnMediaConnect">连接</div>
+					</div>
+					<div class="media-status" id="mediaConfigStatus">未加载配置</div>
+				</div>
+			</div>
+			<div class="media-web-view hide" id="mediaWebView">
+				<div class="media-web-input-row">
+					<div class="media-web-url-control">
+						<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M10.5 13.5a4 4 0 0 0 5.66 0l2-2a4 4 0 0 0-5.66-5.66l-1.15 1.15M13.5 10.5a4 4 0 0 0-5.66 0l-2 2a4 4 0 0 0 5.66 5.66l1.15-1.15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+						<input type="url" id="mediaWebUrl" inputmode="url" autocomplete="url" placeholder="粘贴包含视频的网页地址" aria-label="网页地址" />
+					</div>
+					<button type="button" class="media-web-sniff-btn" id="btnMediaWebSniff" aria-label="开始嗅探网页视频">
+						<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><circle cx="11" cy="11" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4 4M8.5 11h5M11 8.5v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+						<span>开始嗅探</span>
+					</button>
+				</div>
+				<div class="media-web-meta" id="mediaWebMeta" aria-live="polite">粘贴网页链接，电视会在后台打开页面并寻找可播放视频。</div>
+				<div class="media-web-results" id="mediaWebResults">
+					<div class="media-web-empty">
+						<div class="media-web-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="28" height="28"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m10 9 5 3-5 3V9Z" fill="currentColor"/></svg></div>
+						<div class="media-web-empty-title">从网页发送视频到电视</div>
+						<div class="media-web-empty-copy">适合普通网页中的 HLS、DASH 和直链视频。登录、DRM 或站点专用播放器可能无法直接解析。</div>
+					</div>
+				</div>
+			</div>
+			<section class="media-continue hide" id="mediaContinue" aria-label="继续观看">
+				<div class="media-continue-head">
+					<div class="media-section-title">继续观看</div>
+					<button type="button" class="media-continue-all" id="btnMediaContinueAll">查看全部</button>
+				</div>
+				<div class="media-continue-row" id="mediaContinueItems"></div>
+			</section>
+			<div class="media-home-library hide" id="mediaHomeLibrary">
+				<section class="media-home-shelf hide" id="mediaHomeFavorites" aria-label="收藏">
+					<div class="media-home-shelf-head">
+						<div class="media-section-title">收藏</div>
+						<button type="button" class="media-home-shelf-all" data-library="favorites">查看全部</button>
+					</div>
+					<div class="media-home-shelf-row" id="mediaHomeFavoriteItems"></div>
+				</section>
+				<section class="media-home-shelf hide" id="mediaHomeRecent" aria-label="最近观看">
+					<div class="media-home-shelf-head">
+						<div class="media-section-title">最近观看</div>
+						<button type="button" class="media-home-shelf-all" data-library="history">查看全部</button>
+					</div>
+					<div class="media-home-shelf-row" id="mediaHomeRecentItems"></div>
+				</section>
+			</div>
+			<div class="media-categories" id="mediaCategories"></div>
+			<div class="media-detail hide" id="mediaDetail"></div>
+			<div class="media-grid" id="mediaGrid"></div>
+			<div class="media-pagination hide" id="mediaPagination">
+				<button type="button" class="media-load-more" id="btnMediaLoadMore">加载更多</button>
+			</div>
+		</div>
 		<div class="file-panel hide" data-tab="file">
 		   <div class="file-un">
 			   <div class="file-upload">

@@ -120,3 +120,14 @@
 -keep class javax.jmdns.** { *;}
 -dontwarn org.slf4j.**
 -keep class org.slf4j.** { *;}
+
+# CatVod spider jars resolve this base class by its package name at runtime.
+-keep class com.github.catvod.crawler.** { *;}
+
+# Downloaded CatVod dex files reference these libraries dynamically, so the
+# shrinker cannot discover their members from the app's static call graph.
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-keep class okhttp3.** { *;}
+-keep class okio.** { *;}
+-keep class com.google.gson.** { *;}

@@ -10,12 +10,28 @@ import player.XLVideoPlayActivity;
 import xllib.DownloadManager;
 import xllib.FileUtils;
 
+import java.util.Map;
+
 /**
  * Created by kingt on 2018/2/22.
  */
 
 public class VideoPlayHelper {
+    public static void playDirectStream(Context context, String url, String title, Map<String, String> headers) {
+        playDirectStream(context, url, title, headers, null);
+    }
+
+    public static void playDirectStream(Context context, String url, String title,
+                                        Map<String, String> headers, String requestId) {
+        XLVideoPlayActivity.intentToDirectStream(XLVideoPlayActivity.class, context, url,
+                TextUtils.isEmpty(title) ? url : title, headers, requestId);
+    }
+
     public static void playUrl(Context context, String url, int videoIndex, boolean useSystem){
+        playUrl(context, url, videoIndex, useSystem, null);
+    }
+
+    public static void playUrl(Context context, String url, int videoIndex, boolean useSystem, String title){
         if(useSystem) {
             //外部播放
             DownloadManager downloadManager = DownloadManager.instance();
@@ -36,7 +52,8 @@ public class VideoPlayHelper {
             }
         }else {
             //内部播放
-            XLVideoPlayActivity.intentTo(XLVideoPlayActivity.class, context, url, url, videoIndex);
+            XLVideoPlayActivity.intentTo(XLVideoPlayActivity.class, context, url,
+                    TextUtils.isEmpty(title) ? url : title, videoIndex);
         }
     }
 }

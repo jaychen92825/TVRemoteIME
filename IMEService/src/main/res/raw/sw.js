@@ -1,7 +1,7 @@
 // 只给页面外壳（HTML/CSS/JS/图标）做离线缓存兜底，让PWA能安装、下次打开快一点。
 // 所有控制指令都是POST请求或者动态GET（文件列表/应用列表/直播源等），一律不缓存、
 // 直接放过给网络请求处理，避免任何遥控指令被缓存干扰。
-var CACHE_NAME = "tvremoteime-shell-v1";
+var CACHE_NAME = "tvremoteime-shell-v5";
 var SHELL_FILES = ["/", "/index.html", "/style.css", "/jquery_min.js", "/ime_core.js", "/icon.png"];
 
 self.addEventListener("install", function(event){

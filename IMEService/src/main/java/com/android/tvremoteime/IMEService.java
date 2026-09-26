@@ -32,7 +32,6 @@ import com.android.tvremoteime.accessibility.ScreenAccessibilityService;
 
 import java.io.IOException;
 
-
 public class IMEService extends InputMethodService implements View.OnClickListener, MDnsHelper.ResolvedListener{
 	public static String TAG = "TVRemoteIME";
 	public static String ACTION = "com.android.tvremoteime";
@@ -196,6 +195,13 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 			Environment.debug(TAG, "onStartCommand.");
 		}
 
+		// 开机时网络可能比应用服务晚几十秒才就绪。广播接收器会重试启动，
+		// 每次重试都让 mDNS 再检查一次。也检查 HTTP 服务自身：部分电视 ROM
+		// 会保留 Service 进程但回收底层 socket/thread，表现成“服务在、网页打不开”。
+		if(mServer == null || !mServer.isStarting()){
+			startRemoteServer();
+		}
+		MDnsHelper.start(this.getApplicationContext());
 		onStart(intent, startId);
 		return START_STICKY;
 	}
@@ -325,7 +331,7 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 			//没必要为了这一个特判去依赖它。无障碍服务没开启、或触发失败时，
 			//直接落到下面的通用分支，走已有的ADB/原生注入兜底逻辑。
 		}else {
-			final int kc = KeyEvent.keyCodeFromString(keyCode);
+			final int kc = parseKeyCode(keyCode);
 			if(kc != KeyEvent.KEYCODE_UNKNOWN){
 				if(mInputView != null && KeyEventUtils.isKeyboardFocusEvent(kc) && mInputView.isShown()){
 					if((keyAction == KEY_ACTION_PRESSED || keyAction == KEY_ACTION_DOWN)
@@ -366,6 +372,16 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 					}
 				}
 			}
+		}
+	}
+
+	private int parseKeyCode(String keyCode){
+		if(keyCode == null) return KeyEvent.KEYCODE_UNKNOWN;
+		String value = keyCode.trim();
+		try {
+			return Integer.parseInt(value);
+		} catch (NumberFormatException ignored) {
+			return KeyEvent.keyCodeFromString(value);
 		}
 	}
 
@@ -522,6 +538,10 @@ public class IMEService extends InputMethodService implements View.OnClickListen
 		MDnsHelper.stop();
 		AdbHelper.stopService();
 		Environment.toastInHandler(this, getString(R.string.app_name)  + "服务已停止");
+		// START_STICKY 是第一层恢复；额外安排两次显式唤醒，兼容会忽略 sticky
+		// restart 的电视 ROM。重复 startService 对已经恢复的服务是幂等的。
+		IMEServiceBroadCastReceiver.scheduleServiceRetry(getApplicationContext(), 5 * 1000L, 101);
+		IMEServiceBroadCastReceiver.scheduleServiceRetry(getApplicationContext(), 30 * 1000L, 102);
     	super.onDestroy();    	
     }
 

@@ -1,0 +1,665 @@
+package com.android.tvremoteime.media;
+
+import android.util.Base64;
+import android.util.Log;
+
+import com.android.tvremoteime.IMEService;
+
+import org.apache.http.util.CharArrayBuffer;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.IDN;
+import java.net.InetAddress;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLDecoder;
+import java.net.UnknownHostException;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+
+import okhttp3.Dns;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
+
+public class MediaHttp {
+    private static final String DEFAULT_USER_AGENT = "Mozilla/5.0 TVRemoteIME Media Browser";
+    private static final Pattern IMAGE_HEADER_MARKER = Pattern.compile("@([A-Za-z0-9_-]+)=");
+    private static final Pattern IMAGE_MIME = Pattern.compile("image/[a-z0-9.+-]+", Pattern.CASE_INSENSITIVE);
+    private static final int MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+    private static final int MAX_IMAGE_CACHE_BYTES = 12 * 1024 * 1024;
+    private static final int MAX_IMAGE_FETCH_ATTEMPTS = 2;
+    private static final Object IMAGE_CACHE_LOCK = new Object();
+    private static final LinkedHashMap<String, MediaBinary> IMAGE_CACHE =
+            new LinkedHashMap<String, MediaBinary>(32, 0.75f, true);
+    private static int imageCacheBytes;
+    private static final X509TrustManager MEDIA_TRUST_MANAGER = new X509TrustManager() {
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String authType) {
+        }
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String authType) {
+        }
+
+        @Override
+        public X509Certificate[] getAcceptedIssuers() {
+            return new X509Certificate[0];
+        }
+    };
+    private static final OkHttpClient BASE_IMAGE_CLIENT = createImageClient();
+    private static volatile String cachedHostsKey = "";
+    private static volatile OkHttpClient cachedImageClient = BASE_IMAGE_CLIENT;
+
+    public static String get(String uri) {
+        return get(uri, null);
+    }
+
+    public static String get(String uri, Map<String, String> headers) {
+        try {
+            return getRequired(uri, headers);
+        } catch (Exception e) {
+            Log.e(IMEService.TAG, "media http get failed: " + uri, e);
+            return null;
+        }
+    }
+
+    public static String get(String uri, Map<String, String> headers, JSONObject config) {
+        try {
+            return getRequired(uri, headers, config);
+        } catch (Exception e) {
+            Log.e(IMEService.TAG, "media http get failed: " + uri, e);
+            return null;
+        }
+    }
+
+    public static String getRequired(String uri) throws Exception {
+        return getRequired(uri, null);
+    }
+
+    public static String getRequired(String uri, Map<String, String> headers) throws Exception {
+        HttpURLConnection conn = null;
+        try {
+            URL url = normalizeUrl(uri);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(12000);
+            conn.setReadTimeout(18000);
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Accept", "application/json, text/xml, application/xml, text/plain, */*");
+            conn.setRequestProperty("Accept-Encoding", "identity");
+            conn.setRequestProperty("User-Agent", DEFAULT_USER_AGENT);
+            applyConnectionHeaders(conn, headers);
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 300) throw new IOException("HTTP " + code);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+            try {
+                CharArrayBuffer buffer = new CharArrayBuffer(Math.max(4096, conn.getContentLength()));
+                char[] tmp = new char[2048];
+                int len;
+                while ((len = reader.read(tmp)) != -1) buffer.append(tmp, 0, len);
+                return buffer.toString();
+            } finally {
+                reader.close();
+            }
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    public static String getRequired(String uri, Map<String, String> headers, JSONObject config) throws Exception {
+        if (config == null) return getRequired(uri, headers);
+
+        URL url = normalizeUrl(uri);
+        Request.Builder request = new Request.Builder()
+                .url(url)
+                .get()
+                .header("Accept", "application/json, text/xml, application/xml, text/plain, */*")
+                .header("Accept-Encoding", "identity")
+                .header("User-Agent", DEFAULT_USER_AGENT);
+
+        if (headers != null) {
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                setHeaderIfValid(request, normalizeHeaderName(entry.getKey()), entry.getValue());
+            }
+        }
+        // FongMi applies config-level host header rules after SiteApi headers.
+        // Request.Builder.header() therefore gives matching global rules final precedence.
+        applyConfigHeaders(request, url.getHost(), config);
+
+        Response response = null;
+        try {
+            response = getImageClient(config).newCall(request.build()).execute();
+            if (!response.isSuccessful()) throw new IOException("HTTP " + response.code());
+            ResponseBody body = response.body();
+            if (body == null) throw new IOException("返回内容为空");
+            return body.string();
+        } finally {
+            if (response != null) response.close();
+        }
+    }
+
+    private static void applyConnectionHeaders(HttpURLConnection conn, Map<String, String> headers) {
+        if (headers == null || headers.isEmpty()) return;
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            String key = normalizeHeaderName(entry.getKey());
+            String value = entry.getValue();
+            if (!isSafeHeader(key, value)) continue;
+            try {
+                conn.setRequestProperty(key, value);
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+    }
+
+    public static File downloadRequired(String uri, File file) throws Exception {
+        HttpURLConnection conn = null;
+        try {
+            URL url = normalizeUrl(uri);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(12000);
+            conn.setReadTimeout(30000);
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Accept", "application/java-archive, application/octet-stream, */*");
+            conn.setRequestProperty("Accept-Encoding", "identity");
+            conn.setRequestProperty("User-Agent", DEFAULT_USER_AGENT);
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 300) throw new IOException("HTTP " + code);
+            File parent = file.getParentFile();
+            if (parent != null && !parent.exists()) parent.mkdirs();
+            InputStream input = new BufferedInputStream(conn.getInputStream());
+            FileOutputStream output = new FileOutputStream(file);
+            try {
+                byte[] buffer = new byte[16384];
+                int read;
+                long total = 0;
+                while ((read = input.read(buffer)) != -1) {
+                    output.write(buffer, 0, read);
+                    total += read;
+                }
+                output.flush();
+                if (total == 0) throw new IOException("返回内容为空");
+                return file;
+            } finally {
+                try {
+                    output.close();
+                } finally {
+                    input.close();
+                }
+            }
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    public static MediaBinary getBinary(String uri) throws Exception {
+        return getBinary(uri, null, null);
+    }
+
+    public static MediaBinary getBinary(String uri, JSONObject config) throws Exception {
+        return getBinary(uri, null, config);
+    }
+
+    public static MediaBinary getBinary(String uri, Map<String, String> sourceHeaders, JSONObject config) throws Exception {
+        MediaImageRequest imageRequest = parseImageRequest(uri);
+        if (imageRequest.url.regionMatches(true, 0, "data:", 0, 5)) {
+            return decodeDataImage(imageRequest.url);
+        }
+        URL url = normalizeUrl(imageRequest.url);
+        if (!"http".equalsIgnoreCase(url.getProtocol()) && !"https".equalsIgnoreCase(url.getProtocol())) {
+            throw new IOException("不支持的图片地址");
+        }
+
+        String cacheKey = imageCacheKey(imageRequest, sourceHeaders, config);
+        MediaBinary cached = getCachedImage(cacheKey);
+        if (cached != null) return cached;
+
+        Request.Builder request = new Request.Builder()
+                .url(url)
+                .get()
+                .header("Accept", "image/*,*/*")
+                .header("Accept-Encoding", "identity")
+                .header("User-Agent", DEFAULT_USER_AGENT);
+        applyRequestHeaders(request, sourceHeaders);
+        // Match config request behavior: global host rules override SiteApi headers.
+        applyConfigHeaders(request, url.getHost(), config);
+        // Explicit artwork suffix headers are part of the image URL itself and stay most specific.
+        for (Map.Entry<String, String> entry : imageRequest.headers.entrySet()) {
+            setHeaderIfValid(request, entry.getKey(), entry.getValue());
+        }
+
+        OkHttpClient client = getImageClient(config);
+        MediaBinary result = fetchImage(client, request.build());
+        putCachedImage(cacheKey, result);
+        return result;
+    }
+
+    private static MediaBinary fetchImage(OkHttpClient client, Request request) throws IOException {
+        IOException lastError = null;
+        for (int attempt = 0; attempt < MAX_IMAGE_FETCH_ATTEMPTS; attempt++) {
+            Response response = null;
+            try {
+                response = client.newCall(request).execute();
+                if (!response.isSuccessful()) {
+                    int code = response.code();
+                    IOException error = new IOException("HTTP " + code);
+                    if (attempt + 1 < MAX_IMAGE_FETCH_ATTEMPTS && isTransientImageStatus(code)) {
+                        lastError = error;
+                        continue;
+                    }
+                    if (!isTransientImageStatus(code)) throw new PermanentImageException(error.getMessage(), error);
+                    throw error;
+                }
+                return readImageResponse(response);
+            } catch (PermanentImageException e) {
+                throw e;
+            } catch (IOException e) {
+                lastError = e;
+                if (attempt + 1 >= MAX_IMAGE_FETCH_ATTEMPTS) throw e;
+            } finally {
+                if (response != null) response.close();
+            }
+        }
+        throw lastError == null ? new IOException("图片下载失败") : lastError;
+    }
+
+    private static MediaBinary readImageResponse(Response response) throws IOException {
+        try {
+            ResponseBody body = response.body();
+            if (body == null) throw new IOException("图片响应为空");
+            InputStream input = new BufferedInputStream(body.byteStream());
+            long bodyLength = body.contentLength();
+            if (bodyLength > MAX_IMAGE_BYTES) throw new PermanentImageException("图片文件过大");
+            int capacity = bodyLength > 0 && bodyLength <= MAX_IMAGE_BYTES ? (int) bodyLength : 4096;
+            ByteArrayOutputStream output = new ByteArrayOutputStream(Math.max(4096, capacity));
+            try {
+                byte[] buffer = new byte[16384];
+                int read;
+                int total = 0;
+                while ((read = input.read(buffer)) != -1) {
+                    total += read;
+                    if (total > MAX_IMAGE_BYTES) throw new PermanentImageException("图片文件过大");
+                    output.write(buffer, 0, read);
+                }
+                MediaBinary result = new MediaBinary();
+                result.data = output.toByteArray();
+                try {
+                    result.mimeType = resolveImageMime(body.contentType() == null ? null : body.contentType().toString(), result.data);
+                } catch (IOException e) {
+                    throw new PermanentImageException(e.getMessage(), e);
+                }
+                return result;
+            } finally {
+                try {
+                    output.close();
+                } finally {
+                    input.close();
+                }
+            }
+        } catch (PermanentImageException e) {
+            throw e;
+        }
+    }
+
+    private static boolean isTransientImageStatus(int code) {
+        return code == 408 || code == 425 || code == 429 || code >= 500;
+    }
+
+    private static void applyRequestHeaders(Request.Builder request, Map<String, String> headers) {
+        if (headers == null || headers.isEmpty()) return;
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            setHeaderIfValid(request, normalizeHeaderName(entry.getKey()), entry.getValue());
+        }
+    }
+
+    private static String imageCacheKey(MediaImageRequest imageRequest, Map<String, String> sourceHeaders, JSONObject config) {
+        StringBuilder key = new StringBuilder(imageRequest.url);
+        appendCacheHeaders(key, sourceHeaders);
+        appendCacheHeaders(key, imageRequest.headers);
+        if (config != null) key.append("\nconfig=").append(config.toString());
+        return key.toString();
+    }
+
+    private static void appendCacheHeaders(StringBuilder key, Map<String, String> headers) {
+        if (headers == null || headers.isEmpty()) return;
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            key.append('\n').append(normalizeHeaderName(entry.getKey())).append('=').append(entry.getValue());
+        }
+    }
+
+    private static MediaBinary getCachedImage(String key) {
+        synchronized (IMAGE_CACHE_LOCK) {
+            return IMAGE_CACHE.get(key);
+        }
+    }
+
+    private static void putCachedImage(String key, MediaBinary image) {
+        if (image == null || image.data == null || image.data.length == 0 || image.data.length > MAX_IMAGE_CACHE_BYTES) return;
+        synchronized (IMAGE_CACHE_LOCK) {
+            MediaBinary previous = IMAGE_CACHE.put(key, image);
+            if (previous != null && previous.data != null) imageCacheBytes -= previous.data.length;
+            imageCacheBytes += image.data.length;
+            Iterator<Map.Entry<String, MediaBinary>> iterator = IMAGE_CACHE.entrySet().iterator();
+            while (imageCacheBytes > MAX_IMAGE_CACHE_BYTES && iterator.hasNext()) {
+                MediaBinary removed = iterator.next().getValue();
+                if (removed != null && removed.data != null) imageCacheBytes -= removed.data.length;
+                iterator.remove();
+            }
+        }
+    }
+
+    private static class PermanentImageException extends IOException {
+        PermanentImageException(String message) {
+            super(message);
+        }
+
+        PermanentImageException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    static MediaImageRequest parseImageRequest(String uri) throws Exception {
+        if (uri == null) throw new IOException("图片地址为空");
+        Matcher matcher = IMAGE_HEADER_MARKER.matcher(uri);
+        int firstMarker = -1;
+        boolean hasSupportedMarker = false;
+        while (matcher.find()) {
+            if (firstMarker < 0) firstMarker = matcher.start();
+            if (isSupportedImageMarker(matcher.group(1))) hasSupportedMarker = true;
+        }
+        if (firstMarker < 0 || !hasSupportedMarker) return new MediaImageRequest(uri);
+
+        matcher.reset();
+        matcher.find();
+        MediaImageRequest result = new MediaImageRequest(uri.substring(0, firstMarker));
+        String key = matcher.group(1);
+        int valueStart = matcher.end();
+        while (true) {
+            boolean hasNext = matcher.find();
+            int valueEnd = hasNext ? matcher.start() : uri.length();
+            addImageHeader(result.headers, key, uri.substring(valueStart, valueEnd));
+            if (!hasNext) break;
+            key = matcher.group(1);
+            valueStart = matcher.end();
+        }
+        return result;
+    }
+
+    private static void addImageHeader(Map<String, String> headers, String rawKey, String rawValue) {
+        String key = normalizeHeaderName(rawKey);
+        String value = decodeHeaderValue(rawValue);
+        if ("Type".equalsIgnoreCase(key)) return;
+        if ("Headers".equalsIgnoreCase(key)) {
+            try {
+                JSONObject object = new JSONObject(value);
+                Iterator<String> keys = object.keys();
+                while (keys.hasNext()) {
+                    String headerKey = keys.next();
+                    String headerValue = object.optString(headerKey, "");
+                    if (isSafeHeader(headerKey, headerValue)) headers.put(normalizeHeaderName(headerKey), headerValue);
+                }
+            } catch (Exception ignored) {
+            }
+            return;
+        }
+        if (("Cookie".equalsIgnoreCase(key) || "Referer".equalsIgnoreCase(key)
+                || "User-Agent".equalsIgnoreCase(key)) && isSafeHeader(key, value)) {
+            headers.put(key, value);
+        }
+    }
+
+    private static boolean isSupportedImageMarker(String key) {
+        String normalized = normalizeHeaderName(key);
+        return "Headers".equalsIgnoreCase(normalized) || "Cookie".equalsIgnoreCase(normalized)
+                || "Referer".equalsIgnoreCase(normalized) || "User-Agent".equalsIgnoreCase(normalized)
+                || "Type".equalsIgnoreCase(normalized);
+    }
+
+    private static MediaBinary decodeDataImage(String uri) throws Exception {
+        int comma = uri.indexOf(',');
+        if (comma <= 5) throw new IOException("无效的 data 图片");
+        String metadata = uri.substring(5, comma).trim();
+        String[] parts = metadata.split(";");
+        String mime = parts.length == 0 ? "" : parts[0].trim();
+        boolean isBase64 = false;
+        for (int i = 1; i < parts.length; i++) {
+            if ("base64".equalsIgnoreCase(parts[i].trim())) {
+                isBase64 = true;
+                break;
+            }
+        }
+        if (!isBase64 || !IMAGE_MIME.matcher(mime).matches()) throw new IOException("不支持的 data 图片格式");
+        byte[] data;
+        try {
+            data = Base64.decode(uri.substring(comma + 1), Base64.DEFAULT);
+        } catch (IllegalArgumentException e) {
+            throw new IOException("无效的 base64 图片", e);
+        }
+        if (data.length == 0 || data.length > MAX_IMAGE_BYTES) throw new IOException("图片文件过大");
+        MediaBinary result = new MediaBinary();
+        result.data = data;
+        result.mimeType = resolveImageMime(mime, data);
+        return result;
+    }
+
+    static String resolveImageMime(String declaredMime, byte[] data) throws IOException {
+        if (data == null || data.length == 0) throw new IOException("图片响应为空");
+        if (looksLikeHtml(data)) throw new IOException("图片地址返回了网页内容");
+
+        String detected = detectImageMime(data);
+        if (detected != null) return detected;
+
+        String declared = declaredMime == null ? "" : declaredMime.trim();
+        int semicolon = declared.indexOf(';');
+        if (semicolon >= 0) declared = declared.substring(0, semicolon).trim();
+        if (declared.toLowerCase().startsWith("image/")) return declared;
+        throw new IOException("返回内容不是可识别的图片");
+    }
+
+    private static String detectImageMime(byte[] data) {
+        if (data.length >= 3 && (data[0] & 0xff) == 0xff && (data[1] & 0xff) == 0xd8 && (data[2] & 0xff) == 0xff) {
+            return "image/jpeg";
+        }
+        if (data.length >= 8 && (data[0] & 0xff) == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G'
+                && (data[4] & 0xff) == 0x0d && (data[5] & 0xff) == 0x0a && (data[6] & 0xff) == 0x1a && (data[7] & 0xff) == 0x0a) {
+            return "image/png";
+        }
+        if (data.length >= 6 && data[0] == 'G' && data[1] == 'I' && data[2] == 'F'
+                && data[3] == '8' && (data[4] == '7' || data[4] == '9') && data[5] == 'a') {
+            return "image/gif";
+        }
+        if (data.length >= 12 && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F'
+                && data[8] == 'W' && data[9] == 'E' && data[10] == 'B' && data[11] == 'P') {
+            return "image/webp";
+        }
+        if (data.length >= 2 && data[0] == 'B' && data[1] == 'M') return "image/bmp";
+        return null;
+    }
+
+    private static boolean looksLikeHtml(byte[] data) {
+        int length = Math.min(data.length, 512);
+        int start = 0;
+        while (start < length && Character.isWhitespace((char) (data[start] & 0xff))) start++;
+        if (start >= length || data[start] != '<') return false;
+        String prefix;
+        try {
+            prefix = new String(data, start, length - start, "UTF-8").toLowerCase();
+        } catch (Exception e) {
+            return false;
+        }
+        return prefix.startsWith("<!doctype html") || prefix.startsWith("<html")
+                || prefix.startsWith("<head") || prefix.startsWith("<body");
+    }
+
+    private static void applyConfigHeaders(Request.Builder request, String host, JSONObject config) {
+        if (config == null) return;
+        JSONArray rules = config.optJSONArray("headers");
+        if (rules == null) return;
+        for (int i = 0; i < rules.length(); i++) {
+            JSONObject rule = rules.optJSONObject(i);
+            if (rule == null || !containOrMatch(host, rule.optString("host"))) continue;
+            JSONObject headers = rule.optJSONObject("header");
+            if (headers == null) continue;
+            Iterator<String> keys = headers.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                String value = headers.optString(key, "");
+                setHeaderIfValid(request, normalizeHeaderName(key), value);
+            }
+        }
+    }
+
+    private static void setHeaderIfValid(Request.Builder request, String key, String value) {
+        if (!isSafeHeader(key, value)) return;
+        try {
+            request.header(key, value);
+        } catch (IllegalArgumentException ignored) {
+        }
+    }
+
+    private static OkHttpClient getImageClient(JSONObject config) {
+        Map<String, String> hosts = parseHosts(config);
+        String key = hosts.toString();
+        if (key.equals(cachedHostsKey)) return cachedImageClient;
+        synchronized (MediaHttp.class) {
+            if (key.equals(cachedHostsKey)) return cachedImageClient;
+            cachedImageClient = hosts.isEmpty()
+                    ? BASE_IMAGE_CLIENT
+                    : BASE_IMAGE_CLIENT.newBuilder().dns(buildDns(hosts)).build();
+            cachedHostsKey = key;
+            return cachedImageClient;
+        }
+    }
+
+    private static OkHttpClient createImageClient() {
+        OkHttpClient.Builder builder = new OkHttpClient.Builder()
+                .connectTimeout(12, TimeUnit.SECONDS)
+                .readTimeout(18, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(true);
+        try {
+            // Match TVBox/FongMi's CatVod transport for user-configured artwork.
+            // Keep this relaxed TLS policy isolated to Media Browser image traffic.
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, new TrustManager[]{MEDIA_TRUST_MANAGER}, new SecureRandom());
+            builder.sslSocketFactory(sslContext.getSocketFactory(), MEDIA_TRUST_MANAGER);
+            builder.hostnameVerifier(new HostnameVerifier() {
+                @Override
+                public boolean verify(String hostname, SSLSession session) {
+                    return true;
+                }
+            });
+        } catch (Exception e) {
+            Log.w(IMEService.TAG, "media image TLS compatibility unavailable", e);
+        }
+        return builder.build();
+    }
+
+    private static Dns buildDns(final Map<String, String> hosts) {
+        if (hosts.isEmpty()) return Dns.SYSTEM;
+        return new Dns() {
+            @Override
+            public List<InetAddress> lookup(String hostname) throws UnknownHostException {
+                String target = hostname;
+                String exact = hosts.get(hostname);
+                if (exact != null) {
+                    target = exact;
+                } else {
+                    for (Map.Entry<String, String> entry : hosts.entrySet()) {
+                        if (containOrMatch(hostname, entry.getKey())) {
+                            target = entry.getValue();
+                            break;
+                        }
+                    }
+                }
+                return Dns.SYSTEM.lookup(target);
+            }
+        };
+    }
+
+    static Map<String, String> parseHosts(JSONObject config) {
+        LinkedHashMap<String, String> result = new LinkedHashMap<String, String>();
+        if (config == null) return result;
+        JSONArray items = config.optJSONArray("hosts");
+        if (items == null) return result;
+        for (int i = 0; i < items.length(); i++) {
+            String item = items.optString(i, "");
+            int split = item.indexOf('=');
+            if (split <= 0 || split >= item.length() - 1) continue;
+            String from = item.substring(0, split).trim();
+            String to = item.substring(split + 1).trim();
+            if (from.length() > 0 && to.length() > 0) result.put(from, to);
+        }
+        return result;
+    }
+
+    private static boolean containOrMatch(String text, String regex) {
+        if (text == null || regex == null || regex.length() == 0) return false;
+        try {
+            return text.contains(regex) || text.matches(regex);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static String normalizeHeaderName(String key) {
+        if ("User_Agent".equalsIgnoreCase(key) || "UserAgent".equalsIgnoreCase(key)) return "User-Agent";
+        if ("Referrer".equalsIgnoreCase(key)) return "Referer";
+        return key;
+    }
+
+    private static String decodeHeaderValue(String value) {
+        if (value == null || value.indexOf('%') < 0) return value == null ? "" : value;
+        try {
+            return URLDecoder.decode(value.replace("+", "%2B"), "UTF-8");
+        } catch (Exception e) {
+            return value;
+        }
+    }
+
+    private static boolean isSafeHeader(String key, String value) {
+        if (key == null || key.length() == 0 || value == null) return false;
+        return key.indexOf('\r') < 0 && key.indexOf('\n') < 0 && value.indexOf('\r') < 0 && value.indexOf('\n') < 0;
+    }
+
+    static class MediaImageRequest {
+        final String url;
+        final Map<String, String> headers = new LinkedHashMap<String, String>();
+
+        MediaImageRequest(String url) {
+            this.url = url;
+        }
+    }
+
+    private static URL normalizeUrl(String uri) throws Exception {
+        URL url = new URL(uri);
+        String host = url.getHost();
+        if (host == null) return url;
+        String asciiHost = IDN.toASCII(host);
+        if (host.equals(asciiHost)) return url;
+        URI normalized = new URI(url.getProtocol(), null, asciiHost, url.getPort(), url.getPath(), url.getQuery(), url.getRef());
+        return normalized.toURL();
+    }
+}

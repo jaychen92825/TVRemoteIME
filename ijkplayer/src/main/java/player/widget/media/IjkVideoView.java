@@ -56,6 +56,7 @@ import tv.danmaku.ijk.media.player.AndroidMediaPlayer;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkTimedText;
+import tv.danmaku.ijk.media.player.MediaPlayerProxy;
 import tv.danmaku.ijk.media.player.TextureMediaPlayer;
 import tv.danmaku.ijk.media.player.misc.IMediaDataSource;
 import tv.danmaku.ijk.media.player.misc.IMediaFormat;
@@ -281,7 +282,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
      *                "android-allow-cross-domain-redirect" as the key and "0" or "1" as the value
      *                to disallow or allow cross domain redirection.
      */
-    private void setVideoURI(Uri uri, Map<String, String> headers) {
+    public void setVideoURI(Uri uri, Map<String, String> headers) {
         mUri = uri;
         mHeaders = headers;
         mSeekWhenPrepared = 0;
@@ -901,6 +902,63 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
         return isInPlaybackState() && mMediaPlayer.isPlaying();
     }
 
+    private IMediaPlayer getBaseMediaPlayer() {
+        IMediaPlayer player = mMediaPlayer;
+        // Detached TextureView mode wraps the real player in TextureMediaPlayer,
+        // while a few other paths use MediaPlayerProxy. Unwrap both so capability
+        // checks and playback-speed commands reach the actual backend.
+        while (player != null) {
+            if (player instanceof TextureMediaPlayer) {
+                player = ((TextureMediaPlayer) player).getInternalMediaPlayer();
+            } else if (player instanceof MediaPlayerProxy) {
+                player = ((MediaPlayerProxy) player).getInternalMediaPlayer();
+            } else {
+                break;
+            }
+        }
+        return player;
+    }
+
+    public boolean supportsPlaybackSpeed() {
+        IMediaPlayer player = getBaseMediaPlayer();
+        return player instanceof IjkMediaPlayer
+                || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && player instanceof AndroidMediaPlayer);
+    }
+
+    public float getPlaybackSpeed() {
+        IMediaPlayer player = getBaseMediaPlayer();
+        try {
+            if (player instanceof IjkMediaPlayer) {
+                float speed = ((IjkMediaPlayer) player).getSpeed(1.0f);
+                return speed > 0 ? speed : 1.0f;
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && player instanceof AndroidMediaPlayer) {
+                android.media.MediaPlayer androidPlayer = ((AndroidMediaPlayer) player).getInternalMediaPlayer();
+                return androidPlayer.getPlaybackParams().getSpeed();
+            }
+        } catch (RuntimeException ignored) {
+        }
+        return 1.0f;
+    }
+
+    public boolean setPlaybackSpeed(float speed) {
+        IMediaPlayer player = getBaseMediaPlayer();
+        try {
+            if (player instanceof IjkMediaPlayer) {
+                IjkMediaPlayer ijkPlayer = (IjkMediaPlayer) player;
+                ijkPlayer.setSpeed(speed);
+                return Math.abs(ijkPlayer.getSpeed(1.0f) - speed) < 0.05f;
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && player instanceof AndroidMediaPlayer) {
+                android.media.MediaPlayer androidPlayer = ((AndroidMediaPlayer) player).getInternalMediaPlayer();
+                androidPlayer.setPlaybackParams(androidPlayer.getPlaybackParams().setSpeed(speed));
+                return Math.abs(androidPlayer.getPlaybackParams().getSpeed() - speed) < 0.05f;
+            }
+        } catch (RuntimeException ignored) {
+        }
+        return false;
+    }
+
     @Override
     public int getBufferPercentage() {
         if (mMediaPlayer != null) {
@@ -1109,8 +1167,26 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                     }
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1);
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 0);
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "soundtouch", 1);
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "enable-accurate-seek", 1);
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "accurate-seek-timeout", 1000);
 
-                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "http-detect-range-support", 0);
+                    // HTTP VOD is the dominant TVBox playback path. Let ijk detect
+                    // byte-range support so seekable servers are not treated like
+                    // restart-only streams.
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "http-detect-range-support", 1);
+
+                    String scheme = mUri.getScheme();
+                    if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
+                        // Sniffed/CDN streams can briefly drop their HTTP connection.
+                        // These options are supported by the bundled ijkffmpeg and
+                        // keep transient network failures from becoming permanent
+                        // stalls while preserving normal EOF behavior for VOD.
+                        ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1);
+                        ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_streamed", 1);
+                        ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_delay_max", 3);
+                        ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rw_timeout", 15000000L);
+                    }
 
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48);
                 }
