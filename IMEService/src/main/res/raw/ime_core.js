@@ -263,6 +263,97 @@ function formatTVSourceName(channelName, sourceName){
 	}
 	return result.join(' · ');
 }
+var tvExpandedGroups = {};
+var tvListDataCache = [];
+var tvListMobileMode = null;
+var tvListResizeTimer = null;
+function isMobileTVList(){
+	return window.matchMedia ? window.matchMedia('(max-width: 640px)').matches : ($(window).width() <= 640);
+}
+function tvChannelGroupPrefix(name){
+	var value = normalizeTVSourceText(name);
+	var match = value.match(/^([A-Za-z][A-Za-z0-9]{1,15})(?:[-_:|\/]+|\s+)/);
+	if(!match) return '';
+	var prefix = match[1];
+	var capitals = prefix.match(/[A-Z]/g) || [];
+	var brandLike = capitals.length >= 2 || /\d/.test(prefix);
+	return brandLike ? prefix : '';
+}
+function buildTVMobileGroups(data){
+	var buckets = {};
+	for(var i=0;i<data.length;i++){
+		var prefix = tvChannelGroupPrefix(data[i].name);
+		if(!prefix) continue;
+		var key = prefix.toLowerCase();
+		if(!buckets[key]) buckets[key] = {key:key, name:prefix, items:[], names:{}, uniqueCount:0};
+		buckets[key].items.push(data[i]);
+		var nameKey = normalizeTVSourceText(data[i].name).toLowerCase();
+		if(!buckets[key].names[nameKey]){
+			buckets[key].names[nameKey] = true;
+			buckets[key].uniqueCount++;
+		}
+	}
+	var result = [];
+	var emitted = {};
+	for(var j=0;j<data.length;j++){
+		var item = data[j];
+		var candidate = tvChannelGroupPrefix(item.name);
+		var groupKey = candidate ? candidate.toLowerCase() : '';
+		var group = groupKey ? buckets[groupKey] : null;
+		if(group && group.uniqueCount >= 3){
+			if(!emitted[groupKey]){
+				emitted[groupKey] = true;
+				result.push({group:true, key:group.key, name:group.name, items:group.items, count:group.uniqueCount});
+			}
+		}else{
+			result.push({group:false, item:item});
+		}
+	}
+	return result;
+}
+function renderTVItemHtml(tv, grouped){
+	var html = [];
+	var sourceCount = tv.urls.length;
+	html.push('<div class="tv-item '+(sourceCount > 1 ? 'tv-item-multi-source' : 'tv-item-single-source')+(grouped ? ' tv-item-grouped' : '')+'">');
+	html.push('<div class="tv-channel-name">'+escapeHtml(tv.name)+'</div>');
+	html.push('<div class="tv-source-list"'+(sourceCount > 1 ? ' aria-label="'+sourceCount+' 条可用线路"' : '')+'>');
+	for(var j=0; j<sourceCount; j++){
+		var originalSourceName = tv.urls[j].name || '';
+		var sourceLabel = formatTVSourceName(tv.name, originalSourceName);
+		if(!sourceLabel) sourceLabel = sourceCount > 1 ? ('线路 ' + (j + 1)) : '播放';
+		var sourceTitle = originalSourceName && originalSourceName !== sourceLabel ? originalSourceName : sourceLabel;
+		html.push('<a class="tv-source" data-video="' + escapeHtml(tv.urls[j].url) + '" title="' + escapeHtml(sourceTitle) + '" aria-label="播放 ' + escapeHtml(tv.name) + '，' + escapeHtml(sourceLabel) + '" onclick="playTV(this)">' + escapeHtml(sourceLabel) + '</a>');
+	}
+	html.push('</div></div>');
+	return html.join('');
+}
+function renderTVList(data){
+	var html = [];
+	var mobile = isMobileTVList();
+	tvListMobileMode = mobile;
+	if(!mobile){
+		for(var i=0;i<data.length;i++) html.push(renderTVItemHtml(data[i], false));
+	}else{
+		var entries = buildTVMobileGroups(data);
+		for(var j=0;j<entries.length;j++){
+			var entry = entries[j];
+			if(!entry.group){
+				html.push(renderTVItemHtml(entry.item, false));
+				continue;
+			}
+			var expanded = !!tvExpandedGroups[entry.key];
+			var bodyId = 'tvGroupBody'+j;
+			html.push('<div class="tv-group'+(expanded ? ' expanded' : '')+'" data-tv-group-key="'+escapeHtml(entry.key)+'">');
+			html.push('<button type="button" class="tv-group-toggle" aria-expanded="'+(expanded ? 'true' : 'false')+'" aria-controls="'+bodyId+'">');
+			html.push('<span class="tv-group-copy"><span class="tv-group-name">'+escapeHtml(entry.name)+'</span><span class="tv-group-count">'+entry.count+' 个频道</span></span>');
+			html.push('<span class="tv-group-chevron" aria-hidden="true">›</span></button>');
+			html.push('<div class="tv-group-body" id="'+bodyId+'"'+(expanded ? '' : ' hidden')+'>');
+			for(var k=0;k<entry.items.length;k++) html.push(renderTVItemHtml(entry.items[k], true));
+			html.push('</div></div>');
+		}
+	}
+	$('.tv-items').html(html.join('\r\n'));
+}
 
 function postKeyCode(keyCode){
 	var fallback = function(){
@@ -480,30 +571,28 @@ function removeFile(id, path){
 }
 function loadTVList(){
 	$.get("/tv.txt",null,function(text){
-		var tvItems=$(".tv-items");
-		tvItems.empty();
 		$('#tvData').val(text);
-		var data = parseTVData(text);
-		var html=[];
-		for(var i=0;i<data.length;i++){
-			var tv=data[i];
-			var sourceCount = tv.urls.length;
-			html.push('<div class="tv-item '+(sourceCount > 1 ? 'tv-item-multi-source' : 'tv-item-single-source')+'">');
-			html.push('<div class="tv-channel-name">'+escapeHtml(tv.name)+'</div>');
-			html.push('<div class="tv-source-list"'+(sourceCount > 1 ? ' aria-label="'+sourceCount+' 条可用线路"' : '')+'>');
-			for(var j=0; j<sourceCount; j++){
-				var originalSourceName = tv.urls[j].name || '';
-				var sourceLabel = formatTVSourceName(tv.name, originalSourceName);
-				if(!sourceLabel) sourceLabel = sourceCount > 1 ? ('线路 ' + (j + 1)) : '播放';
-				var sourceTitle = originalSourceName && originalSourceName !== sourceLabel ? originalSourceName : sourceLabel;
-				html.push('<a class="tv-source" data-video="' + escapeHtml(tv.urls[j].url) + '" title="' + escapeHtml(sourceTitle) + '" aria-label="播放 ' + escapeHtml(tv.name) + '，' + escapeHtml(sourceLabel) + '" onclick="playTV(this)">' + escapeHtml(sourceLabel) + '</a>');
-			}
-			html.push('</div>');
-			html.push('</div>');
-		}
-		tvItems.html(html.join("\r\n"));
+		tvListDataCache = parseTVData(text);
+		renderTVList(tvListDataCache);
 	}, "text");
 }
+$(document).on('click', '.tv-group-toggle', function(){
+	var $button = $(this);
+	var $group = $button.closest('.tv-group');
+	var expanded = $button.attr('aria-expanded') !== 'true';
+	var key = String($group.attr('data-tv-group-key') || '');
+	$button.attr('aria-expanded', expanded ? 'true' : 'false');
+	$group.toggleClass('expanded', expanded);
+	$('#'+$button.attr('aria-controls')).prop('hidden', !expanded);
+	if(key) tvExpandedGroups[key] = expanded;
+});
+$(window).on('resize', function(){
+	clearTimeout(tvListResizeTimer);
+	tvListResizeTimer = setTimeout(function(){
+		var mobile = isMobileTVList();
+		if(tvListDataCache.length && mobile !== tvListMobileMode) renderTVList(tvListDataCache);
+	}, 120);
+});
 function mediaMessage(text){
 	$('#mediaStatus').text(text);
 }
@@ -2946,6 +3035,11 @@ $('#speedInterval').on("change", function(){
 	})
 });
 function playTV(o){
+	var $group = $(o).closest('.tv-group');
+	if($group.length){
+		var groupKey = String($group.attr('data-tv-group-key') || '');
+		if(groupKey) tvExpandedGroups[groupKey] = true;
+	}
 	$.post("/play", {playUrl: $(o).attr('data-video'), "useSystem":$('#playUseSystem')[0].checked}, function(data) {
 		console.log(data)
 	})
