@@ -16,13 +16,6 @@
 </head>
 <body>
 	<div class="container">
-		<div class="tv-connection-status is-connecting" id="tvConnectionStatus" role="status" aria-live="polite" title="正在连接电视">
-			<span class="tv-connection-dot" aria-hidden="true"></span>
-			<span id="tvConnectionStatusText">正在连接</span>
-		</div>
-		<button type="button" class="pwa-install-button" id="pwaInstallButton" aria-label="添加 TapTV 到主屏幕" title="添加到主屏幕" hidden>
-			<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M12 3v11m0 0-4-4m4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 15v4h14v-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-		</button>
 		<div class="pwa-install-hint" id="pwaInstallHint" role="status" aria-live="polite" hidden></div>
 	    <div class="tabs-row">
 		<div class="tabs">
@@ -135,7 +128,14 @@
 		</div>
 		<div class="upload-settings" data-tab="controls">
 		   <label style="margin-right:10px;"><input type="checkbox" checked="checked" id="cbAutoInstall">传送后自动安装APK文件或播放视频文件</label>
-		   <div class="version-watermark"><span id="deviceNameWatermark"></span>V<span id="curVer">1.0</span></div>
+		   <div class="version-watermark">
+			   <span id="deviceNameWatermark"></span><span>V<span id="curVer">1.0</span></span>
+			   <span class="version-watermark-separator" aria-hidden="true">·</span>
+			   <span class="tv-connection-status is-connecting" id="tvConnectionStatus" role="status" aria-live="polite" title="正在连接电视">
+				   <span class="tv-connection-dot" aria-hidden="true"></span>
+				   <span id="tvConnectionStatusText">连接中</span>
+			   </span>
+		   </div>
 	    </div>
 		<div class="play-line hide" data-tab="video">
 		   <div class="card">

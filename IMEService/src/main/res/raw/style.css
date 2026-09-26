@@ -3070,39 +3070,21 @@ body {
 }
 
 .tv-connection-status {
-	position: sticky;
-	top: 0;
-	z-index: 1001;
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
-	height: 26px;
-	margin: 8px 12px 6px;
-	padding: 0 9px;
-	box-sizing: border-box;
-	border: 1px solid var(--color-border);
-	border-radius: 13px;
-	background: rgba(255,255,255,.94);
-	box-shadow: 0 1px 4px rgba(0,0,0,.06);
-	color: #747982;
-	font-size: 11px;
+	gap: 4px;
+	color: inherit;
 	line-height: 1;
 	white-space: nowrap;
-	max-width: min(240px, calc(100vw - 64px));
 	pointer-events: none;
 }
 
-#tvConnectionStatusText {
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
 .tv-connection-dot {
-	width: 7px;
-	height: 7px;
+	width: 6px;
+	height: 6px;
 	border-radius: 50%;
 	background: #9aa0a6;
-	box-shadow: 0 0 0 2px rgba(154,160,166,.14);
+	box-shadow: 0 0 0 1.5px rgba(154,160,166,.12);
 }
 
 .tv-connection-status.is-online {
@@ -3111,7 +3093,7 @@ body {
 
 .tv-connection-status.is-online .tv-connection-dot {
 	background: #34a56f;
-	box-shadow: 0 0 0 2px rgba(52,165,111,.14);
+	box-shadow: 0 0 0 1.5px rgba(52,165,111,.12);
 }
 
 .tv-connection-status.is-reconnecting {
@@ -3120,7 +3102,7 @@ body {
 
 .tv-connection-status.is-reconnecting .tv-connection-dot {
 	background: #d99a2b;
-	box-shadow: 0 0 0 2px rgba(217,154,43,.14);
+	box-shadow: 0 0 0 1.5px rgba(217,154,43,.12);
 }
 
 .tv-connection-status.is-offline {
@@ -3129,27 +3111,7 @@ body {
 
 .tv-connection-status.is-offline .tv-connection-dot {
 	background: #d65353;
-	box-shadow: 0 0 0 2px rgba(214,83,83,.14);
-}
-
-.pwa-install-button {
-	display: none;
-	align-items: center;
-	justify-content: center;
-	width: 32px;
-	height: 32px;
-	padding: 0;
-	border: 1px solid var(--color-border);
-	border-radius: 50%;
-	background: rgba(255,255,255,.96);
-	box-shadow: 0 1px 4px rgba(0,0,0,.08);
-	color: #5f646c;
-	cursor: pointer;
-	-webkit-tap-highlight-color: transparent;
-}
-
-.pwa-install-button[hidden] {
-	display: none !important;
+	box-shadow: 0 0 0 1.5px rgba(214,83,83,.12);
 }
 
 .pwa-install-hint {
@@ -3215,9 +3177,17 @@ body {
 	font-size: 11px;
 	color: #b8bcc2;
 	white-space: nowrap;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	max-width: 56vw;
 	pointer-events: none;
 	-webkit-user-select: none;
 	user-select: none;
+}
+
+.version-watermark-separator {
+	color: #c7cbd0;
 }
 
 /* 设备名是用户自己起的，长度不可控，起了很长名字的极端情况用省略号截断，
@@ -4168,22 +4138,6 @@ body {
    are intentionally shared by every view, but they are declared after the
    first mobile media block and would otherwise override its compact spacing. */
 @media (max-width: 640px) {
-	.pwa-install-button {
-		position: fixed;
-		display: inline-flex;
-		top: max(8px, env(safe-area-inset-top));
-		left: 8px;
-		z-index: 1100;
-	}
-
-	.tv-connection-status {
-		position: fixed;
-		top: max(8px, env(safe-area-inset-top));
-		right: 8px;
-		margin: 0;
-		z-index: 1100;
-	}
-
 	.tabs-row,
 	.container.media-wide-mode .tabs-row {
 		position: fixed;
