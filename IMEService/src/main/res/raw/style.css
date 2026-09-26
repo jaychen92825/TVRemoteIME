@@ -4894,6 +4894,13 @@ body {
 	min-width: 0;
 	overflow: hidden;
 }
+.tv-channel-name {
+	font-weight: 600;
+}
+
+.tv-source-list {
+	min-width: 0;
+}
 .tv-panel-title{
 	display:flex;
 	flex-direction:row;
@@ -4906,6 +4913,108 @@ body {
 	color: #fff;
 	padding: 3px 10px;
 	margin: 2px;
+}
+
+@media (max-width: 640px) {
+	.tv-items {
+		display: flex;
+		flex-direction: column;
+		gap: 0;
+		margin-top: 8px;
+		border-top: 1px solid var(--color-border);
+	}
+
+	.tv-item {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 10px;
+		min-height: 62px;
+		padding: 9px 2px;
+		border: 0;
+		border-bottom: 1px solid var(--color-border);
+		border-radius: 0;
+		background: transparent;
+		text-align: left;
+		font-size: 13px;
+		line-height: 18px;
+		overflow: visible;
+	}
+
+	.tv-channel-name {
+		min-width: 0;
+		font-size: 14px;
+		line-height: 20px;
+		font-weight: 600;
+		color: var(--color-text);
+		overflow-wrap: anywhere;
+	}
+
+	.tv-source-list {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		flex-wrap: wrap;
+		gap: 5px;
+		max-width: 58vw;
+	}
+
+	.tv-source {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		box-sizing: border-box;
+		min-height: 38px;
+		margin: 0;
+		padding: 5px 9px;
+		border: 1px solid rgba(62,166,255,.24);
+		border-radius: 9px;
+		background: var(--color-primary-soft);
+		color: var(--color-primary-dark);
+		font-size: 11px;
+		font-weight: 600;
+		line-height: 15px;
+		text-align: center;
+		text-decoration: none;
+	}
+
+	.tv-item-single-source .tv-source {
+		min-height: 44px;
+		padding: 0 4px 0 8px;
+		border-color: transparent;
+		background: transparent;
+		color: var(--color-text-secondary);
+		font-weight: 500;
+		white-space: normal;
+	}
+
+	.tv-item-single-source .tv-source::after {
+		content: '›';
+		margin-left: 5px;
+		color: var(--color-text-secondary);
+		font-size: 18px;
+		line-height: 1;
+	}
+
+	.tv-item-multi-source .tv-source-list {
+		max-width: 62vw;
+	}
+}
+
+@media (max-width: 375px) {
+	.tv-item {
+		gap: 8px;
+	}
+
+	.tv-source-list,
+	.tv-item-multi-source .tv-source-list {
+		max-width: 56vw;
+	}
+
+	.tv-source {
+		padding-left: 7px;
+		padding-right: 7px;
+	}
 }
 
 /* "种子视频"这个标题文字挪到卡片标题里了，这个透明文件选择框叠加层原来的

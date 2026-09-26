@@ -487,16 +487,18 @@ function loadTVList(){
 		var html=[];
 		for(var i=0;i<data.length;i++){
 			var tv=data[i];
-			html.push('<div class="tv-item">');
-			html.push(escapeHtml(tv.name));
-			html.push('<br />');
-			for(var j=0; j<tv.urls.length; j++){
+			var sourceCount = tv.urls.length;
+			html.push('<div class="tv-item '+(sourceCount > 1 ? 'tv-item-multi-source' : 'tv-item-single-source')+'">');
+			html.push('<div class="tv-channel-name">'+escapeHtml(tv.name)+'</div>');
+			html.push('<div class="tv-source-list"'+(sourceCount > 1 ? ' aria-label="'+sourceCount+' 条可用线路"' : '')+'>');
+			for(var j=0; j<sourceCount; j++){
 				var originalSourceName = tv.urls[j].name || '';
 				var sourceLabel = formatTVSourceName(tv.name, originalSourceName);
-				if(!sourceLabel) sourceLabel = tv.urls.length > 1 ? ('线路 ' + (j + 1)) : '播放';
+				if(!sourceLabel) sourceLabel = sourceCount > 1 ? ('线路 ' + (j + 1)) : '播放';
 				var sourceTitle = originalSourceName && originalSourceName !== sourceLabel ? originalSourceName : sourceLabel;
 				html.push('<a class="tv-source" data-video="' + escapeHtml(tv.urls[j].url) + '" title="' + escapeHtml(sourceTitle) + '" aria-label="播放 ' + escapeHtml(tv.name) + '，' + escapeHtml(sourceLabel) + '" onclick="playTV(this)">' + escapeHtml(sourceLabel) + '</a>');
 			}
+			html.push('</div>');
 			html.push('</div>');
 		}
 		tvItems.html(html.join("\r\n"));
