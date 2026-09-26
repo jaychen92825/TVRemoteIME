@@ -432,6 +432,12 @@ function mediaMessage(text){
 function mediaConfigMessage(text){
 	$('#mediaConfigStatus').text(text);
 }
+function mediaResponseFailed(data){
+	return !data || typeof data !== 'object' || data.success === false;
+}
+function mediaResponseMessage(data, fallback){
+	return data && data.message ? String(data.message) : fallback;
+}
 function setMediaConfigBusy(pending){
 	$('#btnMediaConnect').prop('disabled', !!pending).text(pending ? '连接中…' : '连接');
 	$('#mediaSourceSelect').prop('disabled', !!pending);
@@ -702,9 +708,9 @@ function startMediaWebSniff(){
 	try { localStorage.setItem('mediaWebLastUrl', url); } catch(e) {}
 	$.ajax({url:'/media/web/sniff', type:'POST', data:{url:url}, dataType:'json', timeout:12000, success:function(data){
 		if(requestVersion !== mediaWebSniffRequestVersion) return;
-		if(data && data.success === false){
+		if(mediaResponseFailed(data)){
 			setMediaWebSniffBusy(false);
-			setMediaWebMeta(data.message || '网页视频嗅探失败', 'error');
+			setMediaWebMeta(mediaResponseMessage(data, '网页视频嗅探失败'), 'error');
 			return;
 		}
 		if(renderMediaWebSession(data) && mediaView === 'web') scheduleMediaWebPoll(700);
@@ -726,11 +732,11 @@ function playMediaWebCandidate(candidateId){
 	renderMediaWebCandidates(mediaWebLastCandidates, mediaWebRecommendedCandidateId);
 	$.ajax({url:'/media/web/play', type:'POST', data:{sessionId:sessionId,candidateId:candidateId}, dataType:'json', timeout:45000, success:function(data){
 		if(requestVersion !== mediaWebPlayRequestVersion || sessionId !== mediaWebSessionId) return;
-		if(data && data.success === false){
+		if(mediaResponseFailed(data)){
 			mediaWebPlaybackPendingCandidateId = '';
 			mediaWebPlaybackPendingRequestId = '';
 			mediaWebPlaybackPendingSince = 0;
-			setMediaWebMeta(data.message || '发送到电视失败', 'error');
+			setMediaWebMeta(mediaResponseMessage(data, '发送到电视失败'), 'error');
 			renderMediaWebCandidates(mediaWebLastCandidates, mediaWebRecommendedCandidateId);
 			return;
 		}
@@ -886,6 +892,7 @@ function mediaFindEpisode(item, playId, flag){
 	return null;
 }
 function renderMediaSources(data){
+	data = data || {};
 	mediaSources = data.sources || [];
 	$('#mediaConfigUrl').val(data.url || '');
 	var previous = currentMediaSourceKey;
@@ -971,6 +978,14 @@ function loadMediaConfig(){
 	var requestVersion = ++mediaConfigRequestVersion;
 	$.get('/media/config', null, function(data){
 		if(requestVersion !== mediaConfigRequestVersion) return;
+		if(mediaResponseFailed(data)){
+			mediaMessage('媒体配置读取失败，请稍后重试。');
+			mediaConfigMessage(mediaResponseMessage(data, '媒体配置读取失败，请稍后重试。'));
+			selectMediaSection('browse');
+			showMediaBrowse(false);
+			$('#mediaGrid').html(mediaStateHtml('媒体配置读取失败', '请检查电视与手机连接后重试。', 'config', '重新读取'));
+			return;
+		}
 		renderMediaSources(data);
 		if(data.supportedSources > 0) loadMediaHome();
 		else showMediaReady();
@@ -1020,9 +1035,10 @@ function loadMediaHome(){
 	setMediaGridLoading('正在加载首页…');
 	$.ajax({url:'/media/home', data:{sourceKey:currentMediaSourceKey}, dataType:'json', timeout:65000, success:function(data){
 		if(requestVersion !== mediaBrowseRequestVersion) return;
-		if(data && data.success === false){
-			mediaMessage('源加载失败：'+(data.message || '未知错误'));
-			setMediaGridState(mediaStateHtml('这个源加载失败', data.message || '可以重试，或在设置中切换其他源。', 'home', '重试'));
+		if(mediaResponseFailed(data)){
+			var homeError = mediaResponseMessage(data, '未知错误');
+			mediaMessage('源加载失败：'+homeError);
+			setMediaGridState(mediaStateHtml('这个源加载失败', mediaResponseMessage(data, '可以重试，或在设置中切换其他源。'), 'home', '重试'));
 			return;
 		}
 		currentMediaSourceKey = data.sourceKey || currentMediaSourceKey;
@@ -1062,9 +1078,9 @@ function loadMediaCategory(id){
 	setMediaGridLoading('正在加载分类…');
 	$.ajax({url:'/media/category', data:{sourceKey:currentMediaSourceKey,id:id,page:'1'}, dataType:'json', timeout:65000, success:function(data){
 		if(requestVersion !== mediaBrowseRequestVersion) return;
-		if(data && data.success === false){
-			mediaMessage('分类加载失败：'+(data.message || '未知错误'));
-			setMediaGridState(mediaStateHtml('分类加载失败', data.message || '可以稍后重试。', 'category', '重试'));
+		if(mediaResponseFailed(data)){
+			mediaMessage('分类加载失败：'+mediaResponseMessage(data, '未知错误'));
+			setMediaGridState(mediaStateHtml('分类加载失败', mediaResponseMessage(data, '可以稍后重试。'), 'category', '重试'));
 			return;
 		}
 		var items = data.items || [];
@@ -1094,15 +1110,15 @@ function loadMediaFolder(sourceKey, id, name, push){
 	setMediaGridLoading('正在打开目录…');
 	$.ajax({url:'/media/category', data:{sourceKey:currentMediaSourceKey,id:id,page:'1'}, dataType:'json', timeout:65000, success:function(data){
 		if(requestVersion !== mediaBrowseRequestVersion) return;
-		if(data && data.success === false){
-			mediaMessage('目录加载失败：'+(data.message || '未知错误'));
-			setMediaGridState(mediaStateHtml('目录加载失败', data.message || '可以稍后重试。', 'folder', '重试'));
+		if(mediaResponseFailed(data)){
+			mediaMessage('目录加载失败：'+mediaResponseMessage(data, '未知错误'));
+			setMediaGridState(mediaStateHtml('目录加载失败', mediaResponseMessage(data, '可以稍后重试。'), 'folder', '重试'));
 			return;
 		}
 		var items = data.items || [];
 		mediaPage = 1;
 		mediaHasMore = items.length > 0;
-		mediaMessage((data.sourceName || '当前源')+' · '+escapeHtml(name || '目录')+' · '+items.length+' 项');
+		mediaMessage((data.sourceName || '当前源')+' · '+(name || '目录')+' · '+items.length+' 项');
 		renderMediaGrid(items);
 		updateMediaPagination();
 	}, error:function(){
@@ -1163,10 +1179,10 @@ function loadMoreMedia(){
 	var requestVersion = mediaBrowseRequestVersion;
 	$.ajax({url:'/media/category', data:{sourceKey:currentMediaSourceKey,id:mediaPageId,page:String(nextPage)}, dataType:'json', timeout:65000, success:function(data){
 		if(requestVersion !== mediaBrowseRequestVersion) return;
-		if(data && data.success === false){
+		if(mediaResponseFailed(data)){
 			mediaLoadingMore = false;
 			updateMediaPagination();
-			mediaMessage('加载更多失败：'+(data.message || '未知错误'));
+			mediaMessage('加载更多失败：'+mediaResponseMessage(data, '未知错误'));
 			return;
 		}
 		var items = data.items || [];
@@ -1297,10 +1313,10 @@ function searchMedia(){
 	setMediaGridLoading('正在搜索“'+q+'”…');
 	$.ajax({url:'/media/search', data:{q:q,sourceKey:''}, dataType:'json', timeout:45000, success:function(data){
 		if(requestVersion !== mediaBrowseRequestVersion) return;
-		if(data && data.success === false){
+		if(mediaResponseFailed(data)){
 			hideMediaSearchFilters();
-			mediaMessage('搜索失败：'+(data.message || '未知错误'));
-			setMediaGridState(mediaStateHtml('搜索失败', data.message || '可以直接重试。', 'search', '重试'));
+			mediaMessage('搜索失败：'+mediaResponseMessage(data, '未知错误'));
+			setMediaGridState(mediaStateHtml('搜索失败', mediaResponseMessage(data, '可以直接重试。'), 'search', '重试'));
 			return;
 		}
 		var items = data.items || [];
@@ -1341,8 +1357,8 @@ function loadMediaDetail(sourceKey, id){
 	$('#mediaDetail').html(mediaDetailHeader()+mediaStateHtml('正在加载详情', '', '', '', true));
 	$.ajax({url:'/media/detail', data:{sourceKey:sourceKey, id:id}, dataType:'json', timeout:65000, success:function(data){
 		if(requestVersion !== mediaDetailRequestVersion) return;
-		if(data && data.success === false){
-			var message = mediaRecoveryMessage(data.message, '详情加载失败，请重试或返回浏览。', '可以重试，或返回浏览后切换其他源。');
+		if(mediaResponseFailed(data)){
+			var message = mediaRecoveryMessage(mediaResponseMessage(data, ''), '详情加载失败，请重试或返回浏览。', '可以重试，或返回浏览后切换其他源。');
 			mediaMessage(message);
 			$('#mediaDetail').html(mediaDetailHeader()+mediaStateHtml('详情加载失败', message, 'detail|'+encodeURIComponent(sourceKey)+'|'+encodeURIComponent(id), '重试'));
 			return;
@@ -1436,8 +1452,8 @@ function playMediaEpisode(sourceKey, flag, playId, title, episode){
 	if(episode) displayTitle += (displayTitle ? ' · ' : '') + episode;
 	var item = currentMediaDetail || {};
 	$.ajax({url:'/media/play', type:'POST', data:{sourceKey:sourceKey, sourceName:item.sourceName || '', mediaId:item.id || '', canonicalId:item.canonicalId || '', mediaName:item.name || title || '', pic:item.pic || '', score:item.score || '', remark:item.remark || '', year:item.year || '', type:item.type || '', flag:flag, playId:playId, episode:episode || '', title:displayTitle}, dataType:'json', timeout:45000, success:function(data){
-		if(data && data.success === false){
-			mediaMessage(mediaRecoveryMessage(data.message, '播放失败，请重试。', '可以换一条线路或切换其他源。'));
+		if(mediaResponseFailed(data)){
+			mediaMessage(mediaRecoveryMessage(mediaResponseMessage(data, ''), '播放失败，请重试。', '可以换一条线路或切换其他源。'));
 		}else{
 			mediaMessage('已发送到电视播放。');
 			refreshMediaPlaybackStatus();
@@ -1469,7 +1485,7 @@ function playMediaHistoryItem(history){
 		episode:history.episode || '',
 		title:displayTitle
 	}, dataType:'json', timeout:45000, success:function(data){
-		if(data && data.success === false){
+		if(mediaResponseFailed(data)){
 			mediaMessage('续播失败，正在打开详情页选择线路…');
 			loadMediaDetail(history.sourceKey, history.id);
 			return;
@@ -1818,7 +1834,7 @@ function mediaPlaybackSwitch(type, value){
 	else payload.flag = value;
 	$.ajax({url:'/media/switch', type:'POST', data:payload, dataType:'json', timeout:45000, success:function(data){
 		if(requestVersion !== mediaPlaybackSwitchRequestVersion) return;
-		if(data && data.success === false) mediaMessage(data.message || (isSource ? '切换播放源失败' : '切换线路失败'));
+		if(mediaResponseFailed(data)) mediaMessage(mediaResponseMessage(data, isSource ? '切换播放源失败' : '切换线路失败'));
 		else mediaMessage(isSource ? '已切换播放源。' : '已切换线路。');
 	}, error:function(){
 		if(requestVersion !== mediaPlaybackSwitchRequestVersion) return;
@@ -1844,7 +1860,7 @@ function mediaEpisodeAction(direction){
 	mediaMessage(direction === 'prev' ? '正在切换上一集…' : '正在切换下一集…');
 	$.ajax({url:'/media/episode', type:'POST', data:{direction:direction}, dataType:'json', timeout:45000, success:function(data){
 		if(requestVersion !== mediaEpisodeRequestVersion) return;
-		if(data && data.success === false) mediaMessage(data.message || '切换剧集失败');
+		if(mediaResponseFailed(data)) mediaMessage(mediaResponseMessage(data, '切换剧集失败'));
 		else mediaMessage('已切换到 '+(data.episode || (direction === 'prev' ? '上一集' : '下一集'))+'。');
 	}, error:function(){
 		if(requestVersion !== mediaEpisodeRequestVersion) return;
@@ -1863,7 +1879,7 @@ function mediaQueueEpisode(index){
 	mediaMessage('正在切换剧集…');
 	$.ajax({url:'/media/episode', type:'POST', data:{index:index}, dataType:'json', timeout:45000, success:function(data){
 		if(requestVersion !== mediaEpisodeRequestVersion) return;
-		if(data && data.success === false) mediaMessage(data.message || '切换剧集失败');
+		if(mediaResponseFailed(data)) mediaMessage(mediaResponseMessage(data, '切换剧集失败'));
 		else mediaMessage('已切换到 '+(data.episode || '所选剧集')+'。');
 	}, error:function(){
 		if(requestVersion !== mediaEpisodeRequestVersion) return;
@@ -1877,8 +1893,8 @@ function mediaQueueEpisode(index){
 
 function mediaMarkerAction(action, delta){
 	$.post('/media/marker', {action:action, delta:delta || 0}, function(data){
-		if(data && data.success === false){
-			mediaMessage(data.message || '跳过设置失败');
+		if(mediaResponseFailed(data)){
+			mediaMessage(mediaResponseMessage(data, '跳过设置失败'));
 			return;
 		}
 		if(action === 'clear') mediaMessage('已清除片头片尾跳过。');
@@ -1944,8 +1960,8 @@ $('#btnMediaConnect').on('click', function(){
 	mediaConfigMessage('正在连接配置…');
 	$.ajax({url:'/media/config', type:'POST', data:{url:url}, dataType:'json', timeout:30000, success:function(data){
 		if(requestVersion !== mediaConfigRequestVersion) return;
-		if(data && data.success === false){
-			mediaConfigMessage(data.message || '配置加载失败');
+		if(mediaResponseFailed(data)){
+			mediaConfigMessage(mediaResponseMessage(data, '配置加载失败'));
 		}else{
 			renderMediaSources(data);
 			if(data.supportedSources > 0) loadMediaHome();
@@ -2033,7 +2049,7 @@ $('#btnMediaNextEpisode').on('click', function(){ mediaEpisodeAction('next'); })
 $('#btnMediaResume').on('click', function(){
 	mediaMessage('正在继续播放…');
 	$.ajax({url:'/media/resume', type:'POST', dataType:'json', timeout:45000, success:function(data){
-		if(data && data.success === false) mediaMessage(data.message || '继续播放失败');
+		if(mediaResponseFailed(data)) mediaMessage(mediaResponseMessage(data, '继续播放失败'));
 		else mediaMessage('已继续在电视播放。');
 		refreshMediaPlaybackStatus();
 	}, error:function(){ mediaMessage('继续播放超时，请稍后重试。'); }});
