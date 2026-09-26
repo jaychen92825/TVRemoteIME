@@ -5,6 +5,7 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.tvremoteime.IMEService;
+import com.android.tvremoteime.VideoPlayHelper;
 import com.android.tvremoteime.media.MediaBinary;
 import com.android.tvremoteime.media.MediaBrowseResult;
 import com.android.tvremoteime.media.MediaCategory;
@@ -25,6 +26,8 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.net.URL;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Collections;
@@ -78,10 +81,13 @@ public class MediaRequestProcesser implements RequestProcesser {
                 if ("/media/favorites".equals(fileName)) return libraryResponse(libraryStore.getFavorites());
                 if ("/media/live/sources".equals(fileName)) return liveSourcesResponse();
                 if ("/media/live/list".equals(fileName)) return liveListResponse(params.get("index"));
+                if ("/media/live/epg".equals(fileName)) return liveEpgResponse(params.get("index"), params.get("name"), params.get("date"));
+                if ("/media/live/logo".equals(fileName)) return liveLogoResponse(params.get("index"), params.get("name"), params.get("url"));
                 if ("/media/session".equals(fileName)) return ok(playbackManager.snapshot());
                 if ("/media/web/session".equals(fileName)) return ok(webVideoSniffer.snapshot(params.get("sessionId")));
             } else if (session.getMethod() == NanoHTTPD.Method.POST) {
                 if ("/media/config".equals(fileName)) return saveConfigResponse(params.get("url"));
+                if ("/media/live/play".equals(fileName)) return livePlayResponse(params);
                 if ("/media/play".equals(fileName)) return playResponse(params);
                 if ("/media/resume".equals(fileName)) return ok(playbackManager.resumeCurrent());
                 if ("/media/episode".equals(fileName)) {
@@ -139,6 +145,11 @@ public class MediaRequestProcesser implements RequestProcesser {
             item.put("type", live.optInt("type", 0));
             item.put("epg", live.optString("epg"));
             item.put("logo", live.optString("logo"));
+            item.put("hasHeaders", !liveHeaders(live).isEmpty());
+            item.put("catchupSupported", hasLiveCatchup(live));
+            item.put("timeZone", live.optString("timeZone"));
+            item.put("playerType", live.optInt("playerType", -1));
+            item.put("timeout", live.optInt("timeout", 0));
             sources.put(item);
         }
         JSONObject obj = new JSONObject();
@@ -169,6 +180,162 @@ public class MediaRequestProcesser implements RequestProcesser {
         return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK, text);
     }
 
+    private NanoHTTPD.Response liveEpgResponse(String indexText, String channelName, String date) throws Exception {
+        JSONObject live = requireLiveSource(indexText);
+        String template = live.optString("epg").trim();
+        if (TextUtils.isEmpty(template)) throw new Exception("这个直播源没有配置节目单");
+        if (TextUtils.isEmpty(channelName)) throw new Exception("未指定频道名称");
+        String epgUrl = applyLiveTemplate(template, channelName, date);
+        epgUrl = resolveConfigUrl(epgUrl);
+        String text = MediaHttp.getRequired(epgUrl, liveHeaders(live), configManager.getConfig());
+        if (TextUtils.isEmpty(text)) throw new Exception("节目单返回内容为空");
+        return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK, text);
+    }
+
+    private NanoHTTPD.Response liveLogoResponse(String indexText, String channelName, String explicitUrl) throws Exception {
+        JSONObject live = parseLiveSource(indexText);
+        String logoUrl = explicitUrl == null ? "" : explicitUrl.trim();
+        if (TextUtils.isEmpty(logoUrl)) {
+            if (live == null) throw new Exception("这个频道没有台标地址");
+            String template = live.optString("logo").trim();
+            if (TextUtils.isEmpty(template)) throw new Exception("这个直播源没有配置台标");
+            logoUrl = applyLiveTemplate(template, channelName, null);
+            logoUrl = resolveConfigUrl(logoUrl);
+        } else {
+            logoUrl = resolveLiveAssetUrl(logoUrl, live);
+        }
+        MediaBinary image = MediaHttp.getBinary(logoUrl, live == null ? null : liveHeaders(live), configManager.getConfig());
+        NanoHTTPD.Response response = NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, image.mimeType,
+                new ByteArrayInputStream(image.data), image.data.length);
+        response.addHeader("Cache-Control", "public, max-age=86400");
+        return response;
+    }
+
+    private NanoHTTPD.Response livePlayResponse(Map<String, String> params) throws Exception {
+        String playUrl = params.get("playUrl");
+        if (TextUtils.isEmpty(playUrl)) throw new Exception("未指定直播地址");
+        JSONObject live = parseLiveSource(params.get("index"));
+        LinkedHashMap<String, String> headers = new LinkedHashMap<String, String>();
+        if (live != null) headers.putAll(liveHeaders(live));
+        playUrl = stripInlineLiveHeaders(playUrl, headers);
+        applyConfigLiveHeaders(playUrl, headers);
+        boolean useSystem = "true".equalsIgnoreCase(params.get("useSystem"));
+        String title = params.get("title");
+        boolean forcedInternal = !headers.isEmpty();
+        if (forcedInternal) {
+            VideoPlayHelper.playDirectStream(context, playUrl, TextUtils.isEmpty(title) ? playUrl : title, headers);
+        } else {
+            VideoPlayHelper.playUrl(context, playUrl, 0, useSystem, title);
+        }
+        JSONObject obj = new JSONObject();
+        obj.put("success", true);
+        obj.put("forcedInternal", forcedInternal && useSystem);
+        obj.put("headerCount", headers.size());
+        return ok(obj);
+    }
+
+    private JSONObject parseLiveSource(String indexText) {
+        if (TextUtils.isEmpty(indexText) || "local".equalsIgnoreCase(indexText)) return null;
+        try {
+            int index = Integer.parseInt(indexText);
+            JSONArray lives = configManager.getLiveSources();
+            return index >= 0 && index < lives.length() ? lives.optJSONObject(index) : null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private JSONObject requireLiveSource(String indexText) throws Exception {
+        JSONObject live = parseLiveSource(indexText);
+        if (live == null) throw new Exception("未找到这个直播源");
+        return live;
+    }
+
+    private boolean hasLiveCatchup(JSONObject live) {
+        if (live == null) return false;
+        Object value = live.opt("catchup");
+        if (value == null || value == JSONObject.NULL) return false;
+        if (value instanceof JSONObject) return ((JSONObject) value).length() > 0;
+        return !TextUtils.isEmpty(String.valueOf(value));
+    }
+
+    private String applyLiveTemplate(String template, String channelName, String date) throws Exception {
+        String result = template == null ? "" : template;
+        String encodedName = URLEncoder.encode(channelName == null ? "" : channelName, "UTF-8").replace("+", "%20");
+        result = result.replace("{name}", encodedName);
+        if (date != null) {
+            String encodedDate = URLEncoder.encode(date, "UTF-8");
+            result = result.replace("{date}", encodedDate);
+        }
+        return result;
+    }
+
+    private String resolveConfigUrl(String value) {
+        if (TextUtils.isEmpty(value)) return "";
+        try {
+            String base = configManager.getConfigUrl();
+            if (!TextUtils.isEmpty(base)) return new URL(new URL(base), value).toString();
+        } catch (Exception ignored) {
+        }
+        return value;
+    }
+
+    private String resolveLiveAssetUrl(String value, JSONObject live) {
+        if (TextUtils.isEmpty(value)) return "";
+        try {
+            if (value.startsWith("http://") || value.startsWith("https://")) return value;
+            if (live != null) {
+                String listUrl = resolveLiveUrl(firstLiveUrl(live));
+                if (!TextUtils.isEmpty(listUrl)) return new URL(new URL(listUrl), value).toString();
+            }
+        } catch (Exception ignored) {
+        }
+        return resolveConfigUrl(value);
+    }
+
+    private String stripInlineLiveHeaders(String value, Map<String, String> headers) {
+        String result = value == null ? "" : value.trim();
+        int pipe = result.indexOf('|');
+        if (pipe <= 0) return result;
+        String suffix = result.substring(pipe + 1);
+        result = result.substring(0, pipe).trim();
+        String[] parts = suffix.split("&");
+        for (String part : parts) {
+            int equals = part.indexOf('=');
+            if (equals <= 0) continue;
+            try {
+                String key = URLDecoder.decode(part.substring(0, equals), "UTF-8").trim();
+                String val = URLDecoder.decode(part.substring(equals + 1), "UTF-8").trim();
+                if (!TextUtils.isEmpty(key) && !TextUtils.isEmpty(val)) headers.put(key, val);
+            } catch (Exception ignored) {
+            }
+        }
+        return result;
+    }
+
+    private void applyConfigLiveHeaders(String playUrl, Map<String, String> headers) {
+        JSONObject config = configManager.getConfig();
+        JSONArray rules = config == null ? null : config.optJSONArray("headers");
+        if (rules == null || TextUtils.isEmpty(playUrl)) return;
+        String host = "";
+        try { host = new URL(playUrl).getHost(); } catch (Exception ignored) {}
+        if (TextUtils.isEmpty(host)) return;
+        for (int i = 0; i < rules.length(); i++) {
+            JSONObject rule = rules.optJSONObject(i);
+            if (rule == null) continue;
+            String ruleHost = rule.optString("host");
+            if (TextUtils.isEmpty(ruleHost) || !(host.equalsIgnoreCase(ruleHost) || host.toLowerCase().endsWith("." + ruleHost.toLowerCase()))) continue;
+            JSONObject object = rule.optJSONObject("header");
+            if (object == null) continue;
+            Iterator<String> keys = object.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                String value = object.optString(key);
+                if (!TextUtils.isEmpty(key) && !TextUtils.isEmpty(value)) headers.put(key, value);
+            }
+        }
+    }
+
     private String firstLiveUrl(JSONObject live) {
         if (live == null) return "";
         Object raw = live.opt("url");
@@ -194,6 +361,12 @@ public class MediaRequestProcesser implements RequestProcesser {
         LinkedHashMap<String, String> headers = new LinkedHashMap<String, String>();
         JSONObject object = live.optJSONObject("header");
         if (object == null) object = live.optJSONObject("headers");
+        if (object == null) {
+            String raw = live.optString("header").trim();
+            if (!TextUtils.isEmpty(raw) && raw.startsWith("{")) {
+                try { object = new JSONObject(raw); } catch (Exception ignored) {}
+            }
+        }
         if (object != null) {
             Iterator<String> keys = object.keys();
             while (keys.hasNext()) {
@@ -208,6 +381,8 @@ public class MediaRequestProcesser implements RequestProcesser {
         String referer = live.optString("referer");
         if (TextUtils.isEmpty(referer)) referer = live.optString("referrer");
         if (!TextUtils.isEmpty(referer)) headers.put("Referer", referer);
+        String origin = live.optString("origin");
+        if (!TextUtils.isEmpty(origin)) headers.put("Origin", origin);
         return headers;
     }
 

@@ -21,6 +21,7 @@ var playHubSection = 'link';
 var mediaLiveSources = [];
 var mediaLiveRequestVersion = 0;
 var mediaLiveSelectedSource = 'local';
+var mediaLiveEpgCache = {};
 var mediaSettingsReturnView = 'browse';
 var mediaBrowseScrollTop = 0;
 var currentMediaDetail = null;
@@ -153,7 +154,7 @@ function parseTVM3UData(text){
 		var match = line.match(new RegExp('(?:^|\\s)' + name + '="([^"]*)"', 'i'));
 		return match ? match[1].trim() : '';
 	}
-	function add(key, name, sourceName, url){
+	function add(key, name, sourceName, url, meta){
 		key = (key || name || '').trim().toLowerCase();
 		name = (name || '').trim();
 		sourceName = (sourceName || '').trim();
@@ -161,9 +162,12 @@ function parseTVM3UData(text){
 		if(!key || !name || !url) return;
 		var item = byName[key];
 		if(!item){
-			item = {"name":name, "urls":[]};
+			item = {"name":name, "urls":[], "tvgId":meta && meta.tvgId || '', "logo":meta && meta.logo || ''};
 			byName[key] = item;
 			tv.push(item);
+		}else{
+			if(!item.tvgId && meta && meta.tvgId) item.tvgId = meta.tvgId;
+			if(!item.logo && meta && meta.logo) item.logo = meta.logo;
 		}
 		for(var i=0;i<item.urls.length;i++){
 			if(item.urls[i].url === url) return;
@@ -185,13 +189,15 @@ function parseTVM3UData(text){
 			pending = {
 				key: tvgId ? tvgId.replace(/@[^@]+$/, '') : canonicalName,
 				name: attr(line, 'tvg-name') || canonicalName || tvgId || '未命名频道',
-				sourceName: displayName
+				sourceName: displayName,
+				tvgId: tvgId,
+				logo: attr(line, 'tvg-logo')
 			};
 			continue;
 		}
 		if(line.charAt(0) === '#') continue;
 		if(pending){
-			add(pending.key, pending.name, pending.sourceName, line);
+			add(pending.key, pending.name, pending.sourceName, line, {tvgId:pending.tvgId, logo:pending.logo});
 			pending = null;
 		}
 	}
@@ -316,20 +322,61 @@ function buildTVMobileGroups(data){
 	}
 	return result;
 }
+function currentMediaLiveSource(){
+	if(mediaLiveSelectedSource === 'local') return null;
+	for(var i=0;i<mediaLiveSources.length;i++){
+		if(String(mediaLiveSources[i].index) === String(mediaLiveSelectedSource)) return mediaLiveSources[i];
+	}
+	return null;
+}
+function mediaLiveLogoUrl(tv){
+	var source = currentMediaLiveSource();
+	var explicit = String(tv && tv.logo || '').trim();
+	if(!explicit && !(source && source.logo)) return '';
+	var params = ['index='+encodeURIComponent(mediaLiveSelectedSource), 'name='+encodeURIComponent(tv.name || '')];
+	if(explicit) params.push('url='+encodeURIComponent(explicit));
+	return '/media/live/logo?' + params.join('&');
+}
+function mediaLiveHasEpg(){
+	var source = currentMediaLiveSource();
+	return !!(source && source.epg);
+}
+function mediaLiveCapabilityText(){
+	var source = currentMediaLiveSource();
+	if(!source) return '';
+	var parts = [];
+	if(source.epg) parts.push('节目单');
+	if(source.logo) parts.push('台标');
+	if(source.hasHeaders) parts.push('特殊请求头');
+	if(source.catchupSupported) parts.push('检测到回看配置');
+	return parts.length ? (' · ' + parts.join(' · ')) : '';
+}
 function renderTVItemHtml(tv, grouped){
 	var html = [];
 	var sourceCount = tv.urls.length;
+	var logoUrl = mediaLiveLogoUrl(tv);
+	var hasEpg = mediaLiveHasEpg();
 	html.push('<div class="tv-item '+(sourceCount > 1 ? 'tv-item-multi-source' : 'tv-item-single-source')+(grouped ? ' tv-item-grouped' : '')+'">');
-	html.push('<div class="tv-channel-name">'+escapeHtml(tv.name)+'</div>');
+	html.push('<div class="tv-channel-main">');
+	if(logoUrl) html.push('<img class="tv-channel-logo" src="'+escapeHtml(logoUrl)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'" />');
+	if(hasEpg){
+		html.push('<button type="button" class="tv-channel-info" data-tv-epg="1" data-tv-name="'+escapeHtml(tv.name)+'" data-tv-id="'+escapeHtml(tv.tvgId || '')+'" aria-expanded="false">');
+	}else{
+		html.push('<div class="tv-channel-info">');
+	}
+	html.push('<span class="tv-channel-name">'+escapeHtml(tv.name)+'</span>');
+	if(hasEpg) html.push('<span class="tv-channel-meta">节目单</span>');
+	html.push(hasEpg ? '</button>' : '</div>');
+	html.push('</div>');
 	html.push('<div class="tv-source-list"'+(sourceCount > 1 ? ' aria-label="'+sourceCount+' 条可用线路"' : '')+'>');
 	for(var j=0; j<sourceCount; j++){
 		var originalSourceName = tv.urls[j].name || '';
 		var sourceLabel = formatTVSourceName(tv.name, originalSourceName);
 		if(!sourceLabel) sourceLabel = sourceCount > 1 ? ('线路 ' + (j + 1)) : '播放';
 		var sourceTitle = originalSourceName && originalSourceName !== sourceLabel ? originalSourceName : sourceLabel;
-		html.push('<a class="tv-source" data-video="' + escapeHtml(tv.urls[j].url) + '" title="' + escapeHtml(sourceTitle) + '" aria-label="播放 ' + escapeHtml(tv.name) + '，' + escapeHtml(sourceLabel) + '" onclick="playTV(this)">' + escapeHtml(sourceLabel) + '</a>');
+		html.push('<a class="tv-source" data-video="' + escapeHtml(tv.urls[j].url) + '" data-channel="'+escapeHtml(tv.name)+'" title="' + escapeHtml(sourceTitle) + '" aria-label="播放 ' + escapeHtml(tv.name) + '，' + escapeHtml(sourceLabel) + '" onclick="playTV(this)">' + escapeHtml(sourceLabel) + '</a>');
 	}
-	html.push('</div></div>');
+	html.push('</div><div class="tv-epg-panel hide" aria-live="polite"></div></div>');
 	return html.join('');
 }
 function renderTVList(data){
@@ -359,6 +406,159 @@ function renderTVList(data){
 	}
 	$('#mediaLiveItems').html(html.join('\r\n'));
 }
+function mediaLiveToday(){
+	var d = new Date();
+	var y = d.getFullYear();
+	var m = String(d.getMonth()+1); if(m.length < 2) m = '0'+m;
+	var day = String(d.getDate()); if(day.length < 2) day = '0'+day;
+	return y+'-'+m+'-'+day;
+}
+function mediaLiveEpgArray(payload){
+	if(Array.isArray(payload)) return payload;
+	if(!payload || typeof payload !== 'object') return [];
+	var keys = ['epg_data','programmes','programs','programme','program','list','items','data'];
+	for(var i=0;i<keys.length;i++){
+		var value = payload[keys[i]];
+		if(Array.isArray(value)) return value;
+		if(value && typeof value === 'object'){
+			var nested = mediaLiveEpgArray(value);
+			if(nested.length) return nested;
+		}
+	}
+	return [];
+}
+function mediaLiveEpgEntry(item){
+	item = item || {};
+	return {
+		title:String(item.title || item.name || item.program || item.programme || item.program_name || item.programName || '').trim(),
+		start:String(item.start || item.begin || item.startTime || item.start_time || item.time || '').trim(),
+		end:String(item.end || item.stop || item.endTime || item.end_time || '').trim(),
+		desc:String(item.desc || item.description || item.content || '').trim()
+	};
+}
+function mediaLiveXmlEpg(text){
+	var items = [];
+	if(typeof DOMParser === 'undefined' || String(text || '').indexOf('<programme') < 0) return items;
+	try {
+		var doc = new DOMParser().parseFromString(text, 'text/xml');
+		var nodes = doc.getElementsByTagName('programme');
+		for(var i=0;i<nodes.length;i++){
+			var node = nodes[i];
+			var titleNode = node.getElementsByTagName('title')[0];
+			var descNode = node.getElementsByTagName('desc')[0];
+			items.push({title:titleNode ? titleNode.textContent : '', start:node.getAttribute('start') || '', end:node.getAttribute('stop') || '', desc:descNode ? descNode.textContent : ''});
+		}
+	} catch(e) {}
+	return items;
+}
+function parseMediaLiveEpg(text){
+	var raw = [];
+	try { raw = mediaLiveEpgArray(JSON.parse(String(text || ''))); } catch(e) { raw = mediaLiveXmlEpg(text); }
+	var result = [];
+	for(var i=0;i<raw.length;i++){
+		var entry = mediaLiveEpgEntry(raw[i]);
+		if(entry.title) result.push(entry);
+	}
+	return result;
+}
+function mediaLiveEpgTime(value){
+	value = String(value || '').trim();
+	var match = value.match(/(?:^|\D)(\d{2}):(\d{2})(?:\D|$)/);
+	if(match) return match[1]+':'+match[2];
+	match = value.match(/^\d{8}(\d{2})(\d{2})/);
+	if(match) return match[1]+':'+match[2];
+	var numeric = Number(value);
+	if(numeric > 1000000000){
+		var d = new Date(numeric < 1000000000000 ? numeric*1000 : numeric);
+		if(!isNaN(d.getTime())) return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+	}
+	var date = new Date(value);
+	if(!isNaN(date.getTime())) return ('0'+date.getHours()).slice(-2)+':'+('0'+date.getMinutes()).slice(-2);
+	return value.length > 8 ? value.substring(0,8) : value;
+}
+function mediaLiveTimeMinutes(value){
+	var text = mediaLiveEpgTime(value);
+	var match = text.match(/^(\d{2}):(\d{2})$/);
+	return match ? (parseInt(match[1],10)*60 + parseInt(match[2],10)) : -1;
+}
+function mediaLiveCurrentEpgIndex(items){
+	var now = new Date();
+	var minute = now.getHours()*60 + now.getMinutes();
+	for(var i=0;i<items.length;i++){
+		var start = mediaLiveTimeMinutes(items[i].start);
+		var end = mediaLiveTimeMinutes(items[i].end);
+		if(start < 0) continue;
+		if(end < 0 && i+1 < items.length) end = mediaLiveTimeMinutes(items[i+1].start);
+		if(end >= 0 && end < start) end += 1440;
+		var compareMinute = minute < start && end > 1440 ? minute + 1440 : minute;
+		if(end >= 0 && compareMinute >= start && compareMinute < end) return i;
+		if(end < 0 && compareMinute >= start) return i;
+	}
+	for(var j=0;j<items.length;j++) if(mediaLiveTimeMinutes(items[j].start) >= minute) return j;
+	return items.length ? Math.max(0, items.length-1) : -1;
+}
+function renderMediaLiveEpg($button, items){
+	var $item = $button.closest('.tv-item');
+	var $panel = $item.find('.tv-epg-panel').first();
+	if(!items.length){
+		$panel.html('<div class="tv-epg-empty">今天暂时没有节目单。</div>');
+		return;
+	}
+	var current = mediaLiveCurrentEpgIndex(items);
+	var start = current >= 0 ? current : 0;
+	var end = Math.min(items.length, start + 5);
+	var html = ['<div class="tv-epg-title">今日节目</div>'];
+	for(var i=start;i<end;i++){
+		var entry = items[i];
+		var isCurrent = i === current;
+		var time = mediaLiveEpgTime(entry.start);
+		html.push('<div class="tv-epg-row'+(isCurrent ? ' current' : '')+'"><span class="tv-epg-time">'+escapeHtml(time)+'</span><span class="tv-epg-name">'+escapeHtml(entry.title)+'</span>'+(isCurrent ? '<span class="tv-epg-now">直播中</span>' : '')+'</div>');
+	}
+	$panel.html(html.join(''));
+	if(current >= 0 && items[current] && items[current].title) $button.find('.tv-channel-meta').text('正在播 · '+items[current].title);
+}
+function toggleMediaLiveEpg(button){
+	var $button = $(button);
+	var $item = $button.closest('.tv-item');
+	var $panel = $item.find('.tv-epg-panel').first();
+	var expanded = $button.attr('aria-expanded') === 'true';
+	$('#mediaLiveItems .tv-channel-info[data-tv-epg="1"]').not($button).attr('aria-expanded','false');
+	$('#mediaLiveItems .tv-epg-panel').not($panel).addClass('hide').empty();
+	if(expanded){
+		$button.attr('aria-expanded','false');
+		$panel.addClass('hide').empty();
+		return;
+	}
+	$button.attr('aria-expanded','true');
+	$panel.removeClass('hide').html('<div class="tv-epg-empty">正在加载节目单…</div>');
+	var name = String($button.attr('data-tv-name') || '');
+	var date = mediaLiveToday();
+	var key = mediaLiveSelectedSource+'|'+name+'|'+date;
+	if(mediaLiveEpgCache[key]){
+		renderMediaLiveEpg($button, mediaLiveEpgCache[key]);
+		return;
+	}
+	var sourceAtRequest = mediaLiveSelectedSource;
+	$.get('/media/live/epg', {index:mediaLiveSelectedSource, name:name, date:date}, function(text){
+		if(sourceAtRequest !== mediaLiveSelectedSource || !$button.closest('body').length) return;
+		try {
+			var maybeError = JSON.parse(String(text || ''));
+			if(maybeError && maybeError.success === false){
+				$panel.html('<div class="tv-epg-empty error">'+escapeHtml(maybeError.message || '节目单加载失败，请稍后重试。')+'</div>');
+				return;
+			}
+		} catch(e) {}
+		var items = parseMediaLiveEpg(text);
+		mediaLiveEpgCache[key] = items;
+		renderMediaLiveEpg($button, items);
+	}, 'text').fail(function(xhr){
+		if(sourceAtRequest !== mediaLiveSelectedSource) return;
+		var message = '节目单加载失败，请稍后重试。';
+		try { var data = JSON.parse(xhr && xhr.responseText || '{}'); if(data && data.message) message = data.message; } catch(e) {}
+		$panel.html('<div class="tv-epg-empty error">'+escapeHtml(message)+'</div>');
+	});
+}
+$(document).on('click', '.tv-channel-info[data-tv-epg="1"]', function(){ toggleMediaLiveEpg(this); });
 
 function postKeyCode(keyCode){
 	var fallback = function(){
@@ -599,7 +799,7 @@ function loadMediaLiveSource(sourceKey){
 		tvListDataCache = parseTVData(text || '');
 		renderTVList(tvListDataCache);
 		$('#mediaLiveItems').attr('aria-busy', 'false');
-		setMediaLiveStatus(tvListDataCache.length ? ('共 '+tvListDataCache.length+' 个频道') : '这个直播源没有可用频道', tvListDataCache.length ? 'ready' : '');
+		setMediaLiveStatus(tvListDataCache.length ? ('共 '+tvListDataCache.length+' 个频道'+mediaLiveCapabilityText()) : '这个直播源没有可用频道', tvListDataCache.length ? 'ready' : '');
 	};
 	var onError = function(xhr){
 		if(requestVersion !== mediaLiveRequestVersion) return;
@@ -619,6 +819,7 @@ function loadMediaLiveSource(sourceKey){
 }
 function loadMediaLiveSources(preserveSelection, loadSelected){
 	var requestVersion = ++mediaLiveRequestVersion;
+	mediaLiveEpgCache = {};
 	var previous = preserveSelection ? mediaLiveSelectedSource : '';
 	tvListDataCache = [];
 	if(mediaView === 'live') setMediaLiveStatus('正在读取直播源…', 'loading');
@@ -3208,14 +3409,24 @@ $('#speedInterval').on("change", function(){
 	})
 });
 function playTV(o){
-	var $group = $(o).closest('.tv-group');
+	var $source = $(o);
+	var $group = $source.closest('.tv-group');
 	if($group.length){
 		var groupKey = String($group.attr('data-tv-group-key') || '');
 		if(groupKey) tvExpandedGroups[groupKey] = true;
 	}
-	$.post("/play", {playUrl: $(o).attr('data-video'), "useSystem":$('#playUseSystem')[0].checked}, function(data) {
-		console.log(data)
-	})
+	$.post('/media/live/play', {
+		index:mediaLiveSelectedSource,
+		playUrl:$source.attr('data-video'),
+		title:$source.attr('data-channel') || '',
+		useSystem:$('#playUseSystem')[0].checked
+	}, function(data){
+		if(data && data.forcedInternal){
+			setMediaLiveStatus('这个频道需要请求 Header，已自动使用内置播放器。', 'ready');
+		}
+	}, 'json').fail(function(){
+		setMediaLiveStatus('播放请求失败，请尝试其他线路。', 'error');
+	});
 }
 $("#btnClear").on("click", function() {
 	if(confirm("是否要删除所有传送的文件？")){

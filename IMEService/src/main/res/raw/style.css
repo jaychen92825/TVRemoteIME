@@ -5714,3 +5714,140 @@ body {
 		min-height: 32px;
 	}
 }
+
+/* ===== Live TV enrichment: logos, on-demand EPG, capability-aware playback ===== */
+.tv-channel-main {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.tv-channel-logo {
+	flex: 0 0 auto;
+	width: 32px;
+	height: 32px;
+	object-fit: contain;
+	border-radius: 7px;
+	background: var(--color-card-bg);
+}
+
+.tv-channel-info {
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 1px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+}
+
+button.tv-channel-info {
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.tv-channel-meta {
+	display: block;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 10px;
+	font-weight: 500;
+	line-height: 15px;
+	color: var(--color-text-secondary);
+}
+
+.tv-channel-info[aria-expanded="true"] .tv-channel-meta {
+	color: var(--color-primary);
+}
+
+.tv-epg-panel {
+	box-sizing: border-box;
+	width: 100%;
+	margin-top: 8px;
+	padding: 8px 0 0;
+	border-top: 1px solid var(--color-border);
+	text-align: left;
+}
+
+.tv-epg-title {
+	margin-bottom: 4px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: .02em;
+	color: var(--color-text-secondary);
+}
+
+.tv-epg-row {
+	display: grid;
+	grid-template-columns: 42px minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 7px;
+	min-height: 28px;
+	font-size: 11px;
+	line-height: 16px;
+}
+
+.tv-epg-row.current {
+	color: var(--color-text);
+	font-weight: 600;
+}
+
+.tv-epg-time {
+	font-variant-numeric: tabular-nums;
+	color: var(--color-text-secondary);
+}
+
+.tv-epg-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tv-epg-now {
+	padding: 2px 6px;
+	border-radius: 999px;
+	background: var(--color-primary-soft);
+	color: var(--color-primary);
+	font-size: 9px;
+	font-weight: 700;
+	white-space: nowrap;
+}
+
+.tv-epg-empty {
+	padding: 7px 0;
+	font-size: 11px;
+	line-height: 17px;
+	color: var(--color-text-secondary);
+}
+
+.tv-epg-empty.error {
+	color: var(--color-danger);
+}
+
+@media (max-width: 640px) {
+	.tv-item .tv-channel-main {
+		min-width: 0;
+	}
+
+	.tv-channel-logo {
+		width: 36px;
+		height: 36px;
+		border-radius: 8px;
+	}
+
+	.tv-epg-panel {
+		grid-column: 1 / -1;
+		margin-top: 1px;
+		padding: 8px 0 5px;
+	}
+
+}
