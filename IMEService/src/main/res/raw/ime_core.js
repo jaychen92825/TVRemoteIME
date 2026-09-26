@@ -422,7 +422,10 @@ function loadTVList(){
 	}, "text");
 }
 function mediaMessage(text){
-	$('#mediaStatus,#mediaConfigStatus').text(text);
+	$('#mediaStatus').text(text);
+}
+function mediaConfigMessage(text){
+	$('#mediaConfigStatus').text(text);
 }
 function mediaStateHtml(title, message, action, label, loading){
 	var stateTitle = String(title || '');
@@ -887,9 +890,9 @@ function renderMediaSources(data){
 	currentMediaSourceKey = sourceByKey(previous) ? previous : (data.defaultSourceKey || firstSupportedSourceKey());
 	$('#mediaSourceSelect').val(currentMediaSourceKey);
 	if(!data.url){
-		mediaMessage('输入配置 URL 后连接。支持 type-0 API 和 type-3 csp jar 源。');
+		mediaConfigMessage('输入配置 URL 后连接。支持 type-0 API 和 type-3 csp jar 源。');
 	}else{
-		mediaMessage('已加载 '+(data.totalSources || 0)+' 个源，支持 '+(data.supportedSources || 0)+' 个，暂未支持 '+(data.unsupportedSources || 0)+' 个。');
+		mediaConfigMessage('已加载 '+(data.totalSources || 0)+' 个源，支持 '+(data.supportedSources || 0)+' 个，暂未支持 '+(data.unsupportedSources || 0)+' 个。');
 	}
 }
 function sourceByKey(key){
@@ -962,6 +965,7 @@ function loadMediaConfig(){
 		else showMediaReady();
 	}, 'json').fail(function(){
 		mediaMessage('媒体配置读取失败，请稍后重试。');
+		mediaConfigMessage('媒体配置读取失败，请稍后重试。');
 		selectMediaSection('browse');
 		showMediaBrowse(false);
 		$('#mediaGrid').html(mediaStateHtml('媒体配置读取失败', '请检查电视与手机连接后重试。', 'config', '重新读取'));
@@ -1855,17 +1859,17 @@ $('#btnMediaSettingsBack').on('click', function(){
 });
 $('#btnMediaConnect').on('click', function(){
 	var url = $('#mediaConfigUrl').val();
-	mediaMessage('正在连接配置…');
+	mediaConfigMessage('正在连接配置…');
 	$.ajax({url:'/media/config', type:'POST', data:{url:url}, dataType:'json', timeout:30000, success:function(data){
 		if(data && data.success === false){
-			mediaMessage(data.message || '配置加载失败');
+			mediaConfigMessage(data.message || '配置加载失败');
 		}else{
 			renderMediaSources(data);
 			if(data.supportedSources > 0) loadMediaHome();
 			else showMediaReady();
 		}
 	}, error:function(){
-		mediaMessage('配置连接超时，请检查地址或稍后重试。');
+		mediaConfigMessage('配置连接超时，请检查地址或稍后重试。');
 	}});
 });
 $('#btnMediaSearch').on('click', searchMedia);

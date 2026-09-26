@@ -341,9 +341,9 @@
 					<label for="mediaConfigUrl">TVBox 配置 URL</label>
 					<div class="media-config-row">
 						<input type="text" id="mediaConfigUrl" placeholder="https://example.com/config.json" />
-						<div class="btn" id="btnMediaConnect">连接</div>
+						<button type="button" class="btn" id="btnMediaConnect">连接</button>
 					</div>
-					<div class="media-status" id="mediaConfigStatus">未加载配置</div>
+					<div class="media-status" id="mediaConfigStatus" aria-live="polite">未加载配置</div>
 				</div>
 			</div>
 			<div class="media-web-view hide" id="mediaWebView">
