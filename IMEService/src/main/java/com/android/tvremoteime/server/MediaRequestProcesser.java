@@ -11,6 +11,7 @@ import com.android.tvremoteime.media.MediaCategory;
 import com.android.tvremoteime.media.MediaConfigManager;
 import com.android.tvremoteime.media.MediaDetail;
 import com.android.tvremoteime.media.MediaItem;
+import com.android.tvremoteime.media.MediaHttp;
 import com.android.tvremoteime.media.MediaLibraryStore;
 import com.android.tvremoteime.media.MediaPlaybackManager;
 import com.android.tvremoteime.media.MediaSource;
@@ -23,7 +24,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
+import java.net.URL;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -73,6 +76,8 @@ public class MediaRequestProcesser implements RequestProcesser {
                 if ("/media/image".equals(fileName)) return imageResponse(params.get("url"), params.get("sourceKey"));
                 if ("/media/history".equals(fileName)) return libraryResponse(libraryStore.getHistory());
                 if ("/media/favorites".equals(fileName)) return libraryResponse(libraryStore.getFavorites());
+                if ("/media/live/sources".equals(fileName)) return liveSourcesResponse();
+                if ("/media/live/list".equals(fileName)) return liveListResponse(params.get("index"));
                 if ("/media/session".equals(fileName)) return ok(playbackManager.snapshot());
                 if ("/media/web/session".equals(fileName)) return ok(webVideoSniffer.snapshot(params.get("sessionId")));
             } else if (session.getMethod() == NanoHTTPD.Method.POST) {
@@ -120,6 +125,100 @@ public class MediaRequestProcesser implements RequestProcesser {
         obj.put("url", configManager.getConfigUrl());
         addSources(obj);
         return ok(obj);
+    }
+
+    private NanoHTTPD.Response liveSourcesResponse() throws Exception {
+        JSONArray raw = configManager.getLiveSources();
+        JSONArray sources = new JSONArray();
+        for (int i = 0; i < raw.length(); i++) {
+            JSONObject live = raw.optJSONObject(i);
+            if (live == null || TextUtils.isEmpty(firstLiveUrl(live))) continue;
+            JSONObject item = new JSONObject();
+            item.put("index", i);
+            item.put("name", live.optString("name", "直播源 " + (i + 1)));
+            item.put("type", live.optInt("type", 0));
+            item.put("epg", live.optString("epg"));
+            item.put("logo", live.optString("logo"));
+            sources.put(item);
+        }
+        JSONObject obj = new JSONObject();
+        obj.put("sources", sources);
+        obj.put("count", sources.length());
+        return ok(obj);
+    }
+
+    private NanoHTTPD.Response liveListResponse(String indexText) throws Exception {
+        int index;
+        try {
+            index = Integer.parseInt(indexText == null ? "-1" : indexText);
+        } catch (NumberFormatException e) {
+            throw new Exception("直播源索引无效");
+        }
+        JSONArray lives = configManager.getLiveSources();
+        JSONObject live = index >= 0 && index < lives.length() ? lives.optJSONObject(index) : null;
+        if (live == null) throw new Exception("未找到这个直播源");
+        String sourceUrl = firstLiveUrl(live);
+        if (TextUtils.isEmpty(sourceUrl)) throw new Exception("这个直播源没有可用地址");
+        String resolvedUrl = resolveLiveUrl(sourceUrl);
+        if (!resolvedUrl.startsWith("http://") && !resolvedUrl.startsWith("https://")) {
+            throw new Exception("暂不支持这个直播源地址格式");
+        }
+        Map<String, String> headers = liveHeaders(live);
+        String text = MediaHttp.getRequired(resolvedUrl, headers, configManager.getConfig());
+        if (TextUtils.isEmpty(text)) throw new Exception("直播源返回内容为空");
+        return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK, text);
+    }
+
+    private String firstLiveUrl(JSONObject live) {
+        if (live == null) return "";
+        Object raw = live.opt("url");
+        if (raw instanceof JSONArray) {
+            JSONArray urls = (JSONArray) raw;
+            for (int i = 0; i < urls.length(); i++) {
+                Object item = urls.opt(i);
+                if (item instanceof JSONObject) {
+                    String value = ((JSONObject) item).optString("url");
+                    if (!TextUtils.isEmpty(value)) return value.trim();
+                } else if (item != null && item != JSONObject.NULL) {
+                    String value = item.toString().trim();
+                    if (!TextUtils.isEmpty(value)) return value;
+                }
+            }
+            return "";
+        }
+        if (raw instanceof JSONObject) return ((JSONObject) raw).optString("url").trim();
+        return raw == null || raw == JSONObject.NULL ? "" : raw.toString().trim();
+    }
+
+    private Map<String, String> liveHeaders(JSONObject live) {
+        LinkedHashMap<String, String> headers = new LinkedHashMap<String, String>();
+        JSONObject object = live.optJSONObject("header");
+        if (object == null) object = live.optJSONObject("headers");
+        if (object != null) {
+            Iterator<String> keys = object.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                String value = object.optString(key);
+                if (!TextUtils.isEmpty(key) && !TextUtils.isEmpty(value)) headers.put(key, value);
+            }
+        }
+        String ua = live.optString("ua");
+        if (TextUtils.isEmpty(ua)) ua = live.optString("userAgent");
+        if (!TextUtils.isEmpty(ua)) headers.put("User-Agent", ua);
+        String referer = live.optString("referer");
+        if (TextUtils.isEmpty(referer)) referer = live.optString("referrer");
+        if (!TextUtils.isEmpty(referer)) headers.put("Referer", referer);
+        return headers;
+    }
+
+    private String resolveLiveUrl(String value) {
+        if (TextUtils.isEmpty(value)) return "";
+        try {
+            String base = configManager.getConfigUrl();
+            if (!TextUtils.isEmpty(base)) return new URL(new URL(base), value).toString();
+        } catch (Exception ignored) {
+        }
+        return value;
     }
 
     private NanoHTTPD.Response searchResponse(String keyword, String sourceKey) throws Exception {
@@ -348,6 +447,7 @@ public class MediaRequestProcesser implements RequestProcesser {
         obj.put("totalSources", sources.size());
         obj.put("supportedSources", supported);
         obj.put("unsupportedSources", sources.size() - supported);
+        obj.put("liveSources", configManager.getLiveSources().length());
         MediaSource defaultSource = configManager.getDefaultSource();
         obj.put("defaultSourceKey", defaultSource == null ? "" : defaultSource.key);
     }

@@ -58,6 +58,12 @@ public class MediaConfigManager {
         return parseSources(getConfig());
     }
 
+    public JSONArray getLiveSources() {
+        JSONObject config = getConfig();
+        JSONArray lives = config == null ? null : config.optJSONArray("lives");
+        return lives == null ? new JSONArray() : lives;
+    }
+
     public MediaSource getSource(String key) {
         for (MediaSource source : getSources()) {
             if (source.key != null && source.key.equals(key)) return source;
@@ -163,7 +169,7 @@ public class MediaConfigManager {
 
     private ConfigLoadResult resolveConfigObject(String url, JSONObject object, int depth) throws Exception {
         if (object == null) return null;
-        if (object.optJSONArray("sites") != null) return new ConfigLoadResult(url, object);
+        if (object.optJSONArray("sites") != null || object.optJSONArray("lives") != null) return new ConfigLoadResult(url, object);
         JSONArray depots = object.optJSONArray("urls");
         if (depots == null) return null;
         for (int i = 0; i < depots.length(); i++) {
@@ -177,7 +183,7 @@ public class MediaConfigManager {
             } catch (Exception ignored) {
             }
         }
-        throw new Exception("多仓配置里没有可加载的点播配置");
+        throw new Exception("多仓配置里没有可加载的点播或直播配置");
     }
 
     private JSONObject parseJsonConfig(String url, String body) {

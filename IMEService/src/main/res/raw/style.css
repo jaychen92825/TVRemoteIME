@@ -5437,3 +5437,280 @@ body {
 		border-bottom-color: transparent;
 	}
 }
+
+/* ===== IA refinement: quick transfer, playback settings subview, media live ===== */
+.quick-transfer-card {
+	margin: 12px 15px 0;
+	padding: 13px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-md);
+	background: var(--color-card-bg);
+}
+
+.quick-transfer-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.quick-transfer-head > div:first-child {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.quick-transfer-head strong {
+	font-size: 14px;
+	line-height: 20px;
+	color: var(--color-text);
+}
+
+.quick-transfer-head > div:first-child span {
+	font-size: 11px;
+	line-height: 16px;
+	color: var(--color-text-secondary);
+}
+
+.quick-transfer-head .version-watermark {
+	width: auto;
+	max-width: 58%;
+	justify-content: flex-end;
+	flex: 0 1 auto;
+	padding-top: 2px;
+}
+
+.quick-transfer-upload.app-upload {
+	margin: 12px 0 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	gap: 8px;
+}
+
+.quick-transfer-upload #upfile {
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 44px;
+	z-index: 2;
+	cursor: pointer;
+}
+
+.quick-transfer-primary.upload-btn {
+	width: 100%;
+	height: 44px;
+	border-color: var(--color-primary);
+	background: var(--color-primary);
+	color: #fff;
+	font-weight: 600;
+}
+
+.quick-transfer-upload .upload-process {
+	flex: 0 0 100%;
+	height: 20px;
+	padding: 0;
+}
+
+.quick-transfer-options {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid var(--color-border);
+}
+
+.quick-transfer-options .upload-auto-setting {
+	flex: 1;
+	min-width: 0;
+}
+
+.quick-transfer-clear {
+	flex: 0 0 auto;
+	min-height: 34px;
+	padding: 0 3px;
+	border: 0;
+	background: transparent;
+	color: var(--color-text-secondary);
+	font: inherit;
+	font-size: 11px;
+	cursor: pointer;
+}
+
+.play-hub-tabs {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.play-settings-view {
+	padding: 10px 15px 16px;
+}
+
+.play-settings-view .media-subview-head {
+	margin: 0 0 10px;
+}
+
+.play-settings-card {
+	padding: 4px 12px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-md);
+	background: var(--color-card-bg);
+}
+
+.media-live-view {
+	padding: 8px 0 20px;
+}
+
+.media-live-toolbar {
+	display: grid;
+	grid-template-columns: auto minmax(150px, 1fr) auto auto;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 12px;
+	margin: 0 0 4px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-md);
+	background: var(--color-card-bg);
+}
+
+.media-live-toolbar label {
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--color-text-secondary);
+}
+
+#mediaLiveSourceSelect {
+	min-width: 0;
+	height: 36px;
+	padding: 0 8px;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-bg);
+	color: var(--color-text);
+}
+
+.media-live-action {
+	min-height: 36px;
+	padding: 0 8px;
+	border: 0;
+	background: transparent;
+	color: var(--color-primary);
+	font: inherit;
+	font-size: 11px;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.media-live-status {
+	min-height: 18px;
+	padding: 7px 2px 3px;
+	font-size: 11px;
+	color: var(--color-text-secondary);
+}
+
+.media-live-status.loading { color: var(--color-text-secondary); }
+.media-live-status.ready { color: #39865d; }
+.media-live-status.error { color: var(--color-danger); }
+
+.media-live-items.tv-items {
+	margin-top: 4px;
+}
+
+.media-live-edit {
+	margin-top: 8px;
+	padding: 12px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-md);
+	background: var(--color-card-bg);
+}
+
+.media-live-edit textarea {
+	width: 100%;
+	height: 420px;
+	box-sizing: border-box;
+	padding: 8px;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-bg);
+	color: var(--color-text);
+	font: inherit;
+}
+
+@media (max-width: 640px) {
+	.quick-transfer-card {
+		margin-left: 12px;
+		margin-right: 12px;
+		padding: 12px;
+	}
+
+	.quick-transfer-head {
+		flex-direction: column;
+		gap: 7px;
+	}
+
+	.quick-transfer-head .version-watermark {
+		width: 100%;
+		max-width: 100%;
+		justify-content: flex-start;
+		font-size: 10px;
+	}
+
+	.quick-transfer-options {
+		align-items: center;
+	}
+
+	.quick-transfer-options .upload-auto-setting > span {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 1px;
+	}
+
+	.play-settings-view {
+		padding: 10px 12px 16px;
+	}
+
+	.media-live-view {
+		padding-top: 5px;
+	}
+
+	.media-live-toolbar {
+		grid-template-columns: minmax(0, 1fr) auto auto;
+		gap: 5px;
+		padding: 8px;
+	}
+
+	.media-live-toolbar label {
+		display: none;
+	}
+
+	#mediaLiveSourceSelect {
+		height: 44px;
+	}
+
+	.media-live-action {
+		min-height: 44px;
+		padding: 0 7px;
+	}
+
+	.media-live-status {
+		padding-left: 1px;
+	}
+
+	.media-live-edit textarea {
+		height: 360px;
+	}
+}
+
+@media (max-width: 375px) {
+	.media-live-toolbar {
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
+
+	#btnShowTVEdit {
+		grid-column: 1 / -1;
+		justify-self: start;
+		min-height: 32px;
+	}
+}
