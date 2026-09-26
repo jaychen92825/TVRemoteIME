@@ -1507,6 +1507,7 @@ function renderMediaPlaybackStatus(data){
 	mediaPlaybackPlaying = !!(active && playing);
 	var hiddenByDismiss = !!(hasPlaybackUi && nextSessionKey && mediaPlaybackDismissedSessionKey === nextSessionKey);
 	$('#mediaPlaybackControls').toggleClass('hide', !hasPlaybackUi || hiddenByDismiss);
+	$('#btnMediaPlaybackRestore').toggleClass('hide', !hasPlaybackUi || !hiddenByDismiss);
 	$('#mediaPlaybackControls').toggleClass('direct-stream', directStream);
 	$('.container').toggleClass('media-has-global-playback', hasPlaybackUi && !hiddenByDismiss);
 	if(!hasPlaybackUi){
@@ -1853,8 +1854,17 @@ $('#btnMediaPlaybackToggle').on('click', function(){
 $('#btnMediaPlaybackDismiss').on('click', function(){
 	mediaPlaybackDismissedSessionKey = mediaPlaybackSessionKey;
 	$('#mediaPlaybackControls').removeClass('expanded').addClass('hide');
+	$('#btnMediaPlaybackRestore').removeClass('hide');
 	$('#btnMediaPlaybackToggle').attr('aria-expanded', 'false').attr('aria-label', '展开播放控制');
 	$('.container').removeClass('media-has-global-playback');
+});
+$('#btnMediaPlaybackRestore').on('click', function(){
+	if(!mediaPlaybackSessionKey) return;
+	mediaPlaybackDismissedSessionKey = '';
+	$(this).addClass('hide');
+	$('#mediaPlaybackControls').removeClass('hide expanded');
+	$('#btnMediaPlaybackToggle').attr('aria-expanded', 'false').attr('aria-label', '展开播放控制');
+	$('.container').addClass('media-has-global-playback');
 });
 $('#btnMediaCompactPrimary').on('click', function(){
 	if(mediaPlaybackActive){
