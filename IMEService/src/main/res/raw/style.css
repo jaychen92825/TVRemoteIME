@@ -3593,6 +3593,27 @@ body {
 		min-height: 44px;
 	}
 
+	.media-settings-source,
+	#mediaConfigUrl,
+	.media-config-row .btn {
+		height: 44px;
+		min-height: 44px;
+	}
+
+	.media-settings-source {
+		padding: 0 10px;
+	}
+
+	#mediaConfigUrl {
+		font-size: 13px;
+	}
+
+	.media-config-row .btn {
+		min-width: 64px;
+		margin-right: 0;
+		padding: 0 12px;
+	}
+
 	.media-route,
 	.media-episode-range,
 	.media-episode {
