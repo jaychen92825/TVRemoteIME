@@ -425,8 +425,16 @@ function mediaMessage(text){
 	$('#mediaStatus,#mediaConfigStatus').text(text);
 }
 function mediaStateHtml(title, message, action, label, loading){
-	var html = ['<div class="media-empty media-state'+(loading ? ' loading' : '')+'">'];
-	if(loading) html.push('<span class="media-state-spinner" aria-hidden="true"></span>');
+	var stateTitle = String(title || '');
+	var error = !loading && /(失败|超时|没有响应)/.test(stateTitle);
+	var classes = 'media-empty media-state'+(loading ? ' loading' : '')+(error ? ' error' : '');
+	var role = error ? ' role="alert"' : (loading ? ' role="status"' : '');
+	var html = ['<div class="'+classes+'"'+role+'>'];
+	if(loading){
+		html.push('<span class="media-state-spinner" aria-hidden="true"></span>');
+	}else{
+		html.push('<span class="media-state-icon'+(error ? ' error' : '')+'" aria-hidden="true">'+(error ? '<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5v5.5M12 16.5h.01" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>' : '<svg viewBox="0 0 24 24" width="22" height="22"><rect x="4" y="5" width="16" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m10 9 5 3-5 3V9Z" fill="currentColor"/></svg>')+'</span>');
+	}
 	if(title) html.push('<div class="media-state-title">'+escapeHtml(title)+'</div>');
 	if(message) html.push('<div class="media-state-copy">'+escapeHtml(message)+'</div>');
 	if(action && label) html.push('<button type="button" class="media-state-action" data-media-action="'+escapeHtml(action)+'">'+escapeHtml(label)+'</button>');
