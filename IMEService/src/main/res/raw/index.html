@@ -21,30 +21,30 @@
 		<div class="tabs">
 		  <div class="tab cur" data-rel="controls">
 			  <svg viewBox="0 0 24 24" width="14" height="14"><rect x="2" y="6" width="20" height="12" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><line x1="6" y1="10" x2="6" y2="10.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="10" y1="10" x2="10" y2="10.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="14" y1="10" x2="14" y2="10.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="10" x2="18" y2="10.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="7" y1="14" x2="17" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-			  输入遥控
+			  遥控
 		  </div>
 		  <div class="tab" data-rel="app">
 			  <svg viewBox="0 0 24 24" width="14" height="14"><rect x="3" y="3" width="7" height="7" rx="1.5" fill="currentColor"/><rect x="14" y="3" width="7" height="7" rx="1.5" fill="currentColor"/><rect x="3" y="14" width="7" height="7" rx="1.5" fill="currentColor"/><rect x="14" y="14" width="7" height="7" rx="1.5" fill="currentColor"/></svg>
-			  应用管理
+			  应用
 		  </div>
 		  <div class="tab" data-rel="file">
 			  <svg viewBox="0 0 24 24" width="14" height="14"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6z" fill="currentColor"/></svg>
-			  文件管理
+			  文件
 		  </div>
 		  <div class="tab" data-rel="video">
 			  <svg viewBox="0 0 24 24" width="14" height="14"><rect x="2" y="4" width="20" height="13" rx="1.5" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M10 8l6 3-6 3V8z" fill="currentColor"/><line x1="8" y1="21" x2="16" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-			  视频直播
+			  播放
 		  </div>
 		  <div class="tab" data-rel="media">
 			  <svg viewBox="0 0 24 24" width="14" height="14"><rect x="4" y="5" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M9 9l7 3.5L9 16V9z" fill="currentColor"/></svg>
-			  媒体浏览
+			  媒体库
 		  </div>
 		</div>
 		</div>
 		<div class="main-wrapper" data-tab="controls">
-			<button type="button" class="media-remote-return" id="btnMediaReturnFromRemote" aria-label="返回媒体浏览">
+			<button type="button" class="media-remote-return" id="btnMediaReturnFromRemote" aria-label="返回媒体库">
 				<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="m14 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-				<span>返回媒体浏览</span>
+				<span>返回媒体库</span>
 			</button>
 			<div class="inputarea-wrapper">
 				<textarea id="inputarea" rows="1" placeholder="点此为电视输入文字"></textarea>
@@ -118,18 +118,21 @@
 			<label style="color:#e5484d;"><input type="checkbox" id="cbUninstall">卸载应用</label></div>
 			<div class="app-list"></div>
 		</div>
-		<div class="app-upload" data-tab="controls">
+		<div class="file-section-heading hide" data-tab="file"><strong>快速传送</strong><span>发送 APK 或视频到电视</span></div>
+		<div class="app-upload hide" data-tab="file">
 		    <input type="file" id="upfile" value=".." />
-		    <div class="upload-btn" id="btnUpload"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 18a4 4 0 0 1-1-7.87A5 5 0 0 1 16 8h.5a3.5 3.5 0 0 1 .5 7" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="12" x2="12" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M9 15l3-3 3 3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>传送文件</div>
+		    <div class="upload-btn" id="btnUpload"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 18a4 4 0 0 1-1-7.87A5 5 0 0 1 16 8h.5a3.5 3.5 0 0 1 .5 7" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="12" x2="12" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M9 15l3-3 3 3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>选择文件</div>
 			<div class="upload-process">
 			    <div class="processbar" id="processbar1"></div>
 			</div>
-		    <div class="upload-btn" id="btnClear"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 7h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/></svg>清除缓存</div>
+		    <div class="upload-btn" id="btnClear"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 7h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/></svg>清理传送缓存</div>
 		</div>
-		<div class="upload-settings" data-tab="controls">
-		   <label style="margin-right:10px;"><input type="checkbox" checked="checked" id="cbAutoInstall">传送后自动安装APK文件或播放视频文件</label>
-		   <div class="version-watermark">
-			   <span id="deviceNameWatermark"></span><span>V<span id="curVer">1.0</span></span>
+		<div class="upload-settings hide" data-tab="file">
+		   <label class="upload-auto-setting"><input type="checkbox" checked="checked" id="cbAutoInstall"><span><strong>上传后自动处理</strong><small>APK 自动安装 · 视频自动播放</small></span></label>
+		   <div class="version-watermark" aria-label="当前电视设备状态">
+			   <span id="deviceNameWatermark"></span>
+			   <span class="version-watermark-separator" aria-hidden="true">·</span>
+			   <span>V<span id="curVer">1.0</span></span>
 			   <span class="version-watermark-separator" aria-hidden="true">·</span>
 			   <span class="tv-connection-status is-connecting" id="tvConnectionStatus" role="status" aria-live="polite" title="正在连接电视">
 				   <span class="tv-connection-dot" aria-hidden="true"></span>
@@ -138,49 +141,40 @@
 		   </div>
 	    </div>
 		<div class="play-line hide" data-tab="video">
-		   <div class="card">
-			   <div class="card-title">网络视频</div>
-			   <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#8c8c8c;margin-bottom:8px;">
-				   <span>支持http/ftp/thunder/ed2k/rtmp/mms</span>
-				   <a href="javascript:$('#playUrl').val('');" style="color:#8c8c8c;display:inline-flex;align-items:center;gap:2px;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;"><svg viewBox="0 0 24 24" width="11" height="11"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>清空地址</a>
-			   </div>
-			   <div style="display:flex;gap:8px;">
-				   <input type="text" id="playUrl" placeholder="网络视频地址" value="" style="flex:1;" />
-				   <div class="btn" id="btnPlay" style="margin-right:0;"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 5l12 7-12 7V5z" fill="currentColor"/></svg>远程播放</div>
-			   </div>
-		   </div>
-		   <div class="card">
-			   <div class="card-title">播放设置</div>
-			   <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;font-size:12px;color:#555;">
-				   <label>每次快进<input type="text" id="speedInterval" maxlength="3" value="5" style="width:30px;height:22px;margin:0 4px;" />秒</label>
-				   <label><input type="checkbox" id="playUseSystem">调用系统播放器</label>
-				   <div class="btn1 app-btn1" id="stopPlay"><svg viewBox="0 0 24 24" width="12" height="12"><rect x="5" y="5" width="14" height="14" rx="1.5" fill="currentColor"/></svg>停止边下边播任务</div>
-			   </div>
-		   </div>
-		   <div class="card">
-			   <div class="card-title">种子视频</div>
-			   <div style="position: relative;">
-				   <input type="file" id="upfile3" value="..">
-				   <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
-					   <input type="button" value="上传种子" class="btn" id="btnUploadTorrent" style="margin-right:0;">
-					   <div class="btn" id="btnPlayTorrent" style="margin-right:0;"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 5l12 7-12 7V5z" fill="currentColor"/></svg>开始播放</div>
-					   <select style="height:30px;flex:1;min-width:115px;" id="torrentItems">
-					   </select>
-				   </div>
-			   </div>
-		   </div>
-		   <div class="card">
-			   <div class="tv-panel-title" style="margin-top:0;border-top:none;height:auto;padding-right:0;">
-				  <div style="flex:1;margin-bottom:0;" class="card-title">电视节目</div>
-				  <div style="font-size:12px;">需要更改直播源请<a style="color:red;display:inline-flex;align-items:center;gap:2px;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;" id="btnShowTVEdit"><svg viewBox="0 0 24 24" width="11" height="11"><path d="M4 20l1-4 11-11 3 3-11 11-4 1z" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linejoin="round"/></svg>点击这里</a></div>
-			   </div>
-			   <div class="tv-items"></div>
-		   </div>
-		   <div class="tv-edit hide card">
-		      <textarea style="width:98%;height:500px" id="tvData"></textarea><br />
-              <div class="btn" id="btnTVEdit"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M5 13l4 4 10-10" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>修改</div>
-			  <div class="btn" id="btnTVCancel"><svg viewBox="0 0 24 24" width="14" height="14"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>取消</div>
-		  </div>
+			<div class="play-hub-head">
+				<div><div class="play-hub-title">播放</div><div class="play-hub-subtitle">电视直播、网页链接和种子视频</div></div>
+				<button type="button" class="play-settings-btn" id="btnPlaybackSettings" aria-expanded="false" aria-controls="playSettingsPanel" aria-label="播放设置" title="播放设置"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.1A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.1A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.5 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.15.38.37.72.66 1 .3.28.7.43 1.1.4h.1v4h-.1a1.7 1.7 0 0 0-1.76.6Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+			</div>
+			<div class="play-hub-tabs" role="tablist" aria-label="播放方式">
+				<button type="button" class="play-hub-tab active" data-play-section="tv" role="tab" aria-selected="true">电视</button>
+				<button type="button" class="play-hub-tab" data-play-section="link" role="tab" aria-selected="false">网页 / 链接</button>
+				<button type="button" class="play-hub-tab" data-play-section="torrent" role="tab" aria-selected="false">种子</button>
+			</div>
+			<div class="play-settings-panel hide" id="playSettingsPanel">
+				<div class="play-setting-row"><label for="speedInterval">快进步长</label><div><input type="text" id="speedInterval" maxlength="3" value="5" inputmode="numeric" /> <span>秒</span></div></div>
+				<label class="play-setting-row play-setting-toggle"><span><strong>使用系统播放器</strong><small>使用电视已安装的外部播放器打开视频</small></span><input type="checkbox" id="playUseSystem"></label>
+				<button type="button" class="play-stop-task" id="stopPlay"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1.5" fill="currentColor"/></svg>停止当前下载任务</button>
+			</div>
+			<section class="play-hub-section tv-list" data-play-section-panel="tv">
+				<div class="tv-panel-title"><div class="play-section-title">电视</div><button type="button" class="tv-edit-link" id="btnShowTVEdit">编辑直播源</button></div>
+				<div class="tv-items"></div>
+			</section>
+			<section class="play-hub-section hide" data-play-section-panel="link">
+				<div class="media-web-view" id="mediaWebView">
+					<div class="media-web-input-row">
+						<div class="media-web-url-control"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M10.5 13.5a4 4 0 0 0 5.66 0l2-2a4 4 0 0 0-5.66-5.66l-1.15 1.15M13.5 10.5a4 4 0 0 0-5.66 0l-2 2a4 4 0 0 0 5.66 5.66l1.15-1.15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><input type="url" id="mediaWebUrl" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="粘贴网页或视频链接" aria-label="网页或视频链接" /><button type="button" class="media-web-clear-btn hide" id="btnMediaWebClear" aria-label="清空链接" title="清空链接"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="m8 8 8 8M16 8l-8 8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button></div>
+						<button type="button" class="media-web-sniff-btn" id="btnMediaWebSniff" aria-label="解析并播放链接"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" fill="currentColor"/></svg><span>解析并播放</span></button>
+					</div>
+					<div class="media-web-meta" id="mediaWebMeta" aria-live="polite">粘贴网页地址会自动嗅探视频；m3u8、MP4、rtmp、thunder 等直链会直接播放。</div>
+					<button type="button" class="media-web-direct-btn" id="btnMediaWebDirect">无法解析？直接播放此链接</button>
+					<div class="media-web-results" id="mediaWebResults"><div class="media-web-empty"><div class="media-web-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="28" height="28"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m10 9 5 3-5 3V9Z" fill="currentColor"/></svg></div><div class="media-web-empty-title">网页或链接播放</div><div class="media-web-empty-copy">普通网页会自动解析可播放视频；明确的视频直链会直接发送到电视。</div></div></div>
+				</div>
+			</section>
+			<section class="play-hub-section hide" data-play-section-panel="torrent">
+				<div class="play-section-title">种子视频</div><div class="play-section-copy">上传 .torrent，选择其中的视频后边下边播。</div>
+				<div class="torrent-upload-wrap"><input type="file" id="upfile3" value=".."><div class="torrent-actions"><input type="button" value="选择种子" class="btn" id="btnUploadTorrent"><select id="torrentItems" aria-label="种子中的视频文件"></select><button type="button" class="btn" id="btnPlayTorrent"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 5l12 7-12 7V5z" fill="currentColor"/></svg>播放</button></div></div>
+			</section>
+			<div class="tv-edit hide play-hub-section"><textarea id="tvData"></textarea><div class="tv-edit-actions"><button type="button" class="btn" id="btnTVEdit">保存</button><button type="button" class="btn" id="btnTVCancel">取消</button></div></div>
 	    </div>
 		<div class="media-panel hide" data-tab="media">
 			<div class="media-toolbar" id="mediaToolbar">
@@ -192,7 +186,6 @@
 					<button type="button" class="media-library-tab active" data-section="browse">浏览</button>
 					<button type="button" class="media-library-tab" data-section="history">历史</button>
 					<button type="button" class="media-library-tab" data-section="favorites">收藏</button>
-					<button type="button" class="media-library-tab" data-section="web">网页视频</button>
 				</div>
 				<div class="media-search-control" id="mediaSearchControl">
 					<input type="text" id="mediaSearchInput" autocomplete="off" placeholder="搜索电影、电视剧" aria-label="搜索电影、电视剧" />
@@ -346,29 +339,6 @@
 					<div class="media-status" id="mediaConfigStatus" aria-live="polite">未加载配置</div>
 				</div>
 			</div>
-			<div class="media-web-view hide" id="mediaWebView">
-				<div class="media-web-input-row">
-					<div class="media-web-url-control">
-						<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M10.5 13.5a4 4 0 0 0 5.66 0l2-2a4 4 0 0 0-5.66-5.66l-1.15 1.15M13.5 10.5a4 4 0 0 0-5.66 0l-2 2a4 4 0 0 0 5.66 5.66l1.15-1.15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-						<input type="url" id="mediaWebUrl" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="粘贴包含视频的网页地址" aria-label="网页地址" />
-						<button type="button" class="media-web-clear-btn hide" id="btnMediaWebClear" aria-label="清空网页地址" title="清空网页地址">
-							<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="m8 8 8 8M16 8l-8 8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-						</button>
-					</div>
-					<button type="button" class="media-web-sniff-btn" id="btnMediaWebSniff" aria-label="开始嗅探网页视频">
-						<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><circle cx="11" cy="11" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4 4M8.5 11h5M11 8.5v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-						<span>开始嗅探</span>
-					</button>
-				</div>
-				<div class="media-web-meta" id="mediaWebMeta" aria-live="polite">粘贴网页链接，电视会在后台打开页面并寻找可播放视频。</div>
-				<div class="media-web-results" id="mediaWebResults">
-					<div class="media-web-empty">
-						<div class="media-web-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="28" height="28"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m10 9 5 3-5 3V9Z" fill="currentColor"/></svg></div>
-						<div class="media-web-empty-title">从网页发送视频到电视</div>
-						<div class="media-web-empty-copy">适合普通网页中的 HLS、DASH 和直链视频。登录、DRM 或站点专用播放器可能无法直接解析。</div>
-					</div>
-				</div>
-			</div>
 			<section class="media-continue hide" id="mediaContinue" aria-label="继续观看">
 				<div class="media-continue-head">
 					<div class="media-section-title">继续观看</div>
@@ -400,10 +370,11 @@
 			</div>
 		</div>
 		<div class="file-panel hide" data-tab="file">
+		   <div class="file-manager-heading"><strong>文件管理</strong><span>浏览电视存储或上传到当前目录</span></div>
 		   <div class="file-un">
 			   <div class="file-upload">
 					<input type="file" id="upfile2" value=".." />
-					<div class="btn" id="btnUpload2"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 18a4 4 0 0 1-1-7.87A5 5 0 0 1 16 8h.5a3.5 3.5 0 0 1 .5 7" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="12" x2="12" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M9 15l3-3 3 3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>上传文件</div>
+					<div class="btn" id="btnUpload2"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 18a4 4 0 0 1-1-7.87A5 5 0 0 1 16 8h.5a3.5 3.5 0 0 1 .5 7" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="12" x2="12" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M9 15l3-3 3 3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>上传到当前目录</div>
 					<div class="upload-process" style="height:30px">
 						<div class="processbar" id="processbar2"></div>
 					</div>

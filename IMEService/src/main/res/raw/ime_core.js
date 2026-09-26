@@ -17,6 +17,7 @@ var mediaSources = [];
 var currentMediaSourceKey = '';
 var mediaView = 'browse';
 var mediaSection = 'browse';
+var playHubSection = 'tv';
 var mediaBrowseScrollTop = 0;
 var currentMediaDetail = null;
 var renderedMediaItems = [];
@@ -667,12 +668,12 @@ function showMediaBrowse(restorePosition){
 	invalidateMediaDetailRequest();
 	clearMediaWebPoll();
 	mediaView = 'browse';
-	$('.media-panel').removeClass('media-detail-active media-settings-active media-web-active');
+	$('.media-panel').removeClass('media-detail-active media-settings-active');
 	$('#mediaToolbar,#mediaLibraryNav,#mediaSearchControl,.media-toolbar-actions,#mediaStatus,#mediaCategories,#mediaGrid').removeClass('hide');
 	$('#mediaPagination').toggleClass('hide', !mediaHasMore);
 	$('#mediaCategories').toggleClass('hide', mediaSection !== 'browse');
 	$('#mediaFilters').toggleClass('hide', !(mediaSection === 'browse' && mediaSearchFiltersAvailable));
-	$('#mediaDetail,#mediaSettingsView,#mediaWebView').addClass('hide');
+	$('#mediaDetail,#mediaSettingsView').addClass('hide');
 	updateMediaContinueVisibility();
 	updateContainerWidth();
 	setTimeout(function(){
@@ -684,8 +685,8 @@ function showMediaDetailView(){
 	rememberMediaBrowsePosition();
 	mediaView = 'detail';
 	hideMediaContinue(true);
-	$('.media-panel').removeClass('media-settings-active media-web-active').addClass('media-detail-active');
-	$('#mediaToolbar,#mediaLibraryNav,#mediaCategories,#mediaFilters,#mediaGrid,#mediaSettingsView,#mediaWebView,#mediaPagination').addClass('hide');
+	$('.media-panel').removeClass('media-settings-active').addClass('media-detail-active');
+	$('#mediaToolbar,#mediaLibraryNav,#mediaCategories,#mediaFilters,#mediaGrid,#mediaSettingsView,#mediaPagination').addClass('hide');
 	$('#mediaStatus,#mediaDetail').removeClass('hide');
 	updateContainerWidth();
 	$('.container').scrollTop(0);
@@ -696,8 +697,8 @@ function showMediaSettingsView(){
 	rememberMediaBrowsePosition();
 	mediaView = 'settings';
 	hideMediaContinue(true);
-	$('.media-panel').removeClass('media-detail-active media-web-active').addClass('media-settings-active');
-	$('#mediaToolbar,#mediaLibraryNav,#mediaStatus,#mediaCategories,#mediaFilters,#mediaGrid,#mediaDetail,#mediaWebView,#mediaPagination').addClass('hide');
+	$('.media-panel').removeClass('media-detail-active').addClass('media-settings-active');
+	$('#mediaToolbar,#mediaLibraryNav,#mediaStatus,#mediaCategories,#mediaFilters,#mediaGrid,#mediaDetail,#mediaPagination').addClass('hide');
 	$('#mediaSettingsView').removeClass('hide');
 	updateContainerWidth();
 	$('.container').scrollTop(0);
@@ -710,22 +711,30 @@ function clearMediaWebPoll(){
 	}
 }
 
-function showMediaWebView(){
-	invalidateMediaDetailRequest();
-	mediaView = 'web';
-	selectMediaSection('web');
-	hideMediaContinue(true);
-	resetMediaPagination();
-	$('.media-panel').removeClass('media-detail-active media-settings-active').addClass('media-web-active');
-	$('#mediaToolbar,#mediaLibraryNav,#mediaWebView').removeClass('hide');
-	$('#mediaSearchControl,.media-toolbar-actions,#mediaStatus,#mediaCategories,#mediaFilters,#mediaGrid,#mediaDetail,#mediaSettingsView,#mediaPagination').addClass('hide');
-	if(!$('#mediaWebUrl').val()){
-		try { $('#mediaWebUrl').val(localStorage.getItem('mediaWebLastUrl') || ''); } catch(e) {}
+function showPlayHubSection(section){
+	if(section !== 'link' && section !== 'torrent') section = 'tv';
+	playHubSection = section;
+	$('.play-hub-tab').removeClass('active').attr('aria-selected', 'false');
+	$('.play-hub-tab[data-play-section="'+section+'"]').addClass('active').attr('aria-selected', 'true');
+	$('[data-play-section-panel]').addClass('hide');
+	$('[data-play-section-panel="'+section+'"]').removeClass('hide');
+	$('.tv-edit').addClass('hide');
+	$('.tv-list').toggleClass('hide', section !== 'tv');
+	if(section !== 'link'){
+		clearMediaWebPoll();
+	}else{
+		if(!$('#mediaWebUrl').val()){
+			try { $('#mediaWebUrl').val(localStorage.getItem('mediaWebLastUrl') || ''); } catch(e) {}
+		}
+		updateMediaWebUrlActions();
+		if(mediaWebSessionId) pollMediaWebSession();
 	}
-	updateMediaWebUrlActions();
-	if(mediaWebSessionId) pollMediaWebSession();
-	updateContainerWidth();
 	$('.container').scrollTop(0);
+}
+function showMediaWebView(){
+	var $playTab = $('div.tab[data-rel="video"]');
+	if(!$playTab.hasClass('cur')) $playTab.trigger('click');
+	showPlayHubSection('link');
 }
 
 function setMediaWebMeta(text, state){
@@ -794,7 +803,7 @@ function renderMediaWebCandidates(items, recommendedCandidateId){
 }
 
 function setMediaWebSniffBusy(busy){
-	$('#btnMediaWebSniff').prop('disabled', !!busy).toggleClass('loading', !!busy).find('span').text(busy ? '嗅探中…' : '开始嗅探');
+	$('#btnMediaWebSniff').prop('disabled', !!busy).toggleClass('loading', !!busy).find('span').text(busy ? '解析中…' : '解析并播放');
 }
 
 function renderMediaWebSession(data){
@@ -830,11 +839,11 @@ function pollMediaWebSession(){
 	$.ajax({url:'/media/web/session', data:{sessionId:sessionId}, dataType:'json', timeout:6000, success:function(data){
 		if(sessionId !== mediaWebSessionId) return;
 		mediaWebPollFailures = 0;
-		if(renderMediaWebSession(data) && mediaView === 'web') scheduleMediaWebPoll(900);
+		if(renderMediaWebSession(data) && playHubSection === 'link') scheduleMediaWebPoll(900);
 	}, error:function(){
 		if(sessionId !== mediaWebSessionId) return;
 		mediaWebPollFailures++;
-		if(mediaView !== 'web') return;
+		if(playHubSection !== 'link') return;
 		if(mediaWebPollFailures <= 3){
 			setMediaWebMeta('电视正在处理网页，正在重新连接…', 'loading');
 			scheduleMediaWebPoll(1400);
@@ -848,13 +857,13 @@ function pollMediaWebSession(){
 function startMediaWebSniff(){
 	var rawUrl = String($('#mediaWebUrl').val() || '').trim();
 	if(!rawUrl){
-		setMediaWebMeta('请先粘贴一个网页地址。', 'error');
+		setMediaWebMeta('请先粘贴一个网页或视频链接。', 'error');
 		$('#mediaWebUrl').focus();
 		return;
 	}
 	var url = normalizeMediaWebUrl(rawUrl);
 	if(!url){
-		setMediaWebMeta('请输入有效的 http 或 https 网页地址。', 'error');
+		setMediaWebMeta('请输入有效的 http 或 https 网页地址。也可以直接粘贴 m3u8、MP4、rtmp、thunder 等播放链接。', 'error');
 		$('#mediaWebUrl').focus().select();
 		return;
 	}
@@ -870,17 +879,17 @@ function startMediaWebSniff(){
 	mediaWebPollFailures = 0;
 	mediaWebLastCandidates = [];
 	setMediaWebSniffBusy(true);
-	setMediaWebMeta('正在让电视打开网页并寻找视频…', 'loading');
+	setMediaWebMeta('正在解析网页并寻找可播放视频…', 'loading');
 	renderMediaWebCandidates([], '');
 	try { localStorage.setItem('mediaWebLastUrl', url); } catch(e) {}
 	$.ajax({url:'/media/web/sniff', type:'POST', data:{url:url}, dataType:'json', timeout:12000, success:function(data){
 		if(requestVersion !== mediaWebSniffRequestVersion) return;
 		if(mediaResponseFailed(data)){
 			setMediaWebSniffBusy(false);
-			setMediaWebMeta(mediaResponseMessage(data, '网页视频嗅探失败'), 'error');
+			setMediaWebMeta(mediaResponseMessage(data, '网页视频解析失败'), 'error');
 			return;
 		}
-		if(renderMediaWebSession(data) && mediaView === 'web') scheduleMediaWebPoll(700);
+		if(renderMediaWebSession(data) && playHubSection === 'link') scheduleMediaWebPoll(700);
 	}, error:function(xhr){
 		if(requestVersion !== mediaWebSniffRequestVersion) return;
 		setMediaWebSniffBusy(false);
@@ -1420,7 +1429,6 @@ function updateMediaDisplayMode(mode){
 function mediaSectionLabel(section){
 	if(section === 'history') return '历史';
 	if(section === 'favorites') return '收藏';
-	if(section === 'web') return '网页视频';
 	return '浏览';
 }
 function closeMediaLibraryMenu(){
@@ -2268,11 +2276,19 @@ $('#mediaQueueItems').on('click', '.media-queue-item:not(.current)', function(){
 $('#mediaLibraryNav').on('click', '.media-library-tab', function(){
 	var section = $(this).attr('data-section') || 'browse';
 	closeMediaLibraryMenu();
-	if(section === 'web') showMediaWebView();
-	else if(section === 'browse') loadMediaHome();
+	if(section === 'browse') loadMediaHome();
 	else loadMediaLibrary(section);
 });
-$('#btnMediaWebSniff').on('click', startMediaWebSniff);
+$('.play-hub-tabs').on('click', '.play-hub-tab', function(){
+	showPlayHubSection($(this).attr('data-play-section') || 'tv');
+});
+$('#btnPlaybackSettings').on('click', function(){
+	var expanded = $(this).attr('aria-expanded') !== 'true';
+	$(this).attr('aria-expanded', expanded ? 'true' : 'false').toggleClass('active', expanded);
+	$('#playSettingsPanel').toggleClass('hide', !expanded);
+});
+$('#btnMediaWebSniff').on('click', submitUnifiedLinkPlayback);
+$('#btnMediaWebDirect').on('click', submitDirectLinkPlayback);
 $('#btnMediaWebClear').on('click', function(){
 	mediaWebSniffRequestVersion++;
 	mediaWebPlayRequestVersion++;
@@ -2285,15 +2301,15 @@ $('#btnMediaWebClear').on('click', function(){
 	$('#mediaWebUrl').val('').focus();
 	try { localStorage.removeItem('mediaWebLastUrl'); } catch(e) {}
 	setMediaWebSniffBusy(false);
-	setMediaWebMeta('粘贴网页链接，电视会在后台打开页面并寻找可播放视频。');
-	renderMediaWebEmpty('从网页发送视频到电视', '适合普通网页中的 HLS、DASH 和直链视频。登录、DRM 或站点专用播放器可能无法直接解析。');
+	setMediaWebMeta('粘贴网页地址会自动解析视频；视频直链会直接播放。');
+	renderMediaWebEmpty('网页或链接播放', '普通网页会自动解析可播放视频；明确的视频直链会直接发送到电视。');
 	updateMediaWebUrlActions();
 });
 $('#mediaWebUrl').on('input', updateMediaWebUrlActions);
 $('#mediaWebUrl').on('keydown', function(e){
 	if(e.key === 'Enter' || e.keyCode === 13){
 		e.preventDefault();
-		startMediaWebSniff();
+		submitUnifiedLinkPlayback();
 	}
 });
 $('#mediaWebResults').on('click', '.media-web-play-btn', function(){
@@ -2705,6 +2721,7 @@ $("div.tab").on("click", function(){
 	updateContainerWidth();
 	updateElementsAutoRefresh();
 	updateMediaPlaybackPolling();
+	if(targetTab === 'video') showPlayHubSection(playHubSection);
 	if(restoreMediaPosition){
 		setTimeout(function(){ $('.container').scrollTop(mediaRemoteReturnScrollTop); }, 0);
 	}
@@ -2975,26 +2992,83 @@ $("#showSettings").on("click", function() {
 	})
 })
 var PLAY_URL_PROTOCOLS = ['http://', 'https://', 'thunder://', 'ed2k://', 'ftp://', 'rtmp://', 'rtmps://', 'mms://'];
+function normalizeSupportedPlayUrl(value){
+	var url = String(value || '').trim();
+	if(!url) return '';
+	if(!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) url = 'https://' + url;
+	return url;
+}
 function isSupportedPlayUrl(url){
-	url = url || '';
+	url = String(url || '').toLowerCase();
 	for (var i = 0; i < PLAY_URL_PROTOCOLS.length; i++) {
-		if (url.indexOf(PLAY_URL_PROTOCOLS[i]) == 0) return true;
+		if (url.indexOf(PLAY_URL_PROTOCOLS[i]) === 0) return true;
 	}
 	return false;
+}
+function isDirectMediaPlayUrl(url){
+	url = normalizeSupportedPlayUrl(url);
+	if(!isSupportedPlayUrl(url)) return false;
+	if(!/^https?:\/\//i.test(url)) return true;
+	var path = url.split('#')[0].split('?')[0];
+	return /\.(?:m3u8|mp4|m4v|mkv|webm|mov|flv|ts|mpd|avi|wmv|mpeg|mpg)$/i.test(path);
 }
 function submitPlayUrl(url){
 	$.post("/play", {playUrl: url, "useSystem":$('#playUseSystem')[0].checked}, function(data) {
 		console.log(data)
 	})
 }
-$("#btnPlay").on("click", function() {
-	var url = $('#playUrl').val();
-	if (url.length > 0 && isSupportedPlayUrl(url)){
-		submitPlayUrl(url);
-	}else{
-		alert('请输入正确的网络视频地址，只支持http/ftp/thunder/ed2k/rtmp/mms。');
+function resetMediaWebSessionForDirectPlay(){
+	mediaWebSniffRequestVersion++;
+	mediaWebPlayRequestVersion++;
+	clearMediaWebPoll();
+	mediaWebSessionId = '';
+	mediaWebPlaybackPendingCandidateId = '';
+	mediaWebPlaybackPendingRequestId = '';
+	mediaWebPlaybackPendingSince = 0;
+	mediaWebLastCandidates = [];
+	setMediaWebSniffBusy(false);
+}
+function submitDirectLinkPlayback(){
+	var url = normalizeSupportedPlayUrl($('#mediaWebUrl').val());
+	if(!url || !isSupportedPlayUrl(url)){
+		setMediaWebMeta('这个地址暂不支持直接播放。', 'error');
+		$('#mediaWebUrl').focus().select();
+		return;
 	}
-})
+	$('#mediaWebUrl').val(url);
+	updateMediaWebUrlActions();
+	resetMediaWebSessionForDirectPlay();
+	try { localStorage.setItem('mediaWebLastUrl', url); } catch(e) {}
+	submitPlayUrl(url);
+	setMediaWebMeta('已发送到电视播放。', 'ready');
+	renderMediaWebEmpty('已发送到电视', '如果电视无法播放，可以返回后使用“解析并播放”尝试从网页中寻找其他视频地址。');
+}
+function submitUnifiedLinkPlayback(){
+	var raw = String($('#mediaWebUrl').val() || '').trim();
+	if(!raw){
+		setMediaWebMeta('请先粘贴一个网页或视频链接。', 'error');
+		$('#mediaWebUrl').focus();
+		return;
+	}
+	var normalized = normalizeSupportedPlayUrl(raw);
+	if(isDirectMediaPlayUrl(normalized)){
+		$('#mediaWebUrl').val(normalized);
+		submitDirectLinkPlayback();
+		return;
+	}
+	if(/^https?:\/\//i.test(normalized)){
+		$('#mediaWebUrl').val(normalized);
+		startMediaWebSniff();
+		return;
+	}
+	if(isSupportedPlayUrl(normalized)){
+		$('#mediaWebUrl').val(normalized);
+		submitDirectLinkPlayback();
+		return;
+	}
+	setMediaWebMeta('无法识别这个链接，请检查地址后重试。', 'error');
+	$('#mediaWebUrl').focus().select();
+}
 function playMedia(obj){
 	$.post("/play", {playUrl: $(obj).attr('data-uri'), "useSystem":$('#playUseSystem')[0].checked}, function(data) {
 		console.log(data)
@@ -3168,7 +3242,7 @@ function loadDeviceName(showPairingConfirmation){
 		name = (name || '').trim();
 		connectedTvName = name;
 		if(name){
-			$('#deviceNameWatermark').text(name + ' · ');
+			$('#deviceNameWatermark').text(name);
 			document.title = name + ' - TapTV';
 		}else{
 			$('#deviceNameWatermark').text('');
@@ -3290,8 +3364,8 @@ updateMediaPlaybackPolling();
 //PWA分享目标(manifest.json里的share_target)：手机其它App"分享"一个视频链接过来时，
 //系统会带着title/text/url这几个查询参数打开这个页面——不同App放链接的字段不统一
 //(纯分享链接一般用url，转发一段带评论的文字时链接常常混在text里)，所以url/text/
-//title都尝试提取一遍。提取成功后自动切到"视频直播"Tab、填入地址并直接触发播放，
-//不需要用户再手动复制粘贴；处理完立刻清掉地址栏参数，避免刷新页面时重复触发。
+//title都尝试提取一遍。提取成功后自动切到“播放 → 网页 / 链接”、填入地址，
+//再走统一的“解析并播放”判断：明确的视频直链直接播，普通网页进入视频解析。
 function extractPlayUrlFromShare(){
 	var params = new URLSearchParams(location.search);
 	var candidates = [params.get('url'), params.get('text'), params.get('title')];
@@ -3310,8 +3384,10 @@ if (sharedPlayUrl) {
 	history.replaceState(null, '', location.pathname);
 	skipNextMainTabPersistence = true;
 	$('div.tab[data-rel="video"]').trigger('click');
-	$('#playUrl').val(sharedPlayUrl);
-	submitPlayUrl(sharedPlayUrl);
+	showPlayHubSection('link');
+	$('#mediaWebUrl').val(sharedPlayUrl);
+	updateMediaWebUrlActions();
+	submitUnifiedLinkPlayback();
 }
 showCurrentVersion();
 loadDeviceName(justPairedFromQr);
