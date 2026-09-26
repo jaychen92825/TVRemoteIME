@@ -192,6 +192,78 @@ function parseTVM3UData(text){
 	}
 	return tv;
 }
+function normalizeTVSourceText(value){
+	return String(value || '').replace(/\s+/g, ' ').trim();
+}
+function isTVSourceBoundaryChar(ch){
+	return !ch || /[\s\[\](){}|·,;:\/\\\-–—]/.test(ch);
+}
+function stripTVChannelName(sourceName, channelName){
+	var result = normalizeTVSourceText(sourceName);
+	var channel = normalizeTVSourceText(channelName);
+	if(!result || !channel) return result;
+	var needle = channel.toLowerCase();
+	var guard = 0;
+	while(result && guard++ < 20){
+		var lower = result.toLowerCase();
+		var from = 0;
+		var removed = false;
+		while(from <= lower.length - needle.length){
+			var index = lower.indexOf(needle, from);
+			if(index < 0) break;
+			var end = index + needle.length;
+			var before = index > 0 ? result.charAt(index - 1) : '';
+			var after = end < result.length ? result.charAt(end) : '';
+			if(isTVSourceBoundaryChar(before) && isTVSourceBoundaryChar(after)){
+				result = normalizeTVSourceText(result.substring(0, index) + ' ' + result.substring(end));
+				removed = true;
+				break;
+			}
+			from = end;
+		}
+		if(!removed) break;
+	}
+	return result;
+}
+function splitTVSourceChunk(chunk){
+	chunk = normalizeTVSourceText(chunk).replace(/^[\s|·,;:\-–—]+|[\s|·,;:\-–—]+$/g, '');
+	if(!chunk) return [];
+	var technical = [];
+	var pattern = /(?:^|\s)(SD|HD|FHD|UHD|4K|8K|HDR|HEVC|H\.?264|H\.?265|\d{3,4}[pi](?:\d+)?|\d+(?:\.\d+)?\s*fps)$/i;
+	var match;
+	while((match = chunk.match(pattern))){
+		technical.unshift(match[1].replace(/\s+/g, ''));
+		chunk = normalizeTVSourceText(chunk.substring(0, match.index));
+	}
+	var parts = [];
+	if(chunk) parts.push(chunk);
+	return parts.concat(technical);
+}
+function formatTVSourceName(channelName, sourceName){
+	var cleaned = stripTVChannelName(sourceName, channelName);
+	if(!cleaned) return '';
+	cleaned = cleaned
+		.replace(/\[([^\]]+)\]/g, ' · $1 · ')
+		.replace(/\(([^)]+)\)/g, ' · $1 · ')
+		.replace(/\s*[|·]\s*/g, ' · ')
+		.replace(/(?:\s*·\s*){2,}/g, ' · ')
+		.replace(/^\s*·\s*|\s*·\s*$/g, '');
+	var rawParts = cleaned.split(/\s*·\s*/);
+	var result = [];
+	var seen = {};
+	for(var i=0;i<rawParts.length;i++){
+		var chunks = splitTVSourceChunk(rawParts[i]);
+		for(var j=0;j<chunks.length;j++){
+			var part = normalizeTVSourceText(chunks[j]);
+			var key = part.toLowerCase();
+			if(!part || seen[key]) continue;
+			seen[key] = true;
+			result.push(part);
+		}
+	}
+	return result.join(' · ');
+}
+
 function postKeyCode(keyCode){
 	var fallback = function(){
 		$.post("/key",{code:keyCode},function(data){
@@ -419,7 +491,11 @@ function loadTVList(){
 			html.push(escapeHtml(tv.name));
 			html.push('<br />');
 			for(var j=0; j<tv.urls.length; j++){
-				html.push('<a class="tv-source" data-video="' + escapeHtml(tv.urls[j].url) + '" onclick="playTV(this)">' + escapeHtml(tv.urls[j].name) + '</a>');
+				var originalSourceName = tv.urls[j].name || '';
+				var sourceLabel = formatTVSourceName(tv.name, originalSourceName);
+				if(!sourceLabel) sourceLabel = tv.urls.length > 1 ? ('线路 ' + (j + 1)) : '播放';
+				var sourceTitle = originalSourceName && originalSourceName !== sourceLabel ? originalSourceName : sourceLabel;
+				html.push('<a class="tv-source" data-video="' + escapeHtml(tv.urls[j].url) + '" title="' + escapeHtml(sourceTitle) + '" aria-label="播放 ' + escapeHtml(tv.name) + '，' + escapeHtml(sourceLabel) + '" onclick="playTV(this)">' + escapeHtml(sourceLabel) + '</a>');
 			}
 			html.push('</div>');
 		}
