@@ -162,6 +162,61 @@ public class MediaHttp {
         }
     }
 
+    public static String getRequiredWithGithubRawFallback(String uri, Map<String, String> headers, JSONObject config) throws Exception {
+        try {
+            return getRequired(uri, headers, config);
+        } catch (Exception original) {
+            if (!isHttpStatus(original, 429)) throw original;
+            String fallback = githubRawCdnUrl(uri);
+            if (fallback == null || fallback.equals(uri)) throw original;
+            Log.w(IMEService.TAG, "GitHub Raw returned HTTP 429, retrying public source via jsDelivr: " + uri);
+            return getRequired(fallback, headers, config);
+        }
+    }
+
+    static String githubRawCdnUrl(String uri) {
+        if (uri == null || uri.length() == 0) return null;
+        try {
+            URL url = normalizeUrl(uri);
+            if (!"raw.githubusercontent.com".equalsIgnoreCase(url.getHost())) return null;
+            String[] raw = url.getPath().split("/");
+            java.util.ArrayList<String> parts = new java.util.ArrayList<String>();
+            for (String value : raw) if (value != null && value.length() > 0) parts.add(value);
+            if (parts.size() < 4) return null;
+            String owner = parts.get(0);
+            String repo = parts.get(1);
+            String branch;
+            int fileStart;
+            if (parts.size() >= 6 && "refs".equals(parts.get(2)) && "heads".equals(parts.get(3))) {
+                branch = parts.get(4);
+                fileStart = 5;
+            } else {
+                branch = parts.get(2);
+                fileStart = 3;
+            }
+            if (fileStart >= parts.size()) return null;
+            StringBuilder path = new StringBuilder();
+            for (int i = fileStart; i < parts.size(); i++) {
+                if (path.length() > 0) path.append('/');
+                path.append(parts.get(i));
+            }
+            return "https://cdn.jsdelivr.net/gh/" + owner + "/" + repo + "@" + branch + "/" + path;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static boolean isHttpStatus(Throwable error, int code) {
+        String marker = "HTTP " + code;
+        Throwable current = error;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null && message.contains(marker)) return true;
+            current = current.getCause();
+        }
+        return false;
+    }
+
     private static void applyConnectionHeaders(HttpURLConnection conn, Map<String, String> headers) {
         if (headers == null || headers.isEmpty()) return;
         for (Map.Entry<String, String> entry : headers.entrySet()) {

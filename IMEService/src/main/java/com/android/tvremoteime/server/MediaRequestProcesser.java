@@ -187,7 +187,7 @@ public class MediaRequestProcesser implements RequestProcesser {
             throw new Exception("暂不支持这个直播源地址格式");
         }
         Map<String, String> headers = liveHeaders(live);
-        String text = MediaHttp.getRequired(resolvedUrl, headers, configManager.getConfig());
+        String text = MediaHttp.getRequiredWithGithubRawFallback(resolvedUrl, headers, configManager.getConfig());
         if (TextUtils.isEmpty(text)) throw new Exception("直播源返回内容为空");
         return RemoteServer.createPlainTextResponse(NanoHTTPD.Response.Status.OK, text);
     }

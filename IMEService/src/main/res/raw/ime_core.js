@@ -22,6 +22,7 @@ var mediaLiveSources = [];
 var mediaLiveRequestVersion = 0;
 var mediaLiveSelectedSource = 'local';
 var mediaLiveEpgCache = {};
+var mediaLiveChannelCache = {};
 var mediaSettingsReturnView = 'browse';
 var mediaBrowseScrollTop = 0;
 var currentMediaDetail = null;
@@ -939,7 +940,7 @@ function removeFile(id, path){
 function setMediaLiveStatus(text, state){
 	$('#mediaLiveStatus').removeClass('loading ready error').addClass(state || '').text(text || '');
 }
-function loadMediaLiveSource(sourceKey){
+function loadMediaLiveSource(sourceKey, forceRefresh){
 	var requestVersion = ++mediaLiveRequestVersion;
 	mediaLiveSelectedSource = String(sourceKey == null ? 'local' : sourceKey);
 	$('#mediaLiveSourceSelect').val(mediaLiveSelectedSource);
@@ -947,6 +948,16 @@ function loadMediaLiveSource(sourceKey){
 	$('#mediaLiveEdit').addClass('hide');
 	$('#mediaLiveItems').removeClass('hide').attr('aria-busy', 'true').empty();
 	setMediaLiveStatus('正在加载直播频道…', 'loading');
+	var cacheKey = mediaLiveSelectedSource;
+	if(!forceRefresh && mediaLiveChannelCache[cacheKey]){
+		var cachedText = mediaLiveChannelCache[cacheKey];
+		if(mediaLiveSelectedSource === 'local') $('#tvData').val(cachedText || '');
+		tvListDataCache = parseTVData(cachedText || '');
+		renderTVList(tvListDataCache);
+		$('#mediaLiveItems').attr('aria-busy', 'false');
+		setMediaLiveStatus(tvListDataCache.length ? ('共 '+tvListDataCache.length+' 个频道'+mediaLiveCapabilityText()) : '这个直播源没有可用频道', tvListDataCache.length ? 'ready' : '');
+		return;
+	}
 	var onSuccess = function(text){
 		if(requestVersion !== mediaLiveRequestVersion) return;
 		try {
@@ -958,6 +969,7 @@ function loadMediaLiveSource(sourceKey){
 			}
 		} catch(e) {}
 		if(mediaLiveSelectedSource === 'local') $('#tvData').val(text || '');
+		mediaLiveChannelCache[cacheKey] = text || '';
 		tvListDataCache = parseTVData(text || '');
 		renderTVList(tvListDataCache);
 		$('#mediaLiveItems').attr('aria-busy', 'false');
@@ -1000,14 +1012,14 @@ function loadMediaLiveSources(preserveSelection, loadSelected){
 		mediaLiveSelectedSource = selected;
 		$('#mediaLiveSourceSelect').html(html.join('')).val(selected);
 		$('#btnShowTVEdit').toggleClass('hide', selected !== 'local');
-		if(loadSelected) loadMediaLiveSource(selected);
+		if(loadSelected) loadMediaLiveSource(selected, !!loadSelected && !preserveSelection);
 	}, 'json').fail(function(){
 		if(requestVersion !== mediaLiveRequestVersion) return;
 		mediaLiveSources = [];
 		mediaLiveSelectedSource = 'local';
 		$('#mediaLiveSourceSelect').html('<option value="local">自定义直播</option>').val('local');
 		$('#btnShowTVEdit').removeClass('hide');
-		if(loadSelected) loadMediaLiveSource('local');
+		if(loadSelected) loadMediaLiveSource('local', !!loadSelected && !preserveSelection);
 	});
 }
 function loadTVList(){ loadMediaLiveSource('local'); }
@@ -2750,7 +2762,10 @@ $('.play-hub-tabs').on('click', '.play-hub-tab', function(){
 $('#btnPlaybackSettings').on('click', showPlaySettingsView);
 $('#btnPlaySettingsBack').on('click', function(){ showPlayHubSection(playHubSection); });
 $('#mediaLiveSourceSelect').on('change', function(){ loadMediaLiveSource($(this).val()); });
-$('#btnMediaLiveRefresh').on('click', function(){ loadMediaLiveSources(true, true); });
+$('#btnMediaLiveRefresh').on('click', function(){
+	delete mediaLiveChannelCache[mediaLiveSelectedSource];
+	loadMediaLiveSources(true, true);
+});
 $('#btnMediaWebSniff').on('click', submitUnifiedLinkPlayback);
 $('#btnMediaWebDirect').on('click', submitDirectLinkPlayback);
 $('#btnMediaWebClear').on('click', function(){
@@ -3636,10 +3651,14 @@ $("#upfile,#upfile2,#upfile3").change(function() {
 		},
 		beforeSend: function() {
 			if(processbar){
+				if(id == 'upfile') $('.quick-transfer-upload').addClass('uploading');
 				processbar.css({
 					width: "1%"
 				}).text("")
 			}
+		},
+		complete: function(){
+			if(id == 'upfile') $('.quick-transfer-upload').removeClass('uploading');
 		},
 		success: function(data) {
 			if(data.success){
