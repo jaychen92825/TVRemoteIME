@@ -1198,6 +1198,13 @@ body {
 	gap: 0;
 }
 
+@media (min-width: 820px) {
+	.media-grid.media-list,
+	.media-grid.media-list + .media-pagination {
+		max-width: 760px;
+	}
+}
+
 .media-list .media-card {
 	display: grid;
 	grid-template-columns: 54px minmax(0, 1fr);
@@ -2002,6 +2009,11 @@ body {
 	gap: 8px;
 }
 
+.media-config-row .btn:disabled {
+	opacity: .55;
+	cursor: default;
+}
+
 @media (min-width: 820px) and (max-width: 1024px) {
 	.media-panel {
 		margin: 10px 16px 22px;
@@ -2318,7 +2330,7 @@ body {
 	}
 
 	.container.media-has-global-playback {
-		padding-bottom: calc(116px + env(safe-area-inset-bottom));
+		padding-bottom: var(--media-playback-clearance, calc(116px + env(safe-area-inset-bottom)));
 	}
 
 	.media-playback-compact {
@@ -3344,6 +3356,12 @@ body {
 	box-shadow: 0 16px 44px rgba(18,24,32,.22);
 }
 
+@media (min-width: 641px) {
+	.container.media-has-global-playback {
+		padding-bottom: var(--media-playback-clearance, 96px);
+	}
+}
+
 .media-playback-compact {
 	background: linear-gradient(180deg, #fff, #fcfcfd);
 }
@@ -3406,6 +3424,11 @@ body {
 
 .media-queue-item.current {
 	border-color: rgba(62,166,255,.22);
+}
+
+.media-queue-item:disabled:not(.current) {
+	opacity: .55;
+	cursor: default;
 }
 
 @media (hover:hover) and (pointer:fine) {
