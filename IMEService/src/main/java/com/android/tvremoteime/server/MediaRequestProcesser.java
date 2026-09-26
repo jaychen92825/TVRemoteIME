@@ -14,6 +14,7 @@ import com.android.tvremoteime.media.MediaDetail;
 import com.android.tvremoteime.media.MediaItem;
 import com.android.tvremoteime.media.MediaHttp;
 import com.android.tvremoteime.media.MediaLibraryStore;
+import com.android.tvremoteime.media.LiveCatchupBuilder;
 import com.android.tvremoteime.media.MediaPlaybackManager;
 import com.android.tvremoteime.media.MediaSource;
 import com.android.tvremoteime.media.MediaSourceQualityStore;
@@ -28,13 +29,19 @@ import java.io.ByteArrayInputStream;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutorCompletionService;
@@ -88,6 +95,7 @@ public class MediaRequestProcesser implements RequestProcesser {
             } else if (session.getMethod() == NanoHTTPD.Method.POST) {
                 if ("/media/config".equals(fileName)) return saveConfigResponse(params.get("url"));
                 if ("/media/live/play".equals(fileName)) return livePlayResponse(params);
+                if ("/media/live/catchup".equals(fileName)) return liveCatchupResponse(params);
                 if ("/media/play".equals(fileName)) return playResponse(params);
                 if ("/media/resume".equals(fileName)) return ok(playbackManager.resumeCurrent());
                 if ("/media/episode".equals(fileName)) {
@@ -147,6 +155,10 @@ public class MediaRequestProcesser implements RequestProcesser {
             item.put("logo", live.optString("logo"));
             item.put("hasHeaders", !liveHeaders(live).isEmpty());
             item.put("catchupSupported", hasLiveCatchup(live));
+            CatchupConfig catchup = catchupConfig(live);
+            item.put("catchupType", catchup.type);
+            item.put("catchupPlayable", isCatchupPlayable(catchup.type, catchup.source));
+            item.put("catchupDays", liveCatchupDays(live));
             item.put("timeZone", live.optString("timeZone"));
             item.put("playerType", live.optInt("playerType", -1));
             item.put("timeout", live.optInt("timeout", 0));
@@ -219,9 +231,40 @@ public class MediaRequestProcesser implements RequestProcesser {
         if (live != null) headers.putAll(liveHeaders(live));
         playUrl = stripInlineLiveHeaders(playUrl, headers);
         applyConfigLiveHeaders(playUrl, headers);
-        boolean useSystem = "true".equalsIgnoreCase(params.get("useSystem"));
-        String title = params.get("title");
-        boolean forcedInternal = !headers.isEmpty();
+        return playLiveResponse(playUrl, params.get("title"), params.get("useSystem"), headers, false, "");
+    }
+
+    private NanoHTTPD.Response liveCatchupResponse(Map<String, String> params) throws Exception {
+        String playUrl = params.get("playUrl");
+        if (TextUtils.isEmpty(playUrl)) throw new Exception("未指定直播地址");
+        JSONObject live = parseLiveSource(params.get("index"));
+        LinkedHashMap<String, String> headers = new LinkedHashMap<String, String>();
+        if (live != null) headers.putAll(liveHeaders(live));
+        playUrl = stripInlineLiveHeaders(playUrl, headers);
+        applyConfigLiveHeaders(playUrl, headers);
+
+        Date begin = parseCatchupMoment(params.get("start"), params.get("date"), live);
+        Date end = parseCatchupMoment(params.get("end"), params.get("date"), live);
+        if (begin == null || end == null || !end.after(begin)) throw new Exception("节目时间无效，无法生成回看地址");
+
+        String catchupType = trim(params.get("catchupType"));
+        String catchupSource = trim(params.get("catchupSource"));
+        if (TextUtils.isEmpty(catchupType) || TextUtils.isEmpty(catchupSource)) {
+            CatchupConfig config = catchupConfig(live);
+            if (TextUtils.isEmpty(catchupType)) catchupType = config.type;
+            if (TextUtils.isEmpty(catchupSource)) catchupSource = config.source;
+        }
+        if (TextUtils.isEmpty(catchupType) && !TextUtils.isEmpty(catchupSource)) catchupType = "append";
+        if (TextUtils.isEmpty(catchupType)) throw new Exception("这个频道没有可用的回看规则");
+
+        String catchupUrl = buildCatchupUrl(playUrl, catchupType, catchupSource, begin, end, live);
+        return playLiveResponse(catchupUrl, params.get("title"), params.get("useSystem"), headers, true, catchupType);
+    }
+
+    private NanoHTTPD.Response playLiveResponse(String playUrl, String title, String useSystemText,
+                                                 Map<String, String> headers, boolean catchup, String catchupType) throws Exception {
+        boolean useSystem = "true".equalsIgnoreCase(useSystemText);
+        boolean forcedInternal = headers != null && !headers.isEmpty();
         if (forcedInternal) {
             VideoPlayHelper.playDirectStream(context, playUrl, TextUtils.isEmpty(title) ? playUrl : title, headers);
         } else {
@@ -230,8 +273,135 @@ public class MediaRequestProcesser implements RequestProcesser {
         JSONObject obj = new JSONObject();
         obj.put("success", true);
         obj.put("forcedInternal", forcedInternal && useSystem);
-        obj.put("headerCount", headers.size());
+        obj.put("headerCount", headers == null ? 0 : headers.size());
+        obj.put("catchup", catchup);
+        if (catchup) {
+            obj.put("catchupType", catchupType);
+            obj.put("catchupUrl", playUrl);
+        }
         return ok(obj);
+    }
+
+    private static class CatchupConfig {
+        String type = "";
+        String source = "";
+    }
+
+    private CatchupConfig catchupConfig(JSONObject live) {
+        CatchupConfig result = new CatchupConfig();
+        if (live == null) return result;
+        Object raw = live.opt("catchup");
+        if (raw instanceof JSONObject) {
+            JSONObject object = (JSONObject) raw;
+            result.type = trim(object.optString("type"));
+            result.source = trim(object.optString("source"));
+        } else if (raw != null && raw != JSONObject.NULL) {
+            result.type = trim(String.valueOf(raw));
+        }
+        if (TextUtils.isEmpty(result.type)) result.type = trim(live.optString("catchupType"));
+        if (TextUtils.isEmpty(result.source)) result.source = trim(live.optString("catchup-source"));
+        if (TextUtils.isEmpty(result.source)) result.source = trim(live.optString("catchupSource"));
+        return result;
+    }
+
+    private boolean isCatchupPlayable(String type, String source) {
+        String normalized = trim(type).toLowerCase();
+        String catchupSource = trim(source);
+        if (TextUtils.isEmpty(normalized) && !TextUtils.isEmpty(catchupSource)) normalized = "append";
+        if ("default".equals(normalized)) return true;
+        return ("append".equals(normalized) || "shift".equals(normalized) || "replace".equals(normalized))
+                && !TextUtils.isEmpty(catchupSource);
+    }
+
+    private String liveCatchupDays(JSONObject live) {
+        if (live == null) return "";
+        JSONObject object = live.optJSONObject("catchup");
+        String value = object == null ? "" : trim(object.optString("days"));
+        if (TextUtils.isEmpty(value) && object != null) value = trim(object.optString("catchup-days"));
+        if (TextUtils.isEmpty(value)) value = trim(live.optString("catchup-days"));
+        if (TextUtils.isEmpty(value)) value = trim(live.optString("catchupDays"));
+        return value;
+    }
+
+    private String buildCatchupUrl(String baseUrl, String type, String source, Date begin, Date end, JSONObject live) throws Exception {
+        String result = LiveCatchupBuilder.build(baseUrl, type, source, begin, end, liveTimeZone(live));
+        String normalized = trim(type).toLowerCase();
+        if ("shift".equals(normalized) || "replace".equals(normalized)) return resolveLiveAssetUrl(result, live);
+        return result;
+    }
+
+    private Date parseCatchupMoment(String value, String requestedDate, JSONObject live) {
+        String text = trim(value);
+        if (TextUtils.isEmpty(text)) return null;
+        try {
+            long numeric = Long.parseLong(text);
+            if (numeric > 1000000000L) return new Date(numeric < 100000000000L ? numeric * 1000L : numeric);
+        } catch (NumberFormatException ignored) {
+        }
+
+        TimeZone zone = liveTimeZone(live);
+        String date = effectiveEpgDate(requestedDate, live, zone);
+        String[] patterns;
+        String candidate = text;
+        if (text.matches("^\\d{1,2}:\\d{2}(:\\d{2})?$")) {
+            candidate = date + " " + text;
+            patterns = text.length() > 5 ? new String[]{"yyyy-MM-dd HH:mm:ss"} : new String[]{"yyyy-MM-dd HH:mm"};
+        } else {
+            patterns = new String[]{
+                    "yyyyMMddHHmmss Z", "yyyyMMddHHmmssZ", "yyyyMMddHHmmss",
+                    "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm",
+                    "yyyy-MM-dd'T'HH:mm:ssXXX", "yyyy-MM-dd'T'HH:mm:ssX",
+                    "yyyy-MM-dd'T'HH:mm:ss"
+            };
+        }
+        for (String pattern : patterns) {
+            try {
+                SimpleDateFormat format = new SimpleDateFormat(pattern);
+                format.setLenient(false);
+                format.setTimeZone(zone);
+                return format.parse(candidate);
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private String effectiveEpgDate(String requestedDate, JSONObject live, TimeZone zone) {
+        String date = TextUtils.isEmpty(requestedDate) ? new SimpleDateFormat("yyyy-MM-dd").format(new Date()) : requestedDate;
+        Calendar calendar = Calendar.getInstance(zone);
+        try {
+            SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
+            format.setTimeZone(zone);
+            calendar.setTime(format.parse(date));
+        } catch (Exception ignored) {
+        }
+        String epg = live == null ? "" : live.optString("epg");
+        Matcher matcher = Pattern.compile("DATE(\\d+)(SUB|ADD)", Pattern.CASE_INSENSITIVE).matcher(epg);
+        if (matcher.find()) {
+            int days = Integer.parseInt(matcher.group(1));
+            if ("SUB".equalsIgnoreCase(matcher.group(2))) days = -days;
+            calendar.add(Calendar.DAY_OF_MONTH, days);
+        }
+        SimpleDateFormat out = new SimpleDateFormat("yyyy-MM-dd");
+        out.setTimeZone(zone);
+        return out.format(calendar.getTime());
+    }
+
+    private TimeZone liveTimeZone(JSONObject live) {
+        String id = live == null ? "" : trim(live.optString("timeZone"));
+        if (TextUtils.isEmpty(id)) return TimeZone.getDefault();
+        if (id.matches("^[+-]?\\d{1,2}(:\\d{2})?$")) {
+            String sign = id.startsWith("-") ? "-" : "+";
+            String raw = id.replace("+", "").replace("-", "");
+            if (raw.indexOf(':') < 0) raw = (raw.length() == 1 ? "0" + raw : raw) + ":00";
+            id = "GMT" + sign + raw;
+        }
+        TimeZone zone = TimeZone.getTimeZone(id);
+        return zone == null ? TimeZone.getDefault() : zone;
+    }
+
+    private String trim(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private JSONObject parseLiveSource(String indexText) {

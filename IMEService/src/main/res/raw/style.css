@@ -5851,3 +5851,89 @@ button.tv-channel-info {
 	}
 
 }
+
+.tv-catchup-btn {
+	min-width: 42px;
+	min-height: 26px;
+	padding: 2px 7px;
+	border: 1px solid rgba(62,166,255,.26);
+	border-radius: 7px;
+	background: var(--color-primary-soft);
+	color: var(--color-primary);
+	font: inherit;
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 16px;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.tv-catchup-btn:disabled {
+	opacity: .55;
+	cursor: default;
+}
+
+.tv-epg-row.past .tv-epg-name {
+	color: var(--color-text-secondary);
+}
+
+@media (max-width: 640px) {
+	.tv-catchup-btn {
+		min-height: 32px;
+		padding-left: 9px;
+		padding-right: 9px;
+	}
+}
+
+.tv-epg-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	margin-bottom: 4px;
+}
+
+.tv-epg-head .tv-epg-title {
+	margin-bottom: 0;
+}
+
+.tv-epg-date-nav {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 10px;
+	font-weight: 600;
+	color: var(--color-text-secondary);
+}
+
+.tv-epg-date-nav span {
+	min-width: 32px;
+	text-align: center;
+	white-space: nowrap;
+}
+
+.tv-epg-day-nav {
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	border: 1px solid var(--color-border);
+	border-radius: 7px;
+	background: var(--color-card-bg);
+	color: var(--color-text-secondary);
+	font: inherit;
+	font-size: 16px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.tv-epg-day-nav:disabled {
+	opacity: .32;
+	cursor: default;
+}
+
+@media (max-width: 640px) {
+	.tv-epg-day-nav {
+		width: 30px;
+		height: 30px;
+	}
+}

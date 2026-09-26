@@ -149,10 +149,11 @@ function parseTVM3UData(text){
 	var byName = {};
 	var lines = String(text || '').replace(/\r/g, '').split('\n');
 	var pending = null;
+	var playlistCatchup = {type:'', source:'', days:''};
 
 	function attr(line, name){
-		var match = line.match(new RegExp('(?:^|\\s)' + name + '="([^"]*)"', 'i'));
-		return match ? match[1].trim() : '';
+		var match = line.match(new RegExp('(?:^|\\s)' + name + '=(?:"([^"]*)"|([^\\s,]+))', 'i'));
+		return match ? String(match[1] != null ? match[1] : match[2] || '').trim() : '';
 	}
 	function add(key, name, sourceName, url, meta){
 		key = (key || name || '').trim().toLowerCase();
@@ -172,12 +173,24 @@ function parseTVM3UData(text){
 		for(var i=0;i<item.urls.length;i++){
 			if(item.urls[i].url === url) return;
 		}
-		item.urls.push({"name":sourceName || ("线路 " + (item.urls.length + 1)), "url":url});
+		item.urls.push({
+			"name":sourceName || ("线路 " + (item.urls.length + 1)),
+			"url":url,
+			"catchupType":meta && meta.catchupType || '',
+			"catchupSource":meta && meta.catchupSource || '',
+			"catchupDays":meta && meta.catchupDays || ''
+		});
 	}
 
 	for(var i=0;i<lines.length;i++){
 		var line = lines[i].trim();
 		if(!line) continue;
+		if(/^#EXTM3U(?:\s|$)/i.test(line)){
+			playlistCatchup.type = attr(line, 'catchup');
+			playlistCatchup.source = attr(line, 'catchup-source');
+			playlistCatchup.days = attr(line, 'catchup-days');
+			continue;
+		}
 		if(/^#EXTINF:/i.test(line)){
 			var comma = line.indexOf(',');
 			var displayName = comma >= 0 ? line.substring(comma + 1).trim() : '';
@@ -191,13 +204,22 @@ function parseTVM3UData(text){
 				name: attr(line, 'tvg-name') || canonicalName || tvgId || '未命名频道',
 				sourceName: displayName,
 				tvgId: tvgId,
-				logo: attr(line, 'tvg-logo')
+				logo: attr(line, 'tvg-logo'),
+				catchupType: attr(line, 'catchup') || playlistCatchup.type,
+				catchupSource: attr(line, 'catchup-source') || playlistCatchup.source,
+				catchupDays: attr(line, 'catchup-days') || playlistCatchup.days
 			};
 			continue;
 		}
 		if(line.charAt(0) === '#') continue;
 		if(pending){
-			add(pending.key, pending.name, pending.sourceName, line, {tvgId:pending.tvgId, logo:pending.logo});
+			add(pending.key, pending.name, pending.sourceName, line, {
+				tvgId:pending.tvgId,
+				logo:pending.logo,
+				catchupType:pending.catchupType,
+				catchupSource:pending.catchupSource,
+				catchupDays:pending.catchupDays
+			});
 			pending = null;
 		}
 	}
@@ -341,6 +363,47 @@ function mediaLiveHasEpg(){
 	var source = currentMediaLiveSource();
 	return !!(source && source.epg);
 }
+function mediaLiveCatchupTypePlayable(type, source){
+	var normalized = String(type || '').trim().toLowerCase();
+	var catchupSource = String(source || '').trim();
+	if(!normalized && catchupSource) normalized = 'append';
+	if(normalized === 'default') return true;
+	return (normalized === 'append' || normalized === 'shift' || normalized === 'replace') && !!catchupSource;
+}
+function mediaLiveHasCatchup(tv){
+	var source = currentMediaLiveSource();
+	if(source && source.catchupPlayable) return true;
+	if(tv && tv.urls){
+		for(var i=0;i<tv.urls.length;i++){
+			if(mediaLiveCatchupTypePlayable(tv.urls[i].catchupType, tv.urls[i].catchupSource)) return true;
+		}
+	}
+	return false;
+}
+function mediaLiveCatchupRoute($item){
+	var $routes = $item.find('.tv-source');
+	if(!$routes.length) return $routes;
+	var source = currentMediaLiveSource();
+	if(source && source.catchupPlayable) return $routes.first();
+	var $match = $();
+	$routes.each(function(){
+		var $route = $(this);
+		if(mediaLiveCatchupTypePlayable($route.attr('data-catchup-type'), $route.attr('data-catchup-source'))){
+			$match = $route;
+			return false;
+		}
+	});
+	return $match.length ? $match : $routes.first();
+}
+function mediaLiveEpgDayOffset(){
+	var source = currentMediaLiveSource();
+	var epg = source ? String(source.epg || '') : '';
+	var sub = epg.match(/DATE(\d+)SUB/i);
+	if(sub) return -parseInt(sub[1],10);
+	var add = epg.match(/DATE(\d+)ADD/i);
+	if(add) return parseInt(add[1],10);
+	return 0;
+}
 function mediaLiveCapabilityText(){
 	var source = currentMediaLiveSource();
 	if(!source) return '';
@@ -348,7 +411,8 @@ function mediaLiveCapabilityText(){
 	if(source.epg) parts.push('节目单');
 	if(source.logo) parts.push('台标');
 	if(source.hasHeaders) parts.push('特殊请求头');
-	if(source.catchupSupported) parts.push('检测到回看配置');
+	if(source.catchupPlayable) parts.push('回看');
+	else if(source.catchupSupported) parts.push('检测到回看配置');
 	return parts.length ? (' · ' + parts.join(' · ')) : '';
 }
 function renderTVItemHtml(tv, grouped){
@@ -374,7 +438,10 @@ function renderTVItemHtml(tv, grouped){
 		var sourceLabel = formatTVSourceName(tv.name, originalSourceName);
 		if(!sourceLabel) sourceLabel = sourceCount > 1 ? ('线路 ' + (j + 1)) : '播放';
 		var sourceTitle = originalSourceName && originalSourceName !== sourceLabel ? originalSourceName : sourceLabel;
-		html.push('<a class="tv-source" data-video="' + escapeHtml(tv.urls[j].url) + '" data-channel="'+escapeHtml(tv.name)+'" title="' + escapeHtml(sourceTitle) + '" aria-label="播放 ' + escapeHtml(tv.name) + '，' + escapeHtml(sourceLabel) + '" onclick="playTV(this)">' + escapeHtml(sourceLabel) + '</a>');
+		var catchupType = tv.urls[j].catchupType || '';
+		var catchupSource = tv.urls[j].catchupSource || '';
+		var catchupDays = tv.urls[j].catchupDays || '';
+		html.push('<a class="tv-source" data-video="' + escapeHtml(tv.urls[j].url) + '" data-channel="'+escapeHtml(tv.name)+'" data-catchup-type="'+escapeHtml(catchupType)+'" data-catchup-source="'+escapeHtml(catchupSource)+'" data-catchup-days="'+escapeHtml(catchupDays)+'" title="' + escapeHtml(sourceTitle) + '" aria-label="播放 ' + escapeHtml(tv.name) + '，' + escapeHtml(sourceLabel) + '" onclick="playTV(this)">' + escapeHtml(sourceLabel) + '</a>');
 	}
 	html.push('</div><div class="tv-epg-panel hide" aria-live="polite"></div></div>');
 	return html.join('');
@@ -412,6 +479,39 @@ function mediaLiveToday(){
 	var m = String(d.getMonth()+1); if(m.length < 2) m = '0'+m;
 	var day = String(d.getDate()); if(day.length < 2) day = '0'+day;
 	return y+'-'+m+'-'+day;
+}
+function mediaLiveDateValue(offset){
+	var d = new Date();
+	d.setHours(12,0,0,0);
+	d.setDate(d.getDate() + Number(offset || 0));
+	var y = d.getFullYear();
+	var m = String(d.getMonth()+1); if(m.length < 2) m = '0'+m;
+	var day = String(d.getDate()); if(day.length < 2) day = '0'+day;
+	return y+'-'+m+'-'+day;
+}
+function mediaLiveDateOffset(date){
+	var parts = String(date || '').split('-');
+	if(parts.length !== 3) return 0;
+	var target = new Date(Number(parts[0]), Number(parts[1])-1, Number(parts[2]), 12, 0, 0, 0);
+	var today = new Date(); today.setHours(12,0,0,0);
+	return Math.round((target.getTime() - today.getTime()) / 86400000);
+}
+function mediaLiveCatchupDays($item){
+	var $route = mediaLiveCatchupRoute($item);
+	var source = currentMediaLiveSource();
+	var raw = String($route.attr('data-catchup-days') || (source && source.catchupDays) || '').trim();
+	var value = parseFloat(raw);
+	return isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
+function mediaLiveEpgSupportsDateNavigation(){
+	var source = currentMediaLiveSource();
+	return !!(source && String(source.epg || '').indexOf('{date}') >= 0);
+}
+function mediaLiveEpgDateLabel(date){
+	var offset = mediaLiveDateOffset(date);
+	if(offset === 0) return '今天';
+	if(offset === -1) return '昨天';
+	return String(date || '').substring(5);
 }
 function mediaLiveEpgArray(payload){
 	if(Array.isArray(payload)) return payload;
@@ -497,45 +597,56 @@ function mediaLiveCurrentEpgIndex(items){
 	for(var j=0;j<items.length;j++) if(mediaLiveTimeMinutes(items[j].start) >= minute) return j;
 	return items.length ? Math.max(0, items.length-1) : -1;
 }
-function renderMediaLiveEpg($button, items){
+function renderMediaLiveEpg($button, items, date){
 	var $item = $button.closest('.tv-item');
 	var $panel = $item.find('.tv-epg-panel').first();
+	date = date || mediaLiveToday();
+	$panel.attr('data-epg-date', date);
+	var $route = mediaLiveCatchupRoute($item);
+	var source = currentMediaLiveSource();
+	var canCatchup = !!((source && source.catchupPlayable) || mediaLiveCatchupTypePlayable($route.attr('data-catchup-type'), $route.attr('data-catchup-source')));
+	var selectedOffset = mediaLiveDateOffset(date);
+	var dayOffset = mediaLiveEpgDayOffset() + (mediaLiveEpgSupportsDateNavigation() ? selectedOffset : 0);
+	var catchupDays = mediaLiveCatchupDays($item);
+	var nav = '';
+	if(canCatchup && catchupDays > 0 && mediaLiveEpgSupportsDateNavigation()){
+		var canPrevious = selectedOffset > -catchupDays;
+		var canNext = selectedOffset < 0;
+		nav = '<div class="tv-epg-date-nav"><button type="button" class="tv-epg-day-nav" data-date="'+escapeHtml(mediaLiveDateValue(selectedOffset-1))+'"'+(canPrevious ? '' : ' disabled')+' aria-label="前一天">‹</button><span>'+escapeHtml(mediaLiveEpgDateLabel(date))+'</span><button type="button" class="tv-epg-day-nav" data-date="'+escapeHtml(mediaLiveDateValue(selectedOffset+1))+'"'+(canNext ? '' : ' disabled')+' aria-label="后一天">›</button></div>';
+	}
+	var html = ['<div class="tv-epg-head"><div class="tv-epg-title">'+(dayOffset < 0 ? '回看节目' : '今日节目')+'</div>'+nav+'</div>'];
 	if(!items.length){
-		$panel.html('<div class="tv-epg-empty">今天暂时没有节目单。</div>');
+		html.push('<div class="tv-epg-empty">这一天暂时没有节目单。</div>');
+		$panel.html(html.join(''));
 		return;
 	}
-	var current = mediaLiveCurrentEpgIndex(items);
-	var start = current >= 0 ? current : 0;
-	var end = Math.min(items.length, start + 5);
-	var html = ['<div class="tv-epg-title">今日节目</div>'];
+	var current = dayOffset === 0 ? mediaLiveCurrentEpgIndex(items) : -1;
+	var start = dayOffset < 0 ? Math.max(0, items.length - 6) : (current >= 0 ? Math.max(0, current - 2) : 0);
+	var end = Math.min(items.length, start + 6);
 	for(var i=start;i<end;i++){
 		var entry = items[i];
 		var isCurrent = i === current;
+		var isPast = dayOffset < 0 || (dayOffset === 0 && current >= 0 && i < current);
 		var time = mediaLiveEpgTime(entry.start);
-		html.push('<div class="tv-epg-row'+(isCurrent ? ' current' : '')+'"><span class="tv-epg-time">'+escapeHtml(time)+'</span><span class="tv-epg-name">'+escapeHtml(entry.title)+'</span>'+(isCurrent ? '<span class="tv-epg-now">直播中</span>' : '')+'</div>');
+		var action = '';
+		if(canCatchup && isPast && entry.start && entry.end){
+			action = '<button type="button" class="tv-catchup-btn" data-start="'+escapeHtml(entry.start)+'" data-end="'+escapeHtml(entry.end)+'" data-date="'+escapeHtml(date)+'" data-title="'+escapeHtml(entry.title)+'">回看</button>';
+		}else if(isCurrent){
+			action = '<span class="tv-epg-now">直播中</span>';
+		}
+		html.push('<div class="tv-epg-row'+(isCurrent ? ' current' : '')+(isPast ? ' past' : '')+'"><span class="tv-epg-time">'+escapeHtml(time)+'</span><span class="tv-epg-name">'+escapeHtml(entry.title)+'</span>'+action+'</div>');
 	}
 	$panel.html(html.join(''));
 	if(current >= 0 && items[current] && items[current].title) $button.find('.tv-channel-meta').text('正在播 · '+items[current].title);
 }
-function toggleMediaLiveEpg(button){
-	var $button = $(button);
-	var $item = $button.closest('.tv-item');
-	var $panel = $item.find('.tv-epg-panel').first();
-	var expanded = $button.attr('aria-expanded') === 'true';
-	$('#mediaLiveItems .tv-channel-info[data-tv-epg="1"]').not($button).attr('aria-expanded','false');
-	$('#mediaLiveItems .tv-epg-panel').not($panel).addClass('hide').empty();
-	if(expanded){
-		$button.attr('aria-expanded','false');
-		$panel.addClass('hide').empty();
-		return;
-	}
-	$button.attr('aria-expanded','true');
-	$panel.removeClass('hide').html('<div class="tv-epg-empty">正在加载节目单…</div>');
+function loadMediaLiveEpg($button, date){
+	var $panel = $button.closest('.tv-item').find('.tv-epg-panel').first();
 	var name = String($button.attr('data-tv-name') || '');
-	var date = mediaLiveToday();
+	date = date || mediaLiveToday();
+	$panel.removeClass('hide').attr('data-epg-date', date).html('<div class="tv-epg-empty">正在加载节目单…</div>');
 	var key = mediaLiveSelectedSource+'|'+name+'|'+date;
 	if(mediaLiveEpgCache[key]){
-		renderMediaLiveEpg($button, mediaLiveEpgCache[key]);
+		renderMediaLiveEpg($button, mediaLiveEpgCache[key], date);
 		return;
 	}
 	var sourceAtRequest = mediaLiveSelectedSource;
@@ -550,7 +661,7 @@ function toggleMediaLiveEpg(button){
 		} catch(e) {}
 		var items = parseMediaLiveEpg(text);
 		mediaLiveEpgCache[key] = items;
-		renderMediaLiveEpg($button, items);
+		renderMediaLiveEpg($button, items, date);
 	}, 'text').fail(function(xhr){
 		if(sourceAtRequest !== mediaLiveSelectedSource) return;
 		var message = '节目单加载失败，请稍后重试。';
@@ -558,7 +669,58 @@ function toggleMediaLiveEpg(button){
 		$panel.html('<div class="tv-epg-empty error">'+escapeHtml(message)+'</div>');
 	});
 }
+function toggleMediaLiveEpg(button){
+	var $button = $(button);
+	var $item = $button.closest('.tv-item');
+	var $panel = $item.find('.tv-epg-panel').first();
+	var expanded = $button.attr('aria-expanded') === 'true';
+	$('#mediaLiveItems .tv-channel-info[data-tv-epg="1"]').not($button).attr('aria-expanded','false');
+	$('#mediaLiveItems .tv-epg-panel').not($panel).addClass('hide').empty();
+	if(expanded){
+		$button.attr('aria-expanded','false');
+		$panel.addClass('hide').empty();
+		return;
+	}
+	$button.attr('aria-expanded','true');
+	loadMediaLiveEpg($button, mediaLiveToday());
+}
 $(document).on('click', '.tv-channel-info[data-tv-epg="1"]', function(){ toggleMediaLiveEpg(this); });
+$(document).on('click', '.tv-epg-day-nav', function(){
+	if(this.disabled) return;
+	var $item = $(this).closest('.tv-item');
+	var $button = $item.find('.tv-channel-info[data-tv-epg="1"]').first();
+	loadMediaLiveEpg($button, $(this).attr('data-date') || mediaLiveToday());
+});
+$(document).on('click', '.tv-catchup-btn', function(){
+	var $button = $(this);
+	var $item = $button.closest('.tv-item');
+	var $route = mediaLiveCatchupRoute($item);
+	if(!$route.length) return;
+	var oldText = $button.text();
+	$button.prop('disabled', true).text('打开中…');
+	$.post('/media/live/catchup', {
+		index:mediaLiveSelectedSource,
+		playUrl:$route.attr('data-video') || '',
+		title:$button.attr('data-title') || $route.attr('data-channel') || '',
+		start:$button.attr('data-start') || '',
+		end:$button.attr('data-end') || '',
+		date:$button.attr('data-date') || mediaLiveToday(),
+		catchupType:$route.attr('data-catchup-type') || '',
+		catchupSource:$route.attr('data-catchup-source') || '',
+		catchupDays:$route.attr('data-catchup-days') || '',
+		useSystem:$('#playUseSystem')[0].checked
+	}, function(data){
+		if(data && data.success === false){
+			setMediaLiveStatus(data.message || '回看播放失败。', 'error');
+			return;
+		}
+		setMediaLiveStatus('正在回看 · '+($button.attr('data-title') || $route.attr('data-channel') || ''), 'ready');
+	}, 'json').fail(function(){
+		setMediaLiveStatus('回看播放失败，请尝试其他节目或线路。', 'error');
+	}).always(function(){
+		$button.prop('disabled', false).text(oldText);
+	});
+});
 
 function postKeyCode(keyCode){
 	var fallback = function(){
