@@ -1191,7 +1191,8 @@ function renderMediaGrid(items){
 	}else{
 		for(var i=0;i<items.length;i++){
 			var item = items[i];
-			html.push('<div class="media-card" role="button" tabindex="0" data-index="'+i+'" data-source="'+escapeHtml(item.sourceKey)+'" data-id="'+escapeHtml(item.id)+'" data-name="'+escapeHtml(item.name)+'" data-folder="'+(item.folder ? '1' : '0')+'">');
+			var cardClasses = 'media-card'+(mediaSection === 'favorites' ? ' has-unfavorite' : '');
+			html.push('<div class="'+cardClasses+'" role="button" tabindex="0" data-index="'+i+'" data-source="'+escapeHtml(item.sourceKey)+'" data-id="'+escapeHtml(item.id)+'" data-name="'+escapeHtml(item.name)+'" data-folder="'+(item.folder ? '1' : '0')+'">');
 			html.push(mediaPoster(item, true));
 			if(mediaSection === 'favorites') html.push('<button type="button" class="media-card-unfavorite" aria-label="取消收藏" title="取消收藏">★</button>');
 			html.push('<div class="media-card-copy"><div class="media-card-title" title="'+escapeHtml(item.name)+'">'+escapeHtml(item.name)+'</div>');
