@@ -3600,6 +3600,17 @@ body {
 	}
 }
 
+@media (min-width: 520px) and (max-width: 640px) {
+	.media-playback-controls,
+	.media-playback-controls.expanded {
+		left: 50%;
+		right: auto;
+		width: min(520px, calc(100vw - 24px));
+		max-width: 520px;
+		transform: translateX(-50%);
+	}
+}
+
 #confirm,.btn-wrapper,.history,.keys {
 	-webkit-user-select: none;
 	-webkit-touch-callout: none
